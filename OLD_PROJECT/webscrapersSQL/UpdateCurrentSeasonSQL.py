@@ -1,0 +1,6 @@
+from BRadvancedStatsCurrentSQL import updateCurrentSeasonAdvStats
+from BRplayerStatsCurrentSQL import updateCurrentSeasonPlayerStats
+
+
+updateCurrentSeasonPlayerStats()
+updateCurrentSeasonAdvStats()

@@ -1,0 +1,87 @@
+:root {
+  --tableBG: rgba(255, 255, 255, 0.943);
+}
+
+.tableContainer {
+  height: 70vh;
+  width: fit-content;
+  overflow-x: scroll;
+  overflow-y: scroll;
+  border-left: 8px solid black;
+  border-right: 8px solid black;
+  border-bottom: 8px solid black;
+}
+
+.tableContainer::-webkit-scrollbar {
+  display: none;
+}
+
+@media screen and (max-width: 600px) {
+  .tableContainer::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+.tableWrapper {
+  width: fit-content;
+  background-color: var(--tableBG);
+  font-size: small;
+  color: black;
+}
+
+table {
+  padding: 0px;
+  border-collapse: collapse;
+  
+}
+
+td {
+  padding: 0.2rem 0.3rem;
+  border-top: 0.5px solid black;
+  text-align: right;
+  white-space: nowrap;
+}
+
+tr:hover {
+  background-color: yellow;
+}
+
+th {
+  color: yellow;
+  background-color: rgb(0, 0, 0);
+  padding: 8px 4px;
+  position: sticky;
+  top: 0;
+  cursor: pointer;
+}
+
+th:hover {
+  background-color: yellow;
+  color: black;
+}
+
+.colDarker {
+  background-color: rgba(0, 0, 0, 0.089);
+}
+
+.colCentered {
+  text-align: center;
+}
+
+.colName {
+  cursor: pointer;
+  padding-left: 8px;
+  width: 180px;
+  text-align: left;
+}
+
+.colName:hover {
+  color: rgb(0, 0, 0);
+  text-decoration: underline;
+  font-style: italic;
+}
+
+.headerRowName {
+  text-align: left;
+  padding-left: 8px;
+}

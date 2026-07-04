@@ -1,0 +1,10 @@
+.App-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  /* margin-left: 10vw; */
+  font-size: calc(10px + 2vmin);
+  color: white;
+  
+}

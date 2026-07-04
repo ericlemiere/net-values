@@ -1,0 +1,23 @@
+.leagueCapContainer {
+    border: 2px solid yellow;
+    width: fit-content;
+    background-color: rgb(0, 0, 0);
+    color: yellow;
+    font-size: 1rem;
+    font-weight: 700;
+    margin-left: 2rem;
+}
+
+.leagueCapContainer span {
+    background-color: rgb(255, 255, 255);
+    color: black;
+    padding: 0px 8px;
+}
+
+.selectContainer {
+    display: flex;
+}
+
+.thWide {
+    width: 4rem;
+}

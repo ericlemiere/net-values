@@ -1,0 +1,153 @@
+"use client";
+
+import { useMemo, useState } from "react";
+import { PlayerLink } from "./PlayerLink";
+import { alignClass, type ColumnAlign } from "./DataTable";
+import type { SalaryComp } from "@/lib/db/queries";
+
+type SortKey = "name" | "season" | "team" | "pctOfLeagueCap";
+
+interface Column {
+  key: SortKey;
+  label: string;
+  align?: ColumnAlign;
+  defaultDir: "asc" | "desc";
+  /** null sorts last in both directions. */
+  value: (row: SalaryComp) => string | number | null;
+}
+
+const ALL_COLUMNS: Column[] = [
+  { key: "name", label: "Player", defaultDir: "asc", value: (r) => r.name },
+  { key: "season", label: "Season", align: "center", defaultDir: "desc", value: (r) => r.season },
+  { key: "team", label: "Team", align: "center", defaultDir: "asc", value: (r) => r.team },
+  {
+    key: "pctOfLeagueCap",
+    label: "% of Cap",
+    align: "right",
+    defaultDir: "desc",
+    value: (r) => r.pctOfLeagueCap,
+  },
+];
+
+function compare(a: string | number | null, b: string | number | null, dir: "asc" | "desc") {
+  if (a === null && b === null) return 0;
+  if (a === null) return 1;
+  if (b === null) return -1;
+  const order = typeof a === "number" && typeof b === "number" ? a - b : String(a).localeCompare(String(b));
+  return dir === "asc" ? order : -order;
+}
+
+interface CompsTableProps {
+  title: string;
+  subtitle?: string;
+  rows: SalaryComp[];
+  /** Off for the single-season table, where every row repeats the same season. */
+  showSeason?: boolean;
+  emptyMessage: string;
+}
+
+/**
+ * A comps panel: fixed width and height, scrolling internally, so the two of
+ * them stack into a tidy column beside the salaries table however many rows
+ * they hold.
+ *
+ * Sorting is client-side on purpose. The rows are already the closest N to the
+ * anchor percentage — re-sorting reorders that selection rather than re-running
+ * the query, which with a limit would otherwise return, say, the 50
+ * alphabetically-first comps instead of the 50 nearest ones. Unsorted (the
+ * default) leaves them in closest-first order.
+ */
+export function CompsTable({ title, subtitle, rows, showSeason = true, emptyMessage }: CompsTableProps) {
+  const [sort, setSort] = useState<SortKey | null>(null);
+  const [dir, setDir] = useState<"asc" | "desc">("asc");
+
+  const columns = useMemo(
+    () => ALL_COLUMNS.filter((c) => showSeason || c.key !== "season"),
+    [showSeason]
+  );
+
+  const sorted = useMemo(() => {
+    if (!sort) return rows;
+    const col = columns.find((c) => c.key === sort);
+    if (!col) return rows;
+    return [...rows].sort((a, b) => compare(col.value(a), col.value(b), dir));
+  }, [rows, columns, sort, dir]);
+
+  function toggle(col: Column) {
+    if (sort === col.key) {
+      setDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSort(col.key);
+      setDir(col.defaultDir);
+    }
+  }
+
+  return (
+    <div className="mb-8 w-96 max-w-full">
+      <h2 className="text-lg font-semibold text-white">{title}</h2>
+      <div className="mb-2 min-h-[20px] text-sm text-white/60">{subtitle}</div>
+      <div className="h-80 overflow-y-auto overflow-x-auto rounded-lg border border-white/10 bg-white">
+        <table className="w-full text-sm text-black">
+          {/* Sticky so the sort controls stay put while the rows scroll under them. */}
+          <thead className="sticky top-0 z-10 bg-white">
+            <tr>
+              {columns.map((col) => {
+                const isActive = sort === col.key;
+                return (
+                  <th
+                    key={col.key}
+                    aria-sort={isActive ? (dir === "asc" ? "ascending" : "descending") : "none"}
+                    className={`p-0 font-medium whitespace-nowrap border-b border-black/10 ${alignClass(
+                      col.align
+                    )}`}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => toggle(col)}
+                      className={`flex w-full items-center gap-1 px-3 py-2 hover:bg-accent transition-colors ${
+                        col.align === "right"
+                          ? "justify-end"
+                          : col.align === "center"
+                            ? "justify-center"
+                            : "justify-start"
+                      }`}
+                    >
+                      {col.label}
+                      {isActive && <span className="text-black/50">{dir === "asc" ? "▲" : "▼"}</span>}
+                    </button>
+                  </th>
+                );
+              })}
+            </tr>
+          </thead>
+          <tbody>
+            {sorted.map((row, i) => (
+              <tr
+                key={row.id}
+                className={`${i % 2 === 0 ? "bg-white" : "bg-gray-100"} hover:bg-accent transition-colors`}
+              >
+                <td className="px-3 py-1.5 whitespace-nowrap">
+                  <PlayerLink id={row.playerId} name={row.name} />
+                </td>
+                {showSeason && (
+                  <td className="px-3 py-1.5 whitespace-nowrap text-center tabular-nums">{row.season}</td>
+                )}
+                <td className="px-3 py-1.5 whitespace-nowrap text-center">{row.team ?? "—"}</td>
+                <td className="px-3 py-1.5 whitespace-nowrap text-right tabular-nums">
+                  {row.pctOfLeagueCap === null ? "—" : `${row.pctOfLeagueCap.toFixed(2)}%`}
+                </td>
+              </tr>
+            ))}
+            {sorted.length === 0 && (
+              <tr>
+                <td colSpan={columns.length} className="px-3 py-6 text-center text-black/40">
+                  {emptyMessage}
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}

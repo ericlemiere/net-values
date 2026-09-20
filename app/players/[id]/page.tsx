@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { SimpleTable } from "@/components/SimpleTable";
+import { CompsTable } from "@/components/CompsTable";
 import type { ColumnDef } from "@/components/DataTable";
 import { formatNumber, formatCurrency, formatPercent } from "@/lib/format";
 import {
@@ -8,7 +9,12 @@ import {
   getPlayerCareerStatsPerGame,
   getPlayerCareerAdvancedStats,
   getPlayerCareerSalaries,
+  getSalaryComps,
 } from "@/lib/db/queries";
+
+/** Percentage points either side of the anchor season that still count as a comp. */
+const COMP_TOLERANCE = 0.5;
+const COMP_LIMIT = 50;
 
 type StatsRow = Awaited<ReturnType<typeof getPlayerCareerStatsPerGame>>[number];
 type AdvRow = Awaited<ReturnType<typeof getPlayerCareerAdvancedStats>>[number];
@@ -260,12 +266,22 @@ const salariesColumns: ColumnDef<SalRow>[] = [
   },
 ];
 
+// The salaries table anchors the comps beside it: the ?salary= row if it names
+// one, otherwise the player's most recent season that has both a salary and a
+// league cap to divide it by.
+function pickAnchor(rows: SalRow[], salaryId: number | null) {
+  const usable = rows.filter((r) => r.salary !== null && r.leagueCap);
+  return usable.find((r) => r.id === salaryId) ?? usable[usable.length - 1] ?? null;
+}
+
 export default async function PlayerPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ salary?: string }>;
 }) {
-  const { id } = await params;
+  const [{ id }, sp] = await Promise.all([params, searchParams]);
   const playerId = Number(id);
   if (!Number.isInteger(playerId)) notFound();
 
@@ -279,15 +295,85 @@ export default async function PlayerPage({
     getPlayerCareerSalaries(playerId),
   ]);
 
+  const salaryId = Number(sp.salary);
+  const anchor = pickAnchor(salaries, Number.isInteger(salaryId) ? salaryId : null);
+  // Recomputed from the raw figures rather than read off pctOfLeagueCap, which
+  // Postgres hands back as a numeric string.
+  const anchorPct = anchor
+    ? Math.round((10000 * anchor.salary!) / anchor.leagueCap!) / 100
+    : null;
+  const [seasonComps, historicalComps] =
+    anchor === null || anchorPct === null
+      ? [null, null]
+      : await Promise.all(
+          (["season", "historical"] as const).map((scope) =>
+            getSalaryComps({
+              playerId,
+              targetPct: anchorPct,
+              season: anchor.season,
+              scope,
+              tolerance: COMP_TOLERANCE,
+              limit: COMP_LIMIT,
+            })
+          )
+        );
+
+  // Both comps tables hang off the same anchor, so they share a subtitle stem.
+  const anchorLabel =
+    anchorPct === null ? null : `${anchorPct.toFixed(2)}% of the cap \u00b1 ${COMP_TOLERANCE}`;
+  const truncation = (comps: { rows: unknown[]; totalCount: number } | null) =>
+    comps && comps.totalCount > comps.rows.length
+      ? ` \u2014 closest ${comps.rows.length} of ${comps.totalCount}`
+      : "";
+
   return (
     <div className="p-6 max-w-350 mx-auto text-white">
       <h1 className="text-2xl font-semibold mb-6">{player.name}</h1>
-      <SimpleTable
-        title="Salaries"
-        columns={salariesColumns}
-        rows={salaries}
-        rowKey={(r) => r.id}
-      />
+      <div className="flex flex-wrap items-start gap-8">
+        <SimpleTable
+          title="Salaries"
+          subtitle={
+            salaries.length > 0 && "Select a season to compare it against the league."
+          }
+          columns={salariesColumns}
+          rows={salaries}
+          rowKey={(r) => r.id}
+          fit
+          rowHref={(r) => `/players/${playerId}?salary=${r.id}`}
+          isActive={(r) => r.id === anchor?.id}
+        />
+        <div className="flex flex-col">
+          <CompsTable
+            title="Season Cap Comps"
+            subtitle={
+              anchorLabel
+                ? `${anchor!.season} only \u00b7 ${anchorLabel}${truncation(seasonComps)}`
+                : undefined
+            }
+            rows={seasonComps?.rows ?? []}
+            showSeason={false}
+            emptyMessage={
+              seasonComps
+                ? "Nobody else took up this share of the cap that season."
+                : "No salary with a known league cap to compare."
+            }
+          />
+          <CompsTable
+            title="Historical Cap Comps"
+            subtitle={
+              anchorLabel
+                ? `Every other season \u00b7 ${anchorLabel}${truncation(historicalComps)}`
+                : undefined
+            }
+            rows={historicalComps?.rows ?? []}
+            emptyMessage={
+              historicalComps
+                ? "No other season matches this share of the cap."
+                : "No salary with a known league cap to compare."
+            }
+          />
+        </div>
+      </div>
       <SimpleTable
         title="Career Averages"
         columns={statsColumns}

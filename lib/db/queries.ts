@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, sql, type AnyColumn, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, ilike, ne, sql, type AnyColumn, type SQL } from "drizzle-orm";
 import { db } from "./index";
 import {
   players,
@@ -407,4 +407,142 @@ export async function getPlayerCareerSalaries(playerId: number) {
     .leftJoin(seasons, eq(seasons.season, salaries.season))
     .where(eq(salaries.playerId, playerId))
     .orderBy(asc(salaries.season));
+}
+
+export interface SalaryComp {
+  id: number;
+  playerId: number;
+  name: string;
+  season: string;
+  team: string | null;
+  pctOfLeagueCap: number | null;
+}
+
+/**
+ * Other players' seasons whose share of that season's league cap lands within
+ * `tolerance` percentage points of `targetPct` — i.e. contracts that cost the
+ * same slice of the cap.
+ *
+ * `scope` splits that into the two tables the player page shows: "season" keeps
+ * only the anchor's own season (who else was paid like this at the same time),
+ * "historical" keeps every other season (who has been paid like this before).
+ *
+ * The player himself is excluded, and rows are ordered by how close they are to
+ * the target so the tightest comps survive the limit. Windows near the bottom
+ * of the scale (minimum contracts) can hold hundreds of rows, hence the cap and
+ * the returned totalCount so the UI can say how many were left out.
+ */
+export async function getSalaryComps({
+  playerId,
+  targetPct,
+  season,
+  scope,
+  tolerance = 0.5,
+  limit = 50,
+}: {
+  playerId: number;
+  targetPct: number;
+  season: string;
+  scope: "season" | "historical";
+  tolerance?: number;
+  limit?: number;
+}): Promise<{ rows: SalaryComp[]; totalCount: number }> {
+  const distance = sql`abs(${pctOfLeagueCapSql} - ${targetPct})`;
+  // A null salary or league cap makes the pct — and so the distance — null,
+  // which this comparison drops along with the out-of-range rows.
+  const where = and(
+    ne(salaries.playerId, playerId),
+    scope === "season" ? eq(salaries.season, season) : ne(salaries.season, season),
+    sql`${distance} <= ${tolerance}`
+  );
+
+  const [rows, countResult] = await Promise.all([
+    db
+      .select({
+        id: salaries.id,
+        playerId: salaries.playerId,
+        name: players.name,
+        season: salaries.season,
+        team: salaries.team,
+        // Cast to float8: the driver hands plain numeric back as a string,
+        // which the table's client-side sort would compare lexically.
+        pctOfLeagueCap: sql<number | null>`(${pctOfLeagueCapSql})::float8`,
+      })
+      .from(salaries)
+      .innerJoin(players, eq(players.id, salaries.playerId))
+      .innerJoin(seasons, eq(seasons.season, salaries.season))
+      .where(where)
+      .orderBy(sql`${distance} asc`, desc(salaries.season), asc(players.name))
+      .limit(limit),
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(salaries)
+      .innerJoin(seasons, eq(seasons.season, salaries.season))
+      .where(where),
+  ]);
+
+  return { rows, totalCount: Number(countResult[0].count) };
+}
+
+// ---- Header search ----
+
+export interface PlayerSearchResult {
+  id: number;
+  name: string;
+  firstSeason: string | null;
+  lastSeason: string | null;
+}
+
+// Diacritic folding, so "jokic" finds Nikola Joki\u0107 and "doncic" finds Luka
+// Don\u010di\u0107. Done with translate() rather than the unaccent extension, which isn't
+// installed on the database. The two strings are positional: same length, one
+// replacement character per source character.
+const FOLD_FROM =
+  "ÀÁÂÃÄÅÇÈÉÊËÌÍÎÏÑÒÓÔÕÖÙÚÛÜÝàáâãäåçèéêëìíîïñòóôõöùúûüýÿĀāĂăĄąĆćĈĉĊċČčĎďĒēĔĕĖėĘęĚěĜĝĞğĠġĢģĤĥĨĩĪīĬĭĮįİĴĵĶķĹĺĻļĽľŃńŅņŇňŌōŎŏŐőŔŕŖŗŘřŚśŜŝŞşŠšŢţŤťŨũŪūŬŭŮůŰűŲųŴŵŶŷŸŹźŻżŽžØøŁłĐđıßÆæŒœÞþÐð";
+const FOLD_TO =
+  "AAAAAACEEEEIIIINOOOOOUUUUYaaaaaaceeeeiiiinooooouuuuyyAaAaAaCcCcCcCcDdEeEeEeEeEeGgGgGgGgHhIiIiIiIiIJjKkLlLlLlNnNnNnOoOoOoRrRrRrSsSsSsSsTtTtUuUuUuUuUuUuWwYyYZzZzZzOoLlDdisAaOoTtDd";
+
+const FOLD_MAP = new Map([...FOLD_FROM].map((c, i) => [c, FOLD_TO[i]]));
+
+/** The JS twin of the SQL translate() below — both sides must fold identically. */
+function foldDiacritics(value: string) {
+  return value.replace(/[^\u0000-\u007f]/g, (c) => FOLD_MAP.get(c) ?? c);
+}
+
+const foldedName = sql`translate(${players.name}, ${FOLD_FROM}, ${FOLD_TO})`;
+
+/**
+ * Name search for the header's type-ahead. Real players share names (several
+ * "Charles Jones"), so each hit carries the career span that tells them apart.
+ * The span comes from player_stats_per_game via a LEFT join so a player who
+ * only ever appears in the salary tables is still findable.
+ *
+ * Ranking: names that start with the query first, then whoever played most
+ * recently — typing "curry" should surface Stephen before Dell.
+ */
+export async function searchPlayers(query: string, limit = 10): Promise<PlayerSearchResult[]> {
+  const q = query.trim();
+  if (q.length < 2) return [];
+  // The user's text is a literal, not a pattern: neutralize LIKE wildcards
+  // (and the escape character itself) before wrapping it in our own.
+  const literal = foldDiacritics(q).replace(/[\\%_]/g, (c) => `\\${c}`);
+  const lastSeason = sql<string | null>`max(${playerStatsPerGame.season})`;
+
+  return db
+    .select({
+      id: players.id,
+      name: players.name,
+      firstSeason: sql<string | null>`min(${playerStatsPerGame.season})`,
+      lastSeason,
+    })
+    .from(players)
+    .leftJoin(playerStatsPerGame, eq(playerStatsPerGame.playerId, players.id))
+    .where(ilike(foldedName, `%${literal}%`))
+    .groupBy(players.id, players.name)
+    .orderBy(
+      sql`(${foldedName} ilike ${`${literal}%`}) desc`,
+      sql`${lastSeason} desc nulls last`,
+      asc(players.name)
+    )
+    .limit(limit);
 }

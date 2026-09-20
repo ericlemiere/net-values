@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Geist, Geist_Mono } from "next/font/google";
 import { NavLinks } from "@/components/NavLinks";
+import { PlayerSearch } from "@/components/PlayerSearch";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -39,6 +40,7 @@ export default function RootLayout({
               The Net Values
             </Link>
             <NavLinks />
+            <PlayerSearch />
           </div>
         </header>
         <main className="flex flex-1 flex-col">{children}</main>

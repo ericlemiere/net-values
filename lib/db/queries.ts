@@ -1,4 +1,4 @@
-import { asc, desc, eq, sql, type AnyColumn } from "drizzle-orm";
+import { and, asc, desc, eq, sql, type AnyColumn, type SQL } from "drizzle-orm";
 import { db } from "./index";
 import {
   players,
@@ -6,12 +6,16 @@ import {
   playerStatsPerGame,
   advancedStats,
   salaries,
+  seasons,
+  teams,
+  teamPayrolls,
 } from "./schema";
 
 export const PAGE_SIZE = 100;
 
 export interface ListParams {
   season: string; // "ALL" or e.g. "2022-2023"
+  team: string; // "ALL" or a canonical abbreviation, e.g. "LAL"
   sort: string;
   dir: "asc" | "desc";
   page: number;
@@ -24,7 +28,19 @@ function clampPage(page: number) {
 // Postgres sorts NULLs first by default on DESC, which would push
 // unmatched/missing values (e.g. salaries with no Spotrac match) to the
 // top of the table. Always put NULLs last regardless of direction.
-function orderByNullsLast(column: AnyColumn, dir: "asc" | "desc") {
+// Season and team filters combine; either may be "ALL". Returns undefined when
+// neither is active so callers can skip .where() entirely.
+// Note rows with a NULL team (multi-team/TOT season lines) are excluded by an
+// active team filter, which is intended — they belong to no single team.
+function listWhere(seasonCol: AnyColumn, teamCol: AnyColumn, params: ListParams) {
+  const clauses: SQL[] = [];
+  if (params.season !== "ALL") clauses.push(eq(seasonCol, params.season));
+  if (params.team !== "ALL") clauses.push(eq(teamCol, params.team));
+  if (clauses.length === 0) return undefined;
+  return clauses.length === 1 ? clauses[0] : and(...clauses);
+}
+
+function orderByNullsLast(column: AnyColumn | SQL, dir: "asc" | "desc") {
   return dir === "asc" ? sql`${column} asc nulls last` : sql`${column} desc nulls last`;
 }
 
@@ -39,6 +55,16 @@ async function distinctSeasons(table: typeof playerStatsPerGame | typeof advance
 // player_stats_per_game covers every season with stats (nba_api 1996-97+ and
 // sqlite pre-96), so it's the source of truth for the /stats season list —
 // player_stats_totals is a strict subset (no true totals exist pre-96).
+// The canonical 30 franchises. Every stat/salary table stores team as a
+// canonical abbreviation (historical codes like SEA/NJN/VAN were mapped on
+// import), so one list serves all three pages.
+export async function getTeams() {
+  return db
+    .select({ abbr: teams.abbr, name: teams.name })
+    .from(teams)
+    .orderBy(asc(teams.name));
+}
+
 export async function getStatsSeasons() {
   return distinctSeasons(playerStatsPerGame);
 }
@@ -88,7 +114,7 @@ async function getPlayerStatsFrom(t: typeof playerStatsTotals | typeof playerSta
   const page = clampPage(params.page);
   const sortColumns = statSortColumnsFor(t);
   const sortCol = sortColumns[params.sort as StatsSortKey] ?? t.pts;
-  const where = params.season !== "ALL" ? eq(t.season, params.season) : undefined;
+  const where = listWhere(t.season, t.team, params);
 
   const rowsQuery = db
     .select({
@@ -173,7 +199,7 @@ export type AdvancedSortKey = keyof typeof advancedSortColumns;
 export async function getAdvancedStats(params: ListParams) {
   const page = clampPage(params.page);
   const sortCol = advancedSortColumns[params.sort as AdvancedSortKey] ?? advancedStats.vorp;
-  const where = params.season !== "ALL" ? eq(advancedStats.season, params.season) : undefined;
+  const where = listWhere(advancedStats.season, advancedStats.team, params);
 
   const rowsQuery = db
     .select({
@@ -213,42 +239,66 @@ export async function getAdvancedStats(params: ListParams) {
   return { rows, totalCount: Number(countResult[0].count), page };
 }
 
+// Team payroll and league cap live in their own tables (one row per team-season
+// / per season) rather than being duplicated onto every salary row, so the two
+// "% of" figures are computed here instead of stored. nullif guards the divide
+// against a 0 or missing denominator.
+const pctOfTeamCapSql = sql<number | null>`round(100.0 * ${salaries.salary} / nullif(${teamPayrolls.payroll}, 0), 2)`;
+const pctOfLeagueCapSql = sql<number | null>`round(100.0 * ${salaries.salary} / nullif(${seasons.leagueCap}, 0), 2)`;
+
+const salarySelection = {
+  id: salaries.id,
+  season: salaries.season,
+  team: salaries.team,
+  salary: salaries.salary,
+  teamPayroll: teamPayrolls.payroll,
+  leagueCap: seasons.leagueCap,
+  pctOfTeamCap: pctOfTeamCapSql,
+  pctOfLeagueCap: pctOfLeagueCapSql,
+};
+
 const salariesSortColumns = {
   name: players.name,
   season: salaries.season,
   team: salaries.team,
   salary: salaries.salary,
-  teamPayroll: salaries.teamPayroll,
-  pctOfTeamCap: salaries.pctOfTeamCap,
-  pctOfLeagueCap: salaries.pctOfLeagueCap,
-  spotracBase: salaries.spotracBase,
-  spotracCapHit: salaries.spotracCapHit,
+  teamPayroll: teamPayrolls.payroll,
+  pctOfTeamCap: pctOfTeamCapSql,
+  pctOfLeagueCap: pctOfLeagueCapSql,
 } as const;
 
 export type SalariesSortKey = keyof typeof salariesSortColumns;
 
+// The league cap for one season, for display above the salaries table. Read
+// from `seasons` rather than off a result row so it still resolves when the
+// current page of salaries is empty. Null for "ALL", which spans many caps.
+export async function getLeagueCap(season: string) {
+  if (season === "ALL") return null;
+  const rows = await db
+    .select({ leagueCap: seasons.leagueCap })
+    .from(seasons)
+    .where(eq(seasons.season, season));
+  return rows[0]?.leagueCap ?? null;
+}
+
 export async function getSalaries(params: ListParams) {
   const page = clampPage(params.page);
   const sortCol = salariesSortColumns[params.sort as SalariesSortKey] ?? salaries.salary;
-  const where = params.season !== "ALL" ? eq(salaries.season, params.season) : undefined;
+  const where = listWhere(salaries.season, salaries.team, params);
 
   const rowsQuery = db
-    .select({
-      id: salaries.id,
-      playerId: salaries.playerId,
-      name: players.name,
-      season: salaries.season,
-      team: salaries.team,
-      salary: salaries.salary,
-      teamPayroll: salaries.teamPayroll,
-      leagueCap: salaries.leagueCap,
-      pctOfTeamCap: salaries.pctOfTeamCap,
-      pctOfLeagueCap: salaries.pctOfLeagueCap,
-      spotracBase: salaries.spotracBase,
-      spotracCapHit: salaries.spotracCapHit,
-    })
+    .select({ playerId: salaries.playerId, name: players.name, ...salarySelection })
     .from(salaries)
     .innerJoin(players, eq(players.id, salaries.playerId))
+    // salaries.team is a canonical abbreviation, so it reaches team_payrolls
+    // via teams.abbr. LEFT so a salary row still shows when its team payroll
+    // or that season's league cap is missing.
+    .leftJoin(teams, eq(teams.abbr, salaries.team))
+    .leftJoin(
+      teamPayrolls,
+      and(eq(teamPayrolls.teamId, teams.id), eq(teamPayrolls.season, salaries.season))
+    )
+    .leftJoin(seasons, eq(seasons.season, salaries.season))
     .orderBy(orderByNullsLast(sortCol, params.dir), asc(players.name))
     .limit(PAGE_SIZE)
     .offset((page - 1) * PAGE_SIZE);
@@ -347,19 +397,14 @@ export async function getPlayerCareerAdvancedStats(playerId: number) {
 
 export async function getPlayerCareerSalaries(playerId: number) {
   return db
-    .select({
-      id: salaries.id,
-      season: salaries.season,
-      team: salaries.team,
-      salary: salaries.salary,
-      teamPayroll: salaries.teamPayroll,
-      leagueCap: salaries.leagueCap,
-      pctOfTeamCap: salaries.pctOfTeamCap,
-      pctOfLeagueCap: salaries.pctOfLeagueCap,
-      spotracBase: salaries.spotracBase,
-      spotracCapHit: salaries.spotracCapHit,
-    })
+    .select(salarySelection)
     .from(salaries)
+    .leftJoin(teams, eq(teams.abbr, salaries.team))
+    .leftJoin(
+      teamPayrolls,
+      and(eq(teamPayrolls.teamId, teams.id), eq(teamPayrolls.season, salaries.season))
+    )
+    .leftJoin(seasons, eq(seasons.season, salaries.season))
     .where(eq(salaries.playerId, playerId))
     .orderBy(asc(salaries.season));
 }

@@ -159,6 +159,35 @@ export const advancedStats = pgTable(
   ]
 );
 
+// League-wide per-season context. One row per season, replacing what used to be
+// a league_cap value duplicated onto every individual salary row.
+// Sourced from basketball-reference's salary cap history page (1984-85+).
+export const seasons = pgTable("seasons", {
+  season: text("season").primaryKey(),
+  leagueCap: integer("league_cap"),
+  source: varchar("source", { length: 20 }).notNull(),
+});
+
+// Per-team, per-season total payroll. Also formerly duplicated onto every
+// salary row. For bref-sourced seasons this is the sum of that team's salary
+// table; for pre-2011 seasons it was migrated from the legacy Hoopshype data.
+export const teamPayrolls = pgTable(
+  "team_payrolls",
+  {
+    id: serial("id").primaryKey(),
+    teamId: integer("team_id")
+      .notNull()
+      .references(() => teams.id),
+    season: text("season").notNull(),
+    payroll: integer("payroll"),
+    source: varchar("source", { length: 20 }).notNull(),
+  },
+  (t) => [
+    uniqueIndex("team_payrolls_team_season_idx").on(t.teamId, t.season),
+    index("team_payrolls_season_idx").on(t.season),
+  ]
+);
+
 export const salaries = pgTable(
   "salaries",
   {
@@ -168,15 +197,10 @@ export const salaries = pgTable(
       .references(() => players.id),
     season: text("season").notNull(),
     team: varchar("team", { length: 3 }),
-    // Hoopshype-sourced salary, joined with team/league cap context (1990-91 through 2022-23)
+    // Actual salary for this player-season-team. bref-sourced from 2011-12 on,
+    // legacy Hoopshype before that. Team payroll and league cap live in
+    // team_payrolls / seasons; the "% of" figures are computed at query time.
     salary: integer("salary"),
-    teamPayroll: integer("team_payroll"),
-    leagueCap: integer("league_cap"),
-    pctOfTeamCap: numeric("pct_of_team_cap", { precision: 6, scale: 2, mode: "number" }),
-    pctOfLeagueCap: numeric("pct_of_league_cap", { precision: 6, scale: 2, mode: "number" }),
-    // Spotrac-sourced cap hit data, only available 2011-12 onward
-    spotracBase: integer("spotrac_base"),
-    spotracCapHit: integer("spotrac_cap_hit"),
     source: varchar("source", { length: 20 }).notNull().default("sqlite_migration"),
   },
   (t) => [

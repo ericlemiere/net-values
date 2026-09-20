@@ -1,4 +1,4 @@
-import type { ColumnDef } from "./DataTable";
+import { alignClass, type ColumnDef } from "./DataTable";
 
 interface SimpleTableProps<Row> {
   title: string;
@@ -18,9 +18,9 @@ export function SimpleTable<Row>({ title, columns, rows, rowKey }: SimpleTablePr
               {columns.map((col) => (
                 <th
                   key={col.key}
-                  className={`px-3 py-2 font-medium whitespace-nowrap border-b border-black/10 ${
-                    col.align === "right" ? "text-right" : "text-left"
-                  }`}
+                  className={`px-3 py-2 font-medium whitespace-nowrap border-b border-black/10 ${alignClass(
+                    col.align
+                  )}`}
                 >
                   {col.label}
                 </th>
@@ -36,8 +36,8 @@ export function SimpleTable<Row>({ title, columns, rows, rowKey }: SimpleTablePr
                 {columns.map((col) => (
                   <td
                     key={col.key}
-                    className={`px-3 py-1.5 whitespace-nowrap ${
-                      col.align === "right" ? "text-right tabular-nums" : "text-left"
+                    className={`px-3 py-1.5 whitespace-nowrap ${alignClass(col.align)} ${
+                      col.align === "right" || col.align === "center" ? "tabular-nums" : ""
                     }`}
                   >
                     {col.render(row)}

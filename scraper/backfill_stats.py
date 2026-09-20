@@ -125,7 +125,20 @@ def upsert_stat_row(cur, table, player_id, season, values):
     )
 
 
-def main():
+def current_season() -> str:
+    """The nba_api season string for the season now in progress.
+
+    An NBA season spans October through June and is labelled by its start year,
+    so anything before October belongs to the season that started last year.
+    """
+    from datetime import date
+
+    today = date.today()
+    start = today.year if today.month >= 10 else today.year - 1
+    return f"{start}-{str(start + 1)[2:]}"
+
+
+def run(seasons):
     conn = connect()
     cur = conn.cursor()
 
@@ -137,7 +150,7 @@ def main():
 
     season_counts = {}
 
-    for season in NBA_API_SEASONS:
+    for season in seasons:
         label = to_season_label(season)
         print(f"=== {season} ({label}) ===")
 
@@ -189,6 +202,13 @@ def main():
     for label, n in season_counts.items():
         flag = "" if 450 <= n <= 600 else "  <-- outside expected 450-600 range"
         print(f"{label}: {n}{flag}")
+
+
+def main():
+    # No args: every season from 1996-97 on. Otherwise the seasons named,
+    # in nba_api's "2025-26" format.
+    seasons = sys.argv[1:] or NBA_API_SEASONS
+    run(seasons)
 
 
 if __name__ == "__main__":

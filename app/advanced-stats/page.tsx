@@ -1,7 +1,13 @@
 import { DataTable, type ColumnDef } from "@/components/DataTable";
+import { PageHeader } from "@/components/PageHeader";
 import { PlayerLink } from "@/components/PlayerLink";
 import { formatNumber } from "@/lib/format";
-import { getAdvancedStats, getAdvancedStatsSeasons, PAGE_SIZE } from "@/lib/db/queries";
+import {
+  getAdvancedStats,
+  getAdvancedStatsSeasons,
+  getTeams,
+  PAGE_SIZE,
+} from "@/lib/db/queries";
 
 type Row = Awaited<ReturnType<typeof getAdvancedStats>>["rows"][number];
 
@@ -32,20 +38,27 @@ function getColumns(showSeason: boolean): ColumnDef<Row>[] {
 export default async function AdvancedStatsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ season?: string; sort?: string; dir?: string; page?: string }>;
+  searchParams: Promise<{
+    season?: string;
+    team?: string;
+    sort?: string;
+    dir?: string;
+    page?: string;
+  }>;
 }) {
   const sp = await searchParams;
-  const seasons = await getAdvancedStatsSeasons();
+  const [seasons, teams] = await Promise.all([getAdvancedStatsSeasons(), getTeams()]);
   const season = sp.season ?? seasons[0] ?? "ALL";
+  const team = sp.team ?? "ALL";
   const sort = sp.sort ?? "name";
   const dir = sp.dir === "desc" ? "desc" : "asc";
   const page = Number(sp.page ?? "1");
 
-  const { rows, totalCount } = await getAdvancedStats({ season, sort, dir, page });
+  const { rows, totalCount } = await getAdvancedStats({ season, team, sort, dir, page });
 
   return (
-    <div className="p-6 max-w-[1400px] mx-auto text-white">
-      <h1 className="text-2xl font-semibold mb-4">Advanced Stats</h1>
+    <div className="p-6 max-w-350 mx-auto text-white">
+      <PageHeader title="Advanced Stats" />
       <DataTable
         basePath="/advanced-stats"
         columns={getColumns(season === "ALL")}
@@ -53,6 +66,8 @@ export default async function AdvancedStatsPage({
         rowKey={(r) => r.id}
         seasons={seasons}
         currentSeason={season}
+        teams={teams}
+        currentTeam={team}
         sort={sort}
         dir={dir}
         page={page}

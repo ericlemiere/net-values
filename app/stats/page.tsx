@@ -1,8 +1,15 @@
 import { DataTable, type ColumnDef } from "@/components/DataTable";
 import { PlayerLink } from "@/components/PlayerLink";
+import { PageHeader } from "@/components/PageHeader";
 import { StatTypeToggle, type StatType } from "@/components/StatTypeToggle";
 import { formatNumber } from "@/lib/format";
-import { getPlayerStatsPerGame, getPlayerStatsTotals, getStatsSeasons, PAGE_SIZE } from "@/lib/db/queries";
+import {
+  getPlayerStatsPerGame,
+  getPlayerStatsTotals,
+  getStatsSeasons,
+  getTeams,
+  PAGE_SIZE,
+} from "@/lib/db/queries";
 
 type Row = Awaited<ReturnType<typeof getPlayerStatsPerGame>>["rows"][number];
 
@@ -47,11 +54,19 @@ function getColumns(showSeason: boolean, statType: StatType): ColumnDef<Row>[] {
 export default async function StatsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ season?: string; sort?: string; dir?: string; page?: string; type?: string }>;
+  searchParams: Promise<{
+    season?: string;
+    team?: string;
+    sort?: string;
+    dir?: string;
+    page?: string;
+    type?: string;
+  }>;
 }) {
   const sp = await searchParams;
-  const seasons = await getStatsSeasons();
+  const [seasons, teams] = await Promise.all([getStatsSeasons(), getTeams()]);
   const season = sp.season ?? seasons[0] ?? "ALL";
+  const team = sp.team ?? "ALL";
   const sort = sp.sort ?? "pts";
   const dir = sp.dir === "asc" ? "asc" : "desc";
   const page = Number(sp.page ?? "1");
@@ -59,15 +74,24 @@ export default async function StatsPage({
 
   const { rows, totalCount } =
     statType === "totals"
-      ? await getPlayerStatsTotals({ season, sort, dir, page })
-      : await getPlayerStatsPerGame({ season, sort, dir, page });
+      ? await getPlayerStatsTotals({ season, team, sort, dir, page })
+      : await getPlayerStatsPerGame({ season, team, sort, dir, page });
 
   return (
-    <div className="p-6 max-w-[1400px] mx-auto text-white">
-      <div className="flex items-center gap-4 mb-4 flex-wrap">
-        <h1 className="text-2xl font-semibold">Player Stats</h1>
-        <StatTypeToggle basePath="/stats" statType={statType} season={season} sort={sort} dir={dir} />
-      </div>
+    <div className="p-6 max-w-350 mx-auto text-white">
+      <PageHeader
+        title="Player Stats"
+        toolbar={
+          <StatTypeToggle
+            basePath="/stats"
+            statType={statType}
+            season={season}
+            team={team}
+            sort={sort}
+            dir={dir}
+          />
+        }
+      />
       <DataTable
         basePath="/stats"
         columns={getColumns(season === "ALL", statType)}
@@ -75,6 +99,8 @@ export default async function StatsPage({
         rowKey={(r) => r.id}
         seasons={seasons}
         currentSeason={season}
+        teams={teams}
+        currentTeam={team}
         sort={sort}
         dir={dir}
         page={page}

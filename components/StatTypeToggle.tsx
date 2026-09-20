@@ -8,19 +8,21 @@ export function StatTypeToggle({
   basePath,
   statType,
   season,
+  team,
   sort,
   dir,
 }: {
   basePath: string;
   statType: StatType;
   season: string;
+  team: string;
   sort: string;
   dir: string;
 }) {
   const router = useRouter();
 
   function go(next: StatType) {
-    const sp = new URLSearchParams({ type: next, season, sort, dir, page: "1" });
+    const sp = new URLSearchParams({ type: next, season, team, sort, dir, page: "1" });
     router.push(`${basePath}?${sp.toString()}`);
   }
 

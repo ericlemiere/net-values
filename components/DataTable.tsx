@@ -1,13 +1,30 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { SeasonFilter } from "./SeasonFilter";
+import { TeamFilter, type TeamOption } from "./TeamFilter";
+
+export type ColumnAlign = "left" | "right" | "center";
 
 export interface ColumnDef<Row> {
   key: string;
   label: string;
-  align?: "left" | "right";
+  align?: ColumnAlign;
   defaultDir?: "asc" | "desc";
   render: (row: Row) => ReactNode;
+}
+
+export function alignClass(align?: ColumnAlign) {
+  if (align === "right") return "text-right";
+  if (align === "center") return "text-center";
+  return "text-left";
+}
+
+// Header labels sit in a flex row (label + sort caret), so they need a
+// justify-* to match the cell's text-* alignment.
+function justifyClass(align?: ColumnAlign) {
+  if (align === "right") return "justify-end";
+  if (align === "center") return "justify-center";
+  return "justify-start";
 }
 
 interface DataTableProps<Row> {
@@ -17,6 +34,8 @@ interface DataTableProps<Row> {
   rowKey: (row: Row) => string | number;
   seasons: string[];
   currentSeason: string;
+  teams: TeamOption[];
+  currentTeam: string;
   sort: string;
   dir: "asc" | "desc";
   page: number;
@@ -45,6 +64,8 @@ export function DataTable<Row>({
   rowKey,
   seasons,
   currentSeason,
+  teams,
+  currentTeam,
   sort,
   dir,
   page,
@@ -63,6 +84,16 @@ export function DataTable<Row>({
             basePath={basePath}
             seasons={seasons}
             currentSeason={currentSeason}
+            currentTeam={currentTeam}
+            sort={sort}
+            dir={dir}
+            extraParams={extraParams}
+          />
+          <TeamFilter
+            basePath={basePath}
+            teams={teams}
+            currentTeam={currentTeam}
+            season={currentSeason}
             sort={sort}
             dir={dir}
             extraParams={extraParams}
@@ -85,6 +116,7 @@ export function DataTable<Row>({
                   basePath,
                   {
                     season: currentSeason,
+                    team: currentTeam,
                     sort: col.key,
                     dir: nextDir,
                     page: 1,
@@ -94,13 +126,15 @@ export function DataTable<Row>({
                 return (
                   <th
                     key={col.key}
-                    className={`p-0 font-medium whitespace-nowrap border-b border-black/10 ${
-                      col.align === "right" ? "text-right" : "text-left"
-                    }`}
+                    className={`p-0 font-medium whitespace-nowrap border-b border-black/10 ${alignClass(
+                      col.align
+                    )}`}
                   >
                     <Link
                       href={href}
-                      className="flex items-center gap-1 px-3 py-2 hover:bg-accent transition-colors"
+                      className={`flex items-center gap-1 px-3 py-2 hover:bg-accent transition-colors ${justifyClass(
+                        col.align
+                      )}`}
                     >
                       {col.label}
                       {isActive && <span className="text-black/50">{dir === "asc" ? "▲" : "▼"}</span>}
@@ -122,8 +156,8 @@ export function DataTable<Row>({
                 {columns.map((col) => (
                   <td
                     key={col.key}
-                    className={`px-3 py-1.5 whitespace-nowrap ${
-                      col.align === "right" ? "text-right tabular-nums" : "text-left"
+                    className={`px-3 py-1.5 whitespace-nowrap ${alignClass(col.align)} ${
+                      col.align === "right" || col.align === "center" ? "tabular-nums" : ""
                     }`}
                   >
                     {col.render(row)}
@@ -145,7 +179,7 @@ export function DataTable<Row>({
         <Link
           href={buildHref(
             basePath,
-            { season: currentSeason, sort, dir, page: Math.max(1, page - 1) },
+            { season: currentSeason, team: currentTeam, sort, dir, page: Math.max(1, page - 1) },
             extraParams
           )}
           className={`px-3 py-1.5 rounded border border-white/20 ${
@@ -162,6 +196,7 @@ export function DataTable<Row>({
             basePath,
             {
               season: currentSeason,
+              team: currentTeam,
               sort,
               dir,
               page: Math.min(totalPages, page + 1),

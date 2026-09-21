@@ -31,15 +31,20 @@ export function PlayerHeadshot({
       className="shrink-0 overflow-hidden rounded-lg border border-white/15 bg-white/5"
       style={{ width, height }}
     >
-      {nbaPersonId !== null && (
+      {nbaPersonId !== null ? (
         <Image
           src={`${HEADSHOT_BASE}/1040x760/${nbaPersonId}.png`}
           alt={`${name} headshot`}
           width={width}
           height={height}
+          unoptimized
           preload
           className="h-full w-full object-cover object-top"
         />
+      ) : (
+        <div className="flex h-full w-full items-center justify-center text-xs text-white/50">
+          No photo
+        </div>
       )}
     </div>
   );

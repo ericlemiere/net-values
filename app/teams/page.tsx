@@ -3,7 +3,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { SimpleTable } from "@/components/SimpleTable";
 import { TeamSeasonFilter } from "@/components/TeamSeasonFilter";
 import { TableOverlay } from "@/components/TableNav";
-import type { ColumnDef } from "@/components/DataTable";
+import { COUNT_CHIP, type ColumnDef } from "@/components/DataTable";
 import { formatCurrency, formatStat } from "@/lib/format";
 import {
   getLeagueCap,
@@ -39,26 +39,28 @@ const columns: ColumnDef<TeamSeasonRow>[] = [
     key: "wins",
     label: "W",
     align: "right",
-    render: (r) => (r.wins ?? "—"),
+    render: (r) => r.wins ?? "—",
   },
   {
     key: "losses",
     label: "L",
     align: "right",
-    render: (r) => (r.losses ?? "—"),
+    render: (r) => r.losses ?? "—",
   },
   {
     key: "winPct",
     label: "Win%",
     align: "right",
     // .683 rather than 68.3% — the convention every standings page uses.
-    render: (r) => (r.winPct === null ? "—" : r.winPct.toFixed(3).replace(/^0/, "")),
+    render: (r) =>
+      r.winPct === null ? "—" : r.winPct.toFixed(3).replace(/^0/, ""),
   },
   {
     key: "srs",
     label: "SRS",
     align: "right",
-    render: (r) => (r.srs === null ? "—" : `${r.srs > 0 ? "+" : ""}${formatStat(r.srs)}`),
+    render: (r) =>
+      r.srs === null ? "—" : `${r.srs > 0 ? "+" : ""}${formatStat(r.srs)}`,
   },
   {
     key: "payroll",
@@ -70,19 +72,21 @@ const columns: ColumnDef<TeamSeasonRow>[] = [
     key: "payrollPctOfCap",
     label: "% of Cap",
     align: "right",
-    render: (r) => (r.payrollPctOfCap === null ? "—" : `${formatStat(r.payrollPctOfCap)}%`),
+    render: (r) =>
+      r.payrollPctOfCap === null ? "—" : `${formatStat(r.payrollPctOfCap)}%`,
   },
   {
     key: "rosterSize",
     label: "Players Paid",
     align: "right",
-    render: (r) => (r.rosterSize ?? "—"),
+    render: (r) => r.rosterSize ?? "—",
   },
   {
     key: "madePlayoffs",
     label: "Playoffs",
     align: "center",
-    render: (r) => (r.madePlayoffs === null ? "—" : r.madePlayoffs ? "Yes" : "—"),
+    render: (r) =>
+      r.madePlayoffs === null ? "—" : r.madePlayoffs ? "Yes" : "—",
   },
 ];
 
@@ -93,7 +97,8 @@ export default async function TeamsPage({
 }) {
   const sp = await searchParams;
   const seasons = await getTeamSeasons();
-  const season = sp.season && seasons.includes(sp.season) ? sp.season : seasons[0];
+  const season =
+    sp.season && seasons.includes(sp.season) ? sp.season : seasons[0];
 
   const [rows, leagueCap] = await Promise.all([
     getTeamsForSeason(season),
@@ -111,7 +116,9 @@ export default async function TeamsPage({
         meta={
           leagueCap !== null && (
             <div className="inline-flex items-baseline gap-3 rounded-lg border-2 border-accent bg-white/5 px-4 py-2">
-              <span className="text-sm text-white/60">{season} League Salary Cap</span>
+              <span className="text-sm text-white/60">
+                {season} League Salary Cap
+              </span>
               <span className="font-mono text-lg font-semibold tabular-nums text-accent">
                 {formatCurrency(leagueCap)}
               </span>
@@ -121,7 +128,7 @@ export default async function TeamsPage({
       />
       <div className="mb-4 flex flex-wrap items-center justify-between gap-4">
         <TeamSeasonFilter seasons={seasons} currentSeason={season} />
-        <div className="text-sm tabular-nums text-white/60">
+        <div className={COUNT_CHIP}>
           {rows.length} teams
           {withPayroll.length > 0 && (
             <>

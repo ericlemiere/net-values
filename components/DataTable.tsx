@@ -15,6 +15,12 @@ export interface ColumnDef<Row> {
    * one table and a season total on another.
    */
   description?: string;
+  /**
+   * Keeps this cell out of the row-wide link. Set it on any column whose own
+   * render puts a link in the cell: an anchor inside an anchor is invalid
+   * HTML, and the browser silently unnests it.
+   */
+  noRowLink?: boolean;
   align?: ColumnAlign;
   defaultDir?: "asc" | "desc";
   render: (row: Row) => ReactNode;
@@ -41,7 +47,32 @@ export const SHEET =
 /** Header cells sit on the sheet and are separated from it by an accent rule. */
 export const SHEET_HEAD = "bg-surface border-b-2 border-accent";
 
+/**
+ * The scrolling variant, for the long league-wide tables.
+ *
+ * A sticky `thead` anchors to its nearest scroll container, and SHEET is
+ * already one: `overflow-x-auto` makes a box scrollable on both axes. With an
+ * automatic height that container never scrolls vertically, so a sticky header
+ * inside it would never engage as the page moved. Capping the height makes the
+ * sheet itself the thing that scrolls, which is what the header then sticks to.
+ *
+ * The cap leaves room for the fixed site header, the page heading, the filter
+ * row and the pager, so all of those stay put while the rows move.
+ */
+export const SHEET_SCROLL = `${SHEET} max-h-[calc(100dvh-16rem)]`;
+
+/** Keeps the column headers in view while the rows scroll under them. */
+export const SHEET_HEAD_STICKY = `${SHEET_HEAD} sticky top-0 z-10`;
+
 export const SHEET_ROW_HOVER = "hover:bg-surface-hover transition-colors";
+
+/**
+ * The row-count label beside a table's filters. It carries its own background
+ * because it floats over the page, and the logo watermark behind it would
+ * otherwise cut straight through the digits.
+ */
+export const COUNT_CHIP =
+  "rounded-md border border-white/15 bg-black/70 px-2.5 py-1 text-sm tabular-nums text-white/70";
 
 /** Zebra striping for an unselected row. */
 export function stripeClass(i: number) {
@@ -134,14 +165,12 @@ export function DataTable<Row>({
             extraParams={extraParams}
           />
         </div>
-        <div className="text-sm tabular-nums text-white/60">
-          {totalCount.toLocaleString()} rows
-        </div>
+        <div className={COUNT_CHIP}>{totalCount.toLocaleString()} rows</div>
       </div>
       <TableOverlay>
-        <div className={SHEET}>
+        <div className={SHEET_SCROLL}>
           <table className="min-w-full text-sm text-black">
-            <thead className={SHEET_HEAD}>
+            <thead className={SHEET_HEAD_STICKY}>
               <tr>
                 <th
                   className="px-3 py-2 text-right font-medium text-black/40"

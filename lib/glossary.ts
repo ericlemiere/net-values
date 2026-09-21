@@ -61,6 +61,21 @@ export const GLOSSARY: Record<string, string> = {
   bpm: "Box plus/minus: estimated points added per 100 possessions vs. a league-average player",
   vorp: "Value over replacement player: box plus/minus scaled by playing time, measured against a bench-level baseline",
 
+  netValueScore:
+    "Wins produced above what his pay bought, given how much of the season he was available. 0 means he was paid the going rate; it runs about -7 to +9.",
+  netValue:
+    "The same figure in that season's dollars: wins above pay, times what a win cost that year.",
+  production: "Wins above a replacement-level player (VORP).",
+  expectedProduction:
+    "The wins his salary bought at the league's going rate, over the time he was available.",
+  availability: "Share of a full starter's workload he actually played.",
+  netValueRank:
+    "Rank by net value among every player in the league that season. #1 is the best value in the NBA.",
+  salaryRank:
+    "Rank by salary among every player in the league that season. #1 is the highest paid in the NBA.",
+  capAdjustedSalary:
+    "What this contract would pay if it were signed now. % of league cap multiplied by the current league cap.",
+
   // --- teams ---
   abbr: "Three-letter team abbreviation",
   wins: "Regular season wins",

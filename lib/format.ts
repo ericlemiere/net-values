@@ -27,3 +27,25 @@ export function formatStat(value: number | null): string {
   if (value === null || value === undefined) return "—";
   return value.toFixed(1);
 }
+
+/**
+ * Net value, which is meaningful only with its sign: +$12M means the player
+ * returned twelve million more than he cost, -$12M that he didn't.
+ */
+export function formatSignedCurrency(value: number | null): string {
+  if (value === null || value === undefined) return "—";
+  const sign = value < 0 ? "-" : "+";
+  return `${sign}$${Math.abs(Math.round(value)).toLocaleString("en-US")}`;
+}
+
+/** A league-wide rank, shown as "#1". */
+export function formatRank(value: number | null): string {
+  if (value === null || value === undefined) return "—";
+  return `#${value}`;
+}
+
+/** The Net Value score: signed, two decimals, 0 means paid the going rate. */
+export function formatScore(value: number | null): string {
+  if (value === null || value === undefined) return "—";
+  return `${value > 0 ? "+" : value < 0 ? "\u2212" : ""}${Math.abs(value).toFixed(2)}`;
+}

@@ -39,8 +39,17 @@ export default function RootLayout({
           z-50 only ever competes INSIDE the header's. On a tie, <main> wins on
           DOM order and its content (the stats page toggle) covers the results.
         */}
-        <header className="relative z-30">
-          <div className="mx-auto flex max-w-350 items-center gap-6 px-6 py-3">
+        {/*
+          Fixed, so it stays put while a long table scrolls under it. That makes
+          the opaque background load-bearing rather than decorative: without it
+          the rows would show through.
+        */}
+        <header className="site-header fixed inset-x-0 top-0 z-30 bg-background">
+          <div className="site-header-backdrop" aria-hidden="true">
+            <div className="logo-watermark" />
+          </div>
+          {/* Above the header's copy of the watermark, so the nav stays legible. */}
+          <div className="relative z-1 mx-auto flex h-full max-w-350 items-center gap-6 px-6">
             <Link
               href="/"
               className="font-semibold text-white border-2 border-accent rounded px-2 py-1"
@@ -51,7 +60,8 @@ export default function RootLayout({
             <PlayerSearch />
           </div>
         </header>
-        <main className="relative z-10 flex flex-1 flex-col">
+        {/* Offset by the header's height, which no longer takes up flow space. */}
+        <main className="site-main relative z-10 flex flex-1 flex-col">
           <TableNavProvider>{children}</TableNavProvider>
         </main>
       </body>

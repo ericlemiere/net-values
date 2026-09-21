@@ -27,6 +27,12 @@ USER_AGENT = (
 
 _last_fetch = 0.0
 
+# How long a cached page stays good, in seconds. None means forever, which is
+# right for finished seasons: their pages never change, and a backfill re-run
+# after a parsing fix should cost nothing. A job refreshing the season now in
+# progress sets this to a few hours so today's games actually arrive.
+MAX_CACHE_AGE = None
+
 
 def fetch(url: str, use_cache: bool = True) -> str:
     """GET `url`, honoring the crawl delay. Returns HTML, cached on disk."""
@@ -36,7 +42,9 @@ def fetch(url: str, use_cache: bool = True) -> str:
     key = hashlib.sha1(url.encode()).hexdigest()[:16]
     cached = CACHE_DIR / f"{key}.html"
     if use_cache and cached.exists():
-        return cached.read_text(encoding="utf-8")
+        fresh = MAX_CACHE_AGE is None or (time.time() - cached.stat().st_mtime) < MAX_CACHE_AGE
+        if fresh:
+            return cached.read_text(encoding="utf-8")
 
     elapsed = time.monotonic() - _last_fetch
     if elapsed < CRAWL_DELAY:

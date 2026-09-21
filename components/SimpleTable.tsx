@@ -47,10 +47,14 @@ export function SimpleTable<Row>({
     <div className={`mb-8 ${fit ? "w-fit max-w-full" : ""}`}>
       {title && <h2 className="text-lg font-semibold text-white">{title}</h2>}
       {(title || subtitle) && (
-        <div className="mb-2 min-h-[20px] text-sm text-white/60">{subtitle}</div>
+        <div className="mb-2 min-h-[20px] text-sm text-white/60">
+          {subtitle}
+        </div>
       )}
       <div className={SHEET}>
-        <table className={`${fit ? "w-auto" : "min-w-full"} text-sm text-black`}>
+        <table
+          className={`${fit ? "w-auto" : "min-w-full"} text-sm text-black`}
+        >
           <thead className={SHEET_HEAD}>
             <tr>
               {columns.map((col) => (
@@ -67,6 +71,10 @@ export function SimpleTable<Row>({
           <tbody>
             {rows.map((row, i) => {
               const href = rowHref?.(row);
+              // A column that renders its own link opts out, so we never nest
+              // one anchor inside another.
+              const linked = (col: ColumnDef<Row>) =>
+                Boolean(href) && !col.noRowLink;
               const active = isActive?.(row) ?? false;
               return (
                 <tr
@@ -83,10 +91,10 @@ export function SimpleTable<Row>({
                       key={col.key}
                       // A linked row puts the padding on the anchor instead of
                       // the cell, so the whole cell is clickable.
-                      className={`${href ? "p-0" : "px-3 py-1.5"} ${cellClass(col.align)}`}
+                      className={`${linked(col) ? "p-0" : "px-3 py-1.5"} ${cellClass(col.align)}`}
                     >
-                      {href ? (
-                        <Link href={href} className="block px-3 py-1.5">
+                      {linked(col) ? (
+                        <Link href={href!} className="block px-3 py-1.5">
                           {col.render(row)}
                         </Link>
                       ) : (
@@ -99,7 +107,10 @@ export function SimpleTable<Row>({
             })}
             {rows.length === 0 && (
               <tr>
-                <td colSpan={columns.length} className="px-3 py-8 text-center text-black/40">
+                <td
+                  colSpan={columns.length}
+                  className="px-3 py-8 text-center text-black/40"
+                >
                   {emptyMessage}
                 </td>
               </tr>

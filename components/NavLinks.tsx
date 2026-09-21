@@ -4,10 +4,11 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const links = [
-  { href: "/stats", label: "Stats" },
-  { href: "/advanced-stats", label: "Advanced Stats" },
   { href: "/salaries", label: "Salaries" },
   { href: "/teams", label: "Teams" },
+  { href: "/stats", label: "Stats" },
+  { href: "/advanced-stats", label: "Advanced Stats" },
+  { href: "/net-value", label: "Net Value" },
 ];
 
 export function NavLinks() {

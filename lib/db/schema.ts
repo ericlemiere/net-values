@@ -284,3 +284,82 @@ export const nbaAdvanced = pgTable(
     index("nba_advanced_season_idx").on(t.season),
   ]
 );
+
+/**
+ * Net Value: what a player produced, priced in that season's dollars, minus
+ * what he was actually paid.
+ *
+ * Surplus, not a ratio. Dividing production by salary would put every
+ * minimum-contract bench player above every star, because a small number over
+ * a tiny number is enormous. Subtracting asks the question people actually
+ * mean: how much more (or less) was this player worth than he cost?
+ *
+ * Both sides are priced within the player's own season, so the figure is
+ * directly comparable across eras without adjusting for inflation or cap
+ * growth. League-wide the column sums to roughly zero, which makes zero mean
+ * "paid exactly the going rate" rather than an arbitrary origin.
+ *
+ * Recomputed wholesale by scraper/compute_net_values.py — never edited in place.
+ */
+export const netValues = pgTable(
+  "net_values",
+  {
+    id: serial("id").primaryKey(),
+    playerId: integer("player_id")
+      .notNull()
+      .references(() => players.id),
+    season: text("season").notNull(),
+    team: varchar("team", { length: 3 }),
+    salary: integer("salary"),
+    /**
+     * Value over replacement (VORP), sourced from Basketball-Reference rather
+     * than computed here. NOT wins: fitted against team results over 937 full
+     * 82-game team-seasons, one point is worth about 2.2 wins (r = 0.95).
+     * Negative production counts as zero.
+     */
+    production: numeric("production", { precision: 8, scale: 3, mode: "number" }),
+    /** Minutes played, the numerator of `availability`. */
+    minutes: numeric("minutes", { precision: 8, scale: 1, mode: "number" }),
+    /**
+     * A full starter's workload that season, in minutes — the denominator of
+     * `availability`. Stored rather than recomputed so the explainer shows the
+     * same figure the model actually used.
+     */
+    fullWorkload: numeric("full_workload", { precision: 8, scale: 1, mode: "number" }),
+    /**
+     * Share of a full starter's workload the player was actually available
+     * for, 0-1. Expectation is scaled by this so a missed half-season is
+     * charged once (through reduced production) rather than twice.
+     */
+    availability: numeric("availability", { precision: 5, scale: 3, mode: "number" }),
+    /** What his pay bought at the league's going rate, over the time he played. */
+    expectedProduction: numeric("expected_production", { precision: 8, scale: 3, mode: "number" }),
+    /**
+     * The headline figure: production above what his pay bought, in the same
+     * VORP units (about 2.2 team wins per point). Zero is paid-the-going-rate;
+     * it runs about -7 to +9 across NBA history.
+     */
+    netValueScore: numeric("net_value_score", { precision: 6, scale: 2, mode: "number" }),
+    /** What that production was worth at this season's going rate. */
+    valueDollars: numeric("value_dollars", { precision: 14, scale: 2, mode: "number" }),
+    netValue: numeric("net_value", { precision: 14, scale: 2, mode: "number" }),
+    /** Net value as a share of the season's league cap — the era-neutral view. */
+    netValuePctCap: numeric("net_value_pct_cap", { precision: 8, scale: 3, mode: "number" }),
+    /** Rank within the season by net value, 1 = best value in the league. */
+    seasonRank: integer("season_rank"),
+    /** Rank within the season by salary, 1 = highest paid in the league. */
+    salaryRank: integer("salary_rank"),
+    /**
+     * False when the player drew a salary but has no stat row at all. Their
+     * net value is then just minus their salary, which is right for a player
+     * who never took the floor and wrong for a gap in our data — so the
+     * distinction is recorded rather than hidden.
+     */
+    hasStats: boolean("has_stats").notNull().default(true),
+    source: varchar("source", { length: 20 }).notNull(),
+  },
+  (t) => [
+    uniqueIndex("net_values_player_season_idx").on(t.playerId, t.season),
+    index("net_values_season_idx").on(t.season),
+  ]
+);

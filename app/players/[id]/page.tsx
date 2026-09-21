@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { TeamLink } from "@/components/TeamLink";
 import { PlayerHeadshot } from "@/components/PlayerHeadshot";
 import { SimpleTable } from "@/components/SimpleTable";
 import { CompsTable } from "@/components/CompsTable";
@@ -8,9 +9,12 @@ import {
   formatStat,
   formatCurrency,
   formatPercent,
+  formatRank,
+  formatScore,
 } from "@/lib/format";
 import { GLOSSARY } from "@/lib/glossary";
 import {
+  getCurrentCap,
   getPlayerById,
   getPlayerCareerStatsTotals,
   getPlayerCareerStatsPerGame,
@@ -35,7 +39,7 @@ function getStatsColumns(mode: "per_game" | "totals"): ColumnDef<StatsRow>[] {
   const note = (key: string) => (GLOSSARY[key] ?? "") + per;
   return [
     { key: "season", label: "Season", render: (r) => r.season },
-    { key: "team", label: "Team", render: (r) => r.team ?? "—" },
+    { key: "team", label: "Team", render: (r) => <TeamLink abbr={r.team} /> },
     { key: "pos", label: "Pos", render: (r) => r.pos ?? "—" },
     {
       key: "age",
@@ -220,7 +224,7 @@ function getStatsColumns(mode: "per_game" | "totals"): ColumnDef<StatsRow>[] {
 
 const advancedColumns: ColumnDef<AdvRow>[] = [
   { key: "season", label: "Season", render: (r) => r.season },
-  { key: "team", label: "Team", render: (r) => r.team ?? "—" },
+  { key: "team", label: "Team", render: (r) => <TeamLink abbr={r.team} /> },
   { key: "pos", label: "Pos", render: (r) => r.pos ?? "—" },
   {
     key: "age",
@@ -287,49 +291,125 @@ const advancedColumns: ColumnDef<AdvRow>[] = [
   },
 ];
 
-const salariesColumns: ColumnDef<SalRow>[] = [
-  { key: "season", label: "Season", render: (r) => r.season },
-  { key: "team", label: "Team", render: (r) => r.team ?? "—" },
-  {
-    key: "salary",
-    label: "Salary",
-    align: "right",
-    render: (r) => formatCurrency(r.salary),
-  },
-  {
-    key: "teamPayroll",
-    label: "Team Payroll",
-    align: "right",
-    render: (r) => formatCurrency(r.teamPayroll),
-  },
-  {
-    key: "pctOfTeamCap",
-    label: "% of Team Payroll",
-    align: "right",
-    render: (r) => formatPercent(r.pctOfTeamCap),
-  },
-  {
-    key: "leagueCap",
-    label: "League Cap",
-    align: "right",
-    render: (r) => formatCurrency(r.leagueCap),
-  },
-  {
-    key: "pctOfLeagueCap",
-    label: "% of League Cap",
-    align: "right",
-    render: (r) => formatPercent(r.pctOfLeagueCap),
-  },
-];
+function getSalariesColumns(
+  currentCap: Awaited<ReturnType<typeof getCurrentCap>>,
+): ColumnDef<SalRow>[] {
+  return [
+    { key: "season", label: "Season", render: (r) => r.season },
+    {
+      key: "team",
+      label: "Team",
+      noRowLink: true,
+      render: (r) => <TeamLink abbr={r.team} />,
+    },
+    {
+      key: "salary",
+      label: "Salary",
+      align: "right",
+      render: (r) => formatCurrency(r.salary),
+    },
+    {
+      key: "teamPayroll",
+      label: "Team Payroll",
+      align: "right",
+      render: (r) => formatCurrency(r.teamPayroll),
+    },
+    {
+      key: "pctOfTeamCap",
+      label: "% of Team Payroll",
+      align: "right",
+      render: (r) => formatPercent(r.pctOfTeamCap),
+    },
+    {
+      key: "leagueCap",
+      label: "League Cap",
+      align: "right",
+      render: (r) => formatCurrency(r.leagueCap),
+    },
+    {
+      key: "pctOfLeagueCap",
+      label: "% of League Cap",
+      align: "right",
+      render: (r) => formatPercent(r.pctOfLeagueCap),
+    },
+    {
+      key: "capAdjustedSalary",
+      label: currentCap ? `Salary in ${currentCap.season} $` : "Cap-Adjusted",
+      align: "right",
+      description: `The same share of the cap, restated at the ${
+        currentCap?.season ?? "current"
+      } cap. What this contract would pay if it were signed now.`,
+      // Scaled from the raw salary and the two caps, not from % of League Cap:
+      // that column is rounded to two decimals, and multiplying it back out
+      // lands up to ~$8,000 from the real figure. Blank for the current
+      // season, where restating today's salary at today's cap would only
+      // repeat the Salary column beside it.
+      render: (r) =>
+        currentCap?.leagueCap &&
+        r.salary !== null &&
+        r.leagueCap &&
+        r.season !== currentCap.season
+          ? formatCurrency(
+              Math.round((r.salary * currentCap.leagueCap) / r.leagueCap),
+            )
+          : "—",
+    },
+    {
+      key: "salaryRank",
+      label: "Pay Rank",
+      align: "right",
+      render: (r) => formatRank(r.salaryRank),
+    },
+    {
+      key: "netValueScore",
+      label: "Net Value",
+      align: "right",
+      render: (r) => formatScore(r.netValueScore),
+    },
+    {
+      key: "netValueRank",
+      label: "NV Rank",
+      align: "right",
+      render: (r) => formatRank(r.netValueRank),
+    },
+  ];
+}
 
 // The salaries table anchors the comps beside it: the ?salary= row if it names
 // one, otherwise the player's most recent season that has both a salary and a
 // league cap to divide it by.
+/** One figure in the header strip: a label, the number, and a caption. */
+function HeaderBox({
+  label,
+  value,
+  caption,
+}: {
+  label: string;
+  value: string;
+  caption?: string;
+}) {
+  return (
+    <div className="rounded-lg border-2 border-accent bg-background-box px-4 py-2 text-right">
+      <div className="text-sm text-white/60">{label}</div>
+      <div className="font-mono text-2xl font-semibold tabular-nums text-accent">
+        {value}
+      </div>
+      {/* Reserved even when empty so boxes beside each other stay level. */}
+      <div className="min-h-4 text-xs text-white/40">{caption}</div>
+    </div>
+  );
+}
+
 function pickAnchor(rows: SalRow[], salaryId: number | null) {
   const usable = rows.filter((r) => r.salary !== null && r.leagueCap);
-  return (
-    usable.find((r) => r.id === salaryId) ?? usable[usable.length - 1] ?? null
-  );
+  // An explicit ?salary= wins, whatever season it names.
+  const chosen = usable.find((r) => r.id === salaryId);
+  if (chosen) return chosen;
+  // Otherwise default to the most recent season that has actually been played.
+  // The newest salary row is often a season still to come, and anchoring there
+  // gives comps with no net value and nothing to compare.
+  const played = usable.filter((r) => r.netValueScore !== null);
+  return played[played.length - 1] ?? usable[usable.length - 1] ?? null;
 }
 
 export default async function PlayerPage({
@@ -346,11 +426,12 @@ export default async function PlayerPage({
   const player = await getPlayerById(playerId);
   if (!player) notFound();
 
-  const [perGame, totals, advanced, salaries] = await Promise.all([
+  const [perGame, totals, advanced, salaries, currentCap] = await Promise.all([
     getPlayerCareerStatsPerGame(playerId),
     getPlayerCareerStatsTotals(playerId),
     getPlayerCareerAdvancedStats(playerId),
     getPlayerCareerSalaries(playerId),
+    getCurrentCap(),
   ]);
 
   const salaryId = Number(sp.salary);
@@ -375,6 +456,7 @@ export default async function PlayerPage({
               scope,
               tolerance: COMP_TOLERANCE,
               limit: COMP_LIMIT,
+              anchorNetValue: anchor.netValueScore,
             }),
           ),
         );
@@ -391,6 +473,21 @@ export default async function PlayerPage({
   const careerEarnings = paidSeasons.reduce((sum, r) => sum + r.salary!, 0);
   const unknownSeasons = salaries.length - paidSeasons.length;
 
+  // Only shown when the player is actually on a roster for the season now
+  // starting. A season with no games played yet has no Net Value, so the box
+  // says so with a dash rather than being hidden or showing a stale figure.
+  const currentSeasonRow = currentCap
+    ? salaries.find((r) => r.season === currentCap.season)
+    : undefined;
+
+  // Best season of his career by Net Value.
+  const scored = salaries.filter((r) => r.netValueScore !== null);
+  const bestSeason = scored.reduce<(typeof scored)[number] | null>(
+    (best, r) =>
+      best === null || r.netValueScore! > best.netValueScore! ? r : best,
+    null,
+  );
+
   const truncation = (comps: { rows: unknown[]; totalCount: number } | null) =>
     comps && comps.totalCount > comps.rows.length
       ? ` \u2014 closest ${comps.rows.length} of ${comps.totalCount}`
@@ -405,19 +502,34 @@ export default async function PlayerPage({
             {player.name}
           </h1>
         </div>
-        {paidSeasons.length > 0 && (
-          <div className="rounded-lg border-2 border-accent bg-white/5 px-4 py-2 text-right">
-            <div className="text-sm text-white/60">Career Earnings</div>
-            <div className="font-mono text-2xl font-semibold tabular-nums text-accent">
-              {formatCurrency(careerEarnings)}
-            </div>
-            <div className="text-xs text-white/40">
-              {paidSeasons.length} season{paidSeasons.length === 1 ? "" : "s"}
-              {unknownSeasons > 0 &&
-                `, ${unknownSeasons} with no figure on record`}
-            </div>
-          </div>
-        )}
+        <div className="flex flex-wrap items-stretch gap-3">
+          {paidSeasons.length > 0 && (
+            <HeaderBox
+              label="Career Earnings"
+              value={formatCurrency(careerEarnings)}
+              caption={
+                `${paidSeasons.length} season${paidSeasons.length === 1 ? "" : "s"}` +
+                (unknownSeasons > 0
+                  ? `, ${unknownSeasons} with no figure on record`
+                  : "")
+              }
+            />
+          )}
+          {currentSeasonRow && (
+            <HeaderBox
+              label="Current Net Value"
+              value={formatScore(currentSeasonRow.netValueScore)}
+              caption={currentCap!.season}
+            />
+          )}
+          {bestSeason && (
+            <HeaderBox
+              label="Best Net Value"
+              value={formatScore(bestSeason.netValueScore)}
+              caption={bestSeason.season}
+            />
+          )}
+        </div>
       </div>
       <div className="flex flex-wrap items-start gap-8">
         <SimpleTable
@@ -426,19 +538,19 @@ export default async function PlayerPage({
             salaries.length > 0 &&
             "Select a season to compare it against the league."
           }
-          columns={salariesColumns}
+          columns={getSalariesColumns(currentCap)}
           rows={salaries}
           rowKey={(r) => r.id}
           fit
           rowHref={(r) => `/players/${playerId}?salary=${r.id}`}
           isActive={(r) => r.id === anchor?.id}
         />
-        <div className="flex flex-col">
+        <div className="flex flex-wrap items-start gap-8">
           <CompsTable
-            title="Season Cap Comps"
+            title={`${anchor!.season} Season Cap Comps`}
             subtitle={
               anchorLabel
-                ? `${anchor!.season} only \u00b7 ${anchorLabel}${truncation(seasonComps)}`
+                ? `${anchorLabel}${truncation(seasonComps)}`
                 : undefined
             }
             rows={seasonComps?.rows ?? []}

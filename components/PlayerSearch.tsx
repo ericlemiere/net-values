@@ -114,7 +114,7 @@ export function PlayerSearch() {
         aria-expanded={showList}
         aria-controls={listId}
         aria-autocomplete="list"
-        className="w-full rounded-md border border-stone-600 bg-white/10 px-3 py-1.5 text-sm text-white placeholder-white/40 outline-none transition-colors focus:bg-white/10"
+        className="w-full rounded-md border border-white/70 bg-background/70 px-3 py-1.5 text-sm text-white placeholder-white/70 outline-none transition-colors focus:bg-background/80"
       />
       {showList && (
         <ul

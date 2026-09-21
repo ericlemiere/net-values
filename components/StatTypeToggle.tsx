@@ -34,7 +34,7 @@ export function StatTypeToggle({
     <div
       role="group"
       aria-label="Stat type"
-      className="flex items-center gap-1 rounded-lg border-2 border-accent bg-white/5 p-1"
+      className="flex items-center gap-1 rounded-lg border-2 border-accent bg-background p-1"
     >
       <button
         type="button"

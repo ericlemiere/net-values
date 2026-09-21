@@ -9,16 +9,27 @@ import {
   formatNumber,
   formatPercent,
   formatStat,
+  formatRank,
+  formatScore,
 } from "@/lib/format";
 import {
   getTeamByAbbr,
+  getTeamNetValues,
   getTeamHistory,
   getTeamRoster,
   getTeamRosterSeasons,
   type TeamRosterRow,
 } from "@/lib/db/queries";
 
-type HistoryRow = Awaited<ReturnType<typeof getTeamHistory>>[number];
+type HistoryRow = Awaited<ReturnType<typeof getTeamHistory>>[number] & {
+  netValue?: {
+    total: number;
+    average: number;
+    players: number;
+    rank: number;
+    teams: number;
+  };
+};
 
 const historyColumns: ColumnDef<HistoryRow>[] = [
   {
@@ -71,6 +82,21 @@ const historyColumns: ColumnDef<HistoryRow>[] = [
     align: "right",
     render: (r) =>
       r.payrollPctOfCap === null ? "—" : `${formatStat(r.payrollPctOfCap)}%`,
+  },
+  {
+    key: "teamNetValue",
+    label: "Net Value",
+    align: "right",
+    description:
+      "The roster's Net Value added up — wins the squad returned above what it cost. Counts only players on a full contract.",
+    render: (r) => (r.netValue ? formatScore(r.netValue.total) : "—"),
+  },
+  {
+    key: "teamNetValueRank",
+    label: "NV Rank",
+    align: "right",
+    description: "Where that ranked among the league's teams that season.",
+    render: (r) => (r.netValue ? formatRank(r.netValue.rank) : "—"),
   },
   {
     key: "madePlayoffs",
@@ -153,13 +179,22 @@ function rosterColumns(showSeason: boolean): ColumnDef<TeamRosterRow>[] {
 }
 
 /** A labelled figure in the header strip. */
-function Stat({ label, value }: { label: string; value: string }) {
+function Stat({
+  label,
+  value,
+  caption,
+}: {
+  label: string;
+  value: string;
+  caption?: string;
+}) {
   return (
     <div className="rounded-lg border-2 border-accent bg-white/5 px-4 py-2">
       <div className="text-sm text-white/60">{label}</div>
       <div className="font-mono text-xl font-semibold tabular-nums text-accent">
         {value}
       </div>
+      {caption && <div className="text-xs text-white/40">{caption}</div>}
     </div>
   );
 }
@@ -175,10 +210,18 @@ export default async function TeamPage({
   const team = await getTeamByAbbr(abbr);
   if (!team) notFound();
 
-  const [history, rosterSeasons] = await Promise.all([
+  const [rawHistory, rosterSeasons, teamNetValues] = await Promise.all([
     getTeamHistory(team.id),
     getTeamRosterSeasons(team.abbr),
+    getTeamNetValues(team.abbr),
   ]);
+  const netValueBySeason = new Map(teamNetValues.map((n) => [n.season, n]));
+  const history: HistoryRow[] = rawHistory.map((h) => ({
+    ...h,
+    netValue: netValueBySeason.get(h.season),
+  }));
+  // Newest first from the query, so this is the latest season actually played.
+  const latestNetValue = teamNetValues[0] ?? null;
 
   const rosterSeason =
     sp.roster && (sp.roster === "ALL" || rosterSeasons.includes(sp.roster))
@@ -197,26 +240,32 @@ export default async function TeamPage({
       <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">{team.name}</h1>
-          <p className="mt-1 text-sm text-white/60">
-            {seasonsCovered} seasons on file
-            {titles.length > 0 && (
-              <>
-                {" — titles in "}
-                {/* A title is named for the year it was won, which is the
-                    season's END year: 2023-2024 was the 2024 championship. */}
-                {titles.map((t) => t.season.slice(5)).join(", ")}
-              </>
-            )}
-          </p>
         </div>
-        <div className="flex flex-wrap gap-3">
-          <Stat label="Record" value={`${totalWins}-${totalLosses}`} />
+      </div>
+
+      <div className="flex flex-wrap gap-3 mb-8">
+        <Stat
+          label="Record"
+          value={`${totalWins}-${totalLosses}`}
+          caption="Since 1991"
+        />
+        <Stat
+          label="Playoff seasons"
+          value={`${playoffRuns} of ${seasonsCovered}`}
+          caption="Since 1991"
+        />
+        <Stat
+          label="Championships"
+          value={String(titles.length)}
+          caption="Since 1991"
+        />
+        {latestNetValue && (
           <Stat
-            label="Playoff seasons"
-            value={`${playoffRuns} of ${seasonsCovered}`}
+            label="Team Net Value"
+            value={formatScore(latestNetValue.total)}
+            caption={`${latestNetValue.season} — #${latestNetValue.rank} of ${latestNetValue.teams}`}
           />
-          <Stat label="Championships" value={String(titles.length)} />
-        </div>
+        )}
       </div>
 
       <TableOverlay>

@@ -1,6 +1,7 @@
 import { DataTable, type ColumnDef } from "@/components/DataTable";
 import { PageHeader } from "@/components/PageHeader";
 import { PlayerLink } from "@/components/PlayerLink";
+import { TeamLink } from "@/components/TeamLink";
 import { formatNumber, formatStat } from "@/lib/format";
 import {
   getAdvancedStats,
@@ -33,7 +34,7 @@ function getColumns(showSeason: boolean): ColumnDef<Row>[] {
       key: "team",
       label: "Team",
       defaultDir: "asc",
-      render: (r) => r.team ?? "—",
+      render: (r) => <TeamLink abbr={r.team} />,
     },
     {
       key: "pos",

@@ -2,6 +2,7 @@
 
 :root {
   --background: #000000;
+  --background-box: #171717;
   --foreground: #ffffff;
   /* Single source of truth for the site's accent color. */
   --accent: #fff200;
@@ -30,6 +31,7 @@
 
 @theme inline {
   --color-background: var(--background);
+  --color-background-box: var(--background-box);
   --color-foreground: var(--foreground);
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
@@ -57,35 +59,66 @@ body {
 
 /*
  * The NBA logoman pinned to the bottom-right of the viewport, behind
- * everything. Built as two layers confined to the silhouette's own shape:
- *
- *   under — the PNG's alpha used as a mask over a flat --logo-tint fill
- *   over  — the PNG itself at --logo-opacity
- *
- * The mask clips the ::after layer too, so the tint only ever shows through
- * the logo, never as a block of color in the corner.
- *
- * Note the file name lies: nba-logo-black-transparent.png is a *white*
- * silhouette on transparency, not a black one. So --logo-opacity blends
- * toward white, not black — 0 is pure --logo-tint and 1 is flat white. To
- * darken the logo instead of washing it out, the PNG has to be inverted to
- * black first (or the ::after layer swapped for a flat black fill).
+ * everything. The outer layer is a masked accent silhouette; the ::after
+ * layer is the same silhouette slightly scaled down in the page background,
+ * which cuts out the center and leaves a hollow outline.
  */
+/*
+ * Header geometry. The header is fixed, so it no longer takes up flow space and
+ * the main column pads itself by the same amount to start below it.
+ */
+.site-header {
+  height: 3.5rem;
+}
+
+/*
+ * Clips the header's copy of the watermark to the header strip.
+ *
+ * This lives on its own layer rather than on .site-header, because the search
+ * results drop out of the header and `overflow: hidden` up there would cut
+ * them off.
+ */
+.site-header-backdrop {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.site-main {
+  padding-top: 3.5rem;
+}
+
 .logo-watermark {
-  --logo-src: url("/nba-logo-black-transparent.png");
-  --logo-tint: #fff20005;
-  --logo-opacity: 0.03;
+  --logo-src: url("/bg-logo.png");
+  --logo-outline: #fff200;
+  --logo-stroke-scale: 0.994;
+
+  /*
+   * The PNG is cropped tight to the figure, so at exactly viewport height its
+   * head and feet end in a flat edge right where you can see it. Bleeding a
+   * little past both edges puts that cut off-screen.
+   */
+  --logo-bleed: 2px;
+
+  /*
+   * One geometry for both copies. Anchoring on `top` rather than `bottom`
+   * means the header's copy can reuse the same value verbatim: its wrapper
+   * starts at the viewport's top edge, so the two land in the same place and
+   * cannot drift apart when the bleed changes.
+   */
+  --logo-top: calc(-1 * var(--logo-bleed));
+  --logo-height: calc(100dvh + var(--logo-bleed) * 2);
 
   position: fixed;
   right: 0;
-  bottom: 0;
-  height: 100dvh;
+  top: var(--logo-top);
+  height: var(--logo-height);
   /* Intrinsic size of the PNG, so `contain` fills the box exactly. */
   aspect-ratio: 1892 / 4633;
-  z-index: 0;
+  z-index: 1;
   pointer-events: none;
 
-  background-color: var(--logo-tint);
+  background-color: var(--logo-outline);
   -webkit-mask-image: var(--logo-src);
   mask-image: var(--logo-src);
   -webkit-mask-size: contain;
@@ -94,17 +127,44 @@ body {
   mask-position: bottom right;
   -webkit-mask-repeat: no-repeat;
   mask-repeat: no-repeat;
+
+  /* Keep it present but subtle behind content. */
+  opacity: 0.9;
+}
+
+/*
+ * The header draws its own copy of the watermark.
+ *
+ * The page copy has to sit BELOW the tables, or it would wash over them; the
+ * header's background has to sit ABOVE them, or rows would show through it as
+ * they scroll past. Those two can't both be satisfied by one element, so the
+ * header paints the same shape again on top of its own background, clipped to
+ * its own height. Because the header's top edge is the viewport's top edge,
+ * `top: 0` here lands in exactly the same place as the page copy's `bottom: 0`
+ * does, and the two read as one unbroken figure.
+ */
+.site-header-backdrop .logo-watermark {
+  position: absolute;
+  top: var(--logo-top);
 }
 
 .logo-watermark::after {
   content: "";
   position: absolute;
   inset: 0;
-  background-image: var(--logo-src);
-  background-size: contain;
-  background-position: bottom right;
-  background-repeat: no-repeat;
-  opacity: var(--logo-opacity);
+  background-color: var(--background);
+  -webkit-mask-image: var(--logo-src);
+  mask-image: var(--logo-src);
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  -webkit-mask-position: bottom right;
+  mask-position: bottom right;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+
+  /* Slightly shrink the inner silhouette to punch out the fill. */
+  transform: scale(var(--logo-stroke-scale));
+  transform-origin: 100% 50%;
 }
 
 /*

@@ -89,6 +89,9 @@ export default async function NetValuePage() {
       ? (hero.salary / pricing.pool) * pricing.produced * hero.availability
       : 0;
   const drift = hero ? hero.expectedProduction - rawClaim : 0;
+  const salarySharePct =
+    hero && pricing && pricing.pool ? (100 * hero.salary) / pricing.pool : 0;
+  const availabilityShare = hero?.availability ?? 0;
 
   return (
     <div className="mx-auto max-w-4xl p-6 text-white">
@@ -166,13 +169,10 @@ export default async function NetValuePage() {
               working={[
                 `$${hero.salary.toLocaleString()} ÷ $${Math.round(
                   pricing.pool,
-                ).toLocaleString()} = ${(
-                  (100 * hero.salary) /
-                  pricing.pool
-                ).toFixed(2)}% of all salary`,
-                `${((100 * hero.salary) / pricing.pool).toFixed(
-                  2,
-                )}% × ${formatStat(pricing.produced)} points = ${formatStat(
+                ).toLocaleString()} = ${salarySharePct.toFixed(2)}% of all salary`,
+                `${salarySharePct.toFixed(2)}% × ${formatStat(
+                  pricing.produced,
+                )} points = ${formatStat(
                   (hero.salary / pricing.pool) * pricing.produced,
                 )} points`,
               ]}
@@ -185,7 +185,7 @@ export default async function NetValuePage() {
               title="Scale it by how much of the season he was available"
               working={`${Math.round(hero.minutes).toLocaleString()} min played ÷ ${Math.round(
                 hero.fullWorkload,
-              ).toLocaleString()} min full workload = ${hero.availability.toFixed(
+              ).toLocaleString()} min full workload = ${availabilityShare.toFixed(
                 2,
               )}  →  ${formatStat(rawClaim)} points`}
             >

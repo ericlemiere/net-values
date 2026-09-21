@@ -128,7 +128,7 @@ export function CompsTable({
     // Sized to its content: the season-scoped table has one column fewer than
     // the historical one, so forcing them to equal widths would pad the
     // narrower one with empty space.
-    <div className="mb-8 w-fit max-w-full">
+    <div className="mb-8 w-full min-w-0 lg:w-fit lg:max-w-full">
       <h2 className="text-lg font-semibold text-white">{title}</h2>
       <div className="mb-2 min-h-[20px] text-sm text-white/60">{subtitle}</div>
       {/* scrollbar-gutter keeps the vertical scrollbar from squeezing the

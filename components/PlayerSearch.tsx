@@ -13,7 +13,11 @@ function careerSpan(first: string | null, last: string | null) {
   return `${first.slice(0, 4)}–${last.slice(5)}`;
 }
 
-export function PlayerSearch() {
+export function PlayerSearch({
+  className = "ml-auto w-56 sm:w-72",
+}: {
+  className?: string;
+}) {
   const router = useRouter();
   const listId = useId();
   const [query, setQuery] = useState("");
@@ -37,9 +41,12 @@ export function PlayerSearch() {
     const controller = new AbortController();
     const timer = setTimeout(async () => {
       try {
-        const res = await fetch(`/api/players/search?q=${encodeURIComponent(q)}`, {
-          signal: controller.signal,
-        });
+        const res = await fetch(
+          `/api/players/search?q=${encodeURIComponent(q)}`,
+          {
+            signal: controller.signal,
+          },
+        );
         if (!res.ok) return;
         const data: { players: PlayerSearchResult[] } = await res.json();
         setResults(data.players);
@@ -101,7 +108,7 @@ export function PlayerSearch() {
   }
 
   return (
-    <div ref={containerRef} className="relative ml-auto w-56 sm:w-72">
+    <div ref={containerRef} className={`relative ${className}`.trim()}>
       <input
         type="search"
         value={query}
@@ -125,7 +132,11 @@ export function PlayerSearch() {
           {results.map((player, i) => {
             const span = careerSpan(player.firstSeason, player.lastSeason);
             return (
-              <li key={player.id} role="option" aria-selected={i === highlighted}>
+              <li
+                key={player.id}
+                role="option"
+                aria-selected={i === highlighted}
+              >
                 <button
                   type="button"
                   // Mousedown fires before the input's blur, so the click always
@@ -134,7 +145,9 @@ export function PlayerSearch() {
                   onClick={() => go(player)}
                   onMouseEnter={() => setHighlighted(i)}
                   className={`flex w-full items-baseline justify-between gap-3 px-3 py-2 text-left text-sm transition-colors ${
-                    i === highlighted ? "bg-accent text-black" : "text-white hover:bg-white/5"
+                    i === highlighted
+                      ? "bg-accent text-black"
+                      : "text-white hover:bg-white/5"
                   }`}
                 >
                   <span className="truncate">{player.name}</span>

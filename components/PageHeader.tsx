@@ -25,8 +25,8 @@ export function PageHeader({
 }) {
   return (
     <div className="mb-4 flex flex-col gap-4 md:min-h-11.5 md:flex-row md:items-center md:justify-between md:gap-0">
-      <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
-      {meta}
+      <h1 className="min-w-0 text-2xl font-semibold tracking-tight">{title}</h1>
+      {meta ? <div className="min-w-0 max-w-full">{meta}</div> : null}
     </div>
   );
 }

@@ -109,7 +109,7 @@ export default async function NetValuePage() {
         more than his contract paid for.
       </p>
 
-      <div className="my-8 w-fit overflow-x-auto rounded-lg border-2 border-accent bg-white/5 px-5 py-4">
+      <div className="my-8 w-fit max-w-full overflow-x-auto rounded-lg border-2 border-accent bg-white/5 px-5 py-4">
         <p className="font-mono whitespace-nowrap text-accent">
           Net Value = value produced − value bought
         </p>

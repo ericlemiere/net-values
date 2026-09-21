@@ -43,6 +43,11 @@
   --font-mono: var(--font-geist-mono);
 }
 
+html,
+body {
+  max-width: 100%;
+}
+
 body {
   background: var(--background);
   color: var(--foreground);
@@ -86,6 +91,26 @@ body {
 
 .site-main {
   padding-top: 3.5rem;
+}
+
+@media (min-width: 768px) {
+  .site-header {
+    height: 6.5rem;
+  }
+
+  .site-main {
+    padding-top: 6.5rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  .site-header {
+    height: 3.5rem;
+  }
+
+  .site-main {
+    padding-top: 3.5rem;
+  }
 }
 
 .logo-watermark {

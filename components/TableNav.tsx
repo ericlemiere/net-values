@@ -41,7 +41,7 @@ export function TableNavProvider({ children }: { children: ReactNode }) {
   const [pending, startTransition] = useTransition();
   const navigate = useCallback(
     (href: string) => startTransition(() => router.push(href)),
-    [router]
+    [router],
   );
   return (
     <TableNavContext.Provider value={{ pending, navigate }}>
@@ -70,7 +70,8 @@ export function NavLink({
       href={href}
       className={className}
       onClick={(e) => {
-        if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+        if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0)
+          return;
         e.preventDefault();
         navigate(href);
       }}
@@ -84,7 +85,7 @@ export function NavLink({
 export function TableOverlay({ children }: { children: ReactNode }) {
   const { pending } = useTableNav();
   return (
-    <div className="relative" aria-busy={pending}>
+    <div className="relative min-w-0" aria-busy={pending}>
       <div
         className={`transition-opacity duration-150 ${pending ? "opacity-40" : ""}`}
       >

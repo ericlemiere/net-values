@@ -495,14 +495,14 @@ export default async function PlayerPage({
 
   return (
     <div className="p-6 max-w-350 mx-auto text-white">
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
+      <div className="mb-6 flex flex-wrap flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
           <PlayerHeadshot nbaPersonId={player.nbaPersonId} name={player.name} />
           <h1 className="text-2xl font-semibold tracking-tight">
             {player.name}
           </h1>
         </div>
-        <div className="flex flex-wrap items-stretch gap-3">
+        <div className="flex flex-col w-fit md:flex-row items-stretch gap-3">
           {paidSeasons.length > 0 && (
             <HeaderBox
               label="Career Earnings"

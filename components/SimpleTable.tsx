@@ -44,7 +44,7 @@ export function SimpleTable<Row>({
   emptyMessage = "No data.",
 }: SimpleTableProps<Row>) {
   return (
-    <div className={`mb-8 ${fit ? "w-fit max-w-full" : ""}`}>
+    <div className={`mb-8 min-w-0 ${fit ? "w-full lg:w-fit" : "w-full"}`}>
       {title && <h2 className="text-lg font-semibold text-white">{title}</h2>}
       {(title || subtitle) && (
         <div className="mb-2 min-h-[20px] text-sm text-white/60">
@@ -52,9 +52,7 @@ export function SimpleTable<Row>({
         </div>
       )}
       <div className={SHEET}>
-        <table
-          className={`${fit ? "w-auto" : "min-w-full"} text-sm text-black`}
-        >
+        <table className="w-max min-w-full text-sm text-black">
           <thead className={SHEET_HEAD}>
             <tr>
               {columns.map((col) => (

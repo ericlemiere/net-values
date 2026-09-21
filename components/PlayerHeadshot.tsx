@@ -28,7 +28,7 @@ export function PlayerHeadshot({
 
   return (
     <div
-      className="shrink-0 overflow-hidden rounded-lg border border-white/15 bg-white/5"
+      className="shrink-0 overflow-hidden rounded-lg border border-white/15 bg-background-box"
       style={{ width, height }}
     >
       {nbaPersonId !== null ? (

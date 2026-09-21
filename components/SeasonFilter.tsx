@@ -22,7 +22,7 @@ export function SeasonFilter({
   const { navigate } = useTableNav();
 
   return (
-    <label className="flex items-center gap-2 text-sm text-white">
+    <label className="flex items-center gap-2 text-sm text-white bg-background-box rounded-md p-2 w-full md:w-fit justify-between">
       <span className="text-white/70">Season</span>
       <select
         className="rounded-md border border-white/20 bg-white/5 px-2 py-1 text-white transition-colors hover:border-white/40"

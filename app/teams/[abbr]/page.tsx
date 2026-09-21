@@ -189,9 +189,9 @@ function Stat({
   caption?: string;
 }) {
   return (
-    <div className="rounded-lg border-2 border-accent bg-white/5 px-4 py-2">
-      <div className="text-sm text-white/60">{label}</div>
-      <div className="font-mono text-xl font-semibold tabular-nums text-accent">
+    <div className="rounded-lg border-2 border-accent bg-white/5 px-2 md:px-4 py-2">
+      <div className="text-sm md:text-sm text-white/60">{label}</div>
+      <div className="font-mono md:text-xl font-semibold tabular-nums text-accent">
         {value}
       </div>
       {caption && <div className="text-xs text-white/40">{caption}</div>}
@@ -243,7 +243,7 @@ export default async function TeamPage({
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-3 mb-8">
+      <div className="grid grid-cols-2 md:flex md:flex-row w-fit gap-3 mb-8">
         <Stat
           label="Record"
           value={`${totalWins}-${totalLosses}`}

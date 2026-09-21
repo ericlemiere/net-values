@@ -42,7 +42,7 @@ export function alignClass(align?: ColumnAlign) {
  * and "selected" were both #fff200 you couldn't tell them apart.
  */
 export const SHEET =
-  "overflow-x-auto rounded-lg border-2 border-accent bg-surface";
+  "w-full max-w-full overflow-x-auto overscroll-x-contain touch-pan-x rounded-lg border-2 border-accent bg-surface";
 
 /** Header cells sit on the sheet and are separated from it by an accent rule. */
 export const SHEET_HEAD = "bg-surface border-b-2 border-accent";
@@ -143,9 +143,9 @@ export function DataTable<Row>({
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-4 gap-4 flex-wrap">
-        <div className="flex items-center gap-4 flex-wrap">
+    <div className="min-w-0 max-w-screen">
+      <div className="mb-4 flex min-w-0 flex-wrap items-center justify-between gap-4">
+        <div className="flex flex-col md:flex-row min-w-0 md:items-center gap-4 w-full">
           <SeasonFilter
             basePath={basePath}
             seasons={seasons}
@@ -165,11 +165,13 @@ export function DataTable<Row>({
             extraParams={extraParams}
           />
         </div>
-        <div className={COUNT_CHIP}>{totalCount.toLocaleString()} rows</div>
+        <div className={`shrink-0 ${COUNT_CHIP}`}>
+          {totalCount.toLocaleString()} rows
+        </div>
       </div>
       <TableOverlay>
         <div className={SHEET_SCROLL}>
-          <table className="min-w-full text-sm text-black">
+          <table className="w-max min-w-full text-sm text-black">
             <thead className={SHEET_HEAD_STICKY}>
               <tr>
                 <th

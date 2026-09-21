@@ -99,11 +99,9 @@ export default async function SalariesPage({
         title="Salaries"
         meta={
           leagueCap !== null && (
-            <div className="inline-flex items-baseline gap-3 rounded-lg border border-white/15 bg-white/5 px-4 py-2">
-              <span className="text-sm text-white/60">
-                {season} League Salary Cap
-              </span>
-              <span className="text-lg font-semibold text-accent tabular-nums">
+            <div className="inline-flex items-baseline gap-3 rounded-lg border-2 border-accent bg-white/5 px-4 py-2">
+              <span className="text-sm text-white/60">{season} League Salary Cap</span>
+              <span className="font-mono text-lg font-semibold tabular-nums text-accent">
                 {formatCurrency(leagueCap)}
               </span>
             </div>

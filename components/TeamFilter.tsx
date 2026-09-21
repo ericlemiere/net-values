@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useTableNav } from "./TableNav";
 
 export interface TeamOption {
   abbr: string;
@@ -24,13 +24,13 @@ export function TeamFilter({
   dir: string;
   extraParams?: Record<string, string>;
 }) {
-  const router = useRouter();
+  const { navigate } = useTableNav();
 
   return (
     <label className="flex items-center gap-2 text-sm text-white">
       <span className="text-white/70">Team</span>
       <select
-        className="border border-white/20 rounded px-2 py-1 bg-white text-black focus:outline-none focus:ring-2 focus:ring-accent"
+        className="rounded-md border border-white/20 bg-white/5 px-2 py-1 text-white transition-colors hover:border-white/40"
         value={currentTeam}
         onChange={(e) => {
           // Changing the filter always returns to page 1 — the old offset is
@@ -43,7 +43,7 @@ export function TeamFilter({
             dir,
             page: "1",
           });
-          router.push(`${basePath}?${sp.toString()}`);
+          navigate(`${basePath}?${sp.toString()}`);
         }}
       >
         <option value="ALL">All teams</option>

@@ -1,8 +1,15 @@
 import { notFound } from "next/navigation";
+import { PlayerHeadshot } from "@/components/PlayerHeadshot";
 import { SimpleTable } from "@/components/SimpleTable";
 import { CompsTable } from "@/components/CompsTable";
 import type { ColumnDef } from "@/components/DataTable";
-import { formatNumber, formatCurrency, formatPercent } from "@/lib/format";
+import {
+  formatNumber,
+  formatStat,
+  formatCurrency,
+  formatPercent,
+} from "@/lib/format";
+import { GLOSSARY } from "@/lib/glossary";
 import {
   getPlayerById,
   getPlayerCareerStatsTotals,
@@ -20,147 +27,196 @@ type StatsRow = Awaited<ReturnType<typeof getPlayerCareerStatsPerGame>>[number];
 type AdvRow = Awaited<ReturnType<typeof getPlayerCareerAdvancedStats>>[number];
 type SalRow = Awaited<ReturnType<typeof getPlayerCareerSalaries>>[number];
 
-const statsColumns: ColumnDef<StatsRow>[] = [
-  { key: "season", label: "Season", render: (r) => r.season },
-  { key: "team", label: "Team", render: (r) => r.team ?? "—" },
-  { key: "pos", label: "Pos", render: (r) => r.pos ?? "—" },
-  {
-    key: "age",
-    label: "Age",
-    align: "right",
-    render: (r) => formatNumber(r.age),
-  },
-  { key: "gp", label: "GP", align: "right", render: (r) => formatNumber(r.gp) },
-  { key: "gs", label: "GS", align: "right", render: (r) => formatNumber(r.gs) },
-  { key: "mp", label: "MP", align: "right", render: (r) => formatNumber(r.mp) },
-  {
-    key: "fgm",
-    label: "FGM",
-    align: "right",
-    render: (r) => formatNumber(r.fgm),
-  },
-  {
-    key: "fga",
-    label: "FGA",
-    align: "right",
-    render: (r) => formatNumber(r.fga),
-  },
-  {
-    key: "fgPct",
-    label: "FG%",
-    align: "right",
-    render: (r) => formatNumber(r.fgPct),
-  },
-  {
-    key: "fg3m",
-    label: "3PM",
-    align: "right",
-    render: (r) => formatNumber(r.fg3m),
-  },
-  {
-    key: "fg3a",
-    label: "3PA",
-    align: "right",
-    render: (r) => formatNumber(r.fg3a),
-  },
-  {
-    key: "fg3Pct",
-    label: "3P%",
-    align: "right",
-    render: (r) => formatNumber(r.fg3Pct),
-  },
-  {
-    key: "fg2m",
-    label: "2PM",
-    align: "right",
-    render: (r) => formatNumber(r.fg2m),
-  },
-  {
-    key: "fg2a",
-    label: "2PA",
-    align: "right",
-    render: (r) => formatNumber(r.fg2a),
-  },
-  {
-    key: "fg2Pct",
-    label: "2P%",
-    align: "right",
-    render: (r) => formatNumber(r.fg2Pct),
-  },
-  {
-    key: "efgPct",
-    label: "eFG%",
-    align: "right",
-    render: (r) => formatNumber(r.efgPct),
-  },
-  {
-    key: "ftm",
-    label: "FTM",
-    align: "right",
-    render: (r) => formatNumber(r.ftm),
-  },
-  {
-    key: "fta",
-    label: "FTA",
-    align: "right",
-    render: (r) => formatNumber(r.fta),
-  },
-  {
-    key: "ftPct",
-    label: "FT%",
-    align: "right",
-    render: (r) => formatNumber(r.ftPct),
-  },
-  {
-    key: "orb",
-    label: "OREB",
-    align: "right",
-    render: (r) => formatNumber(r.orb),
-  },
-  {
-    key: "drb",
-    label: "DREB",
-    align: "right",
-    render: (r) => formatNumber(r.drb),
-  },
-  {
-    key: "reb",
-    label: "REB",
-    align: "right",
-    render: (r) => formatNumber(r.reb),
-  },
-  {
-    key: "ast",
-    label: "AST",
-    align: "right",
-    render: (r) => formatNumber(r.ast),
-  },
-  {
-    key: "stl",
-    label: "STL",
-    align: "right",
-    render: (r) => formatNumber(r.stl),
-  },
-  {
-    key: "blk",
-    label: "BLK",
-    align: "right",
-    render: (r) => formatNumber(r.blk),
-  },
-  {
-    key: "tov",
-    label: "TOV",
-    align: "right",
-    render: (r) => formatNumber(r.tov),
-  },
-  { key: "pf", label: "PF", align: "right", render: (r) => formatNumber(r.pf) },
-  {
-    key: "pts",
-    label: "PTS",
-    align: "right",
-    render: (r) => formatNumber(r.pts),
-  },
-];
+// Career Averages and Career Totals share this shape but not its precision:
+// a per-game 10.8 FGM is fractional, a season total of 1034 is not.
+function getStatsColumns(mode: "per_game" | "totals"): ColumnDef<StatsRow>[] {
+  const stat = mode === "totals" ? formatNumber : formatStat;
+  const per = mode === "totals" ? " Season total." : " Per game.";
+  const note = (key: string) => (GLOSSARY[key] ?? "") + per;
+  return [
+    { key: "season", label: "Season", render: (r) => r.season },
+    { key: "team", label: "Team", render: (r) => r.team ?? "—" },
+    { key: "pos", label: "Pos", render: (r) => r.pos ?? "—" },
+    {
+      key: "age",
+      label: "Age",
+      align: "right",
+      render: (r) => formatNumber(r.age),
+    },
+    {
+      key: "gp",
+      label: "GP",
+      align: "right",
+      render: (r) => formatNumber(r.gp),
+    },
+    {
+      key: "gs",
+      label: "GS",
+      align: "right",
+      render: (r) => formatNumber(r.gs),
+    },
+    // Minutes are the one counting stat that's fractional in a season total:
+    // nba_api reports them to hundredths (3126.87) while the pre-96 bref rows are
+    // whole (3533), so the column rendered ragged — two decimals some years, none
+    // in others. It takes formatStat in both modes rather than following `stat`.
+    {
+      key: "mp",
+      description: note("mp"),
+      label: "MP",
+      align: "right",
+      render: (r) => formatStat(r.mp),
+    },
+    {
+      key: "fgm",
+      description: note("fgm"),
+      label: "FGM",
+      align: "right",
+      render: (r) => stat(r.fgm),
+    },
+    {
+      key: "fga",
+      description: note("fga"),
+      label: "FGA",
+      align: "right",
+      render: (r) => stat(r.fga),
+    },
+    {
+      key: "fgPct",
+      label: "FG%",
+      align: "right",
+      render: (r) => formatStat(r.fgPct),
+    },
+    {
+      key: "fg3m",
+      description: note("fg3m"),
+      label: "3PM",
+      align: "right",
+      render: (r) => stat(r.fg3m),
+    },
+    {
+      key: "fg3a",
+      description: note("fg3a"),
+      label: "3PA",
+      align: "right",
+      render: (r) => stat(r.fg3a),
+    },
+    {
+      key: "fg3Pct",
+      label: "3P%",
+      align: "right",
+      render: (r) => formatStat(r.fg3Pct),
+    },
+    {
+      key: "fg2m",
+      description: note("fg2m"),
+      label: "2PM",
+      align: "right",
+      render: (r) => stat(r.fg2m),
+    },
+    {
+      key: "fg2a",
+      description: note("fg2a"),
+      label: "2PA",
+      align: "right",
+      render: (r) => stat(r.fg2a),
+    },
+    {
+      key: "fg2Pct",
+      label: "2P%",
+      align: "right",
+      render: (r) => formatStat(r.fg2Pct),
+    },
+    {
+      key: "efgPct",
+      label: "eFG%",
+      align: "right",
+      render: (r) => formatStat(r.efgPct),
+    },
+    {
+      key: "ftm",
+      description: note("ftm"),
+      label: "FTM",
+      align: "right",
+      render: (r) => stat(r.ftm),
+    },
+    {
+      key: "fta",
+      description: note("fta"),
+      label: "FTA",
+      align: "right",
+      render: (r) => stat(r.fta),
+    },
+    {
+      key: "ftPct",
+      label: "FT%",
+      align: "right",
+      render: (r) => formatStat(r.ftPct),
+    },
+    {
+      key: "orb",
+      description: note("orb"),
+      label: "OREB",
+      align: "right",
+      render: (r) => stat(r.orb),
+    },
+    {
+      key: "drb",
+      description: note("drb"),
+      label: "DREB",
+      align: "right",
+      render: (r) => stat(r.drb),
+    },
+    {
+      key: "reb",
+      description: note("reb"),
+      label: "REB",
+      align: "right",
+      render: (r) => stat(r.reb),
+    },
+    {
+      key: "ast",
+      description: note("ast"),
+      label: "AST",
+      align: "right",
+      render: (r) => stat(r.ast),
+    },
+    {
+      key: "stl",
+      description: note("stl"),
+      label: "STL",
+      align: "right",
+      render: (r) => stat(r.stl),
+    },
+    {
+      key: "blk",
+      description: note("blk"),
+      label: "BLK",
+      align: "right",
+      render: (r) => stat(r.blk),
+    },
+    {
+      key: "tov",
+      description: note("tov"),
+      label: "TOV",
+      align: "right",
+      render: (r) => stat(r.tov),
+    },
+    {
+      key: "pf",
+      description: note("pf"),
+      label: "PF",
+      align: "right",
+      render: (r) => stat(r.pf),
+    },
+    {
+      key: "pts",
+      description: note("pts"),
+      label: "PTS",
+      align: "right",
+      render: (r) => stat(r.pts),
+    },
+  ];
+}
 
 const advancedColumns: ColumnDef<AdvRow>[] = [
   { key: "season", label: "Season", render: (r) => r.season },
@@ -178,56 +234,56 @@ const advancedColumns: ColumnDef<AdvRow>[] = [
     key: "per",
     label: "PER",
     align: "right",
-    render: (r) => formatNumber(r.per),
+    render: (r) => formatStat(r.per),
   },
   {
     key: "tsPct",
     label: "TS%",
     align: "right",
-    render: (r) => formatNumber(r.tsPct),
+    render: (r) => formatStat(r.tsPct),
   },
   {
     key: "usgPct",
     label: "USG%",
     align: "right",
-    render: (r) => formatNumber(r.usgPct),
+    render: (r) => formatStat(r.usgPct),
   },
   {
     key: "ows",
     label: "OWS",
     align: "right",
-    render: (r) => formatNumber(r.ows),
+    render: (r) => formatStat(r.ows),
   },
   {
     key: "dws",
     label: "DWS",
     align: "right",
-    render: (r) => formatNumber(r.dws),
+    render: (r) => formatStat(r.dws),
   },
-  { key: "ws", label: "WS", align: "right", render: (r) => formatNumber(r.ws) },
+  { key: "ws", label: "WS", align: "right", render: (r) => formatStat(r.ws) },
   {
     key: "obpm",
     label: "OBPM",
     align: "right",
-    render: (r) => formatNumber(r.obpm),
+    render: (r) => formatStat(r.obpm),
   },
   {
     key: "dbpm",
     label: "DBPM",
     align: "right",
-    render: (r) => formatNumber(r.dbpm),
+    render: (r) => formatStat(r.dbpm),
   },
   {
     key: "bpm",
     label: "BPM",
     align: "right",
-    render: (r) => formatNumber(r.bpm),
+    render: (r) => formatStat(r.bpm),
   },
   {
     key: "vorp",
     label: "VORP",
     align: "right",
-    render: (r) => formatNumber(r.vorp),
+    render: (r) => formatStat(r.vorp),
   },
 ];
 
@@ -271,7 +327,9 @@ const salariesColumns: ColumnDef<SalRow>[] = [
 // league cap to divide it by.
 function pickAnchor(rows: SalRow[], salaryId: number | null) {
   const usable = rows.filter((r) => r.salary !== null && r.leagueCap);
-  return usable.find((r) => r.id === salaryId) ?? usable[usable.length - 1] ?? null;
+  return (
+    usable.find((r) => r.id === salaryId) ?? usable[usable.length - 1] ?? null
+  );
 }
 
 export default async function PlayerPage({
@@ -296,7 +354,10 @@ export default async function PlayerPage({
   ]);
 
   const salaryId = Number(sp.salary);
-  const anchor = pickAnchor(salaries, Number.isInteger(salaryId) ? salaryId : null);
+  const anchor = pickAnchor(
+    salaries,
+    Number.isInteger(salaryId) ? salaryId : null,
+  );
   // Recomputed from the raw figures rather than read off pctOfLeagueCap, which
   // Postgres hands back as a numeric string.
   const anchorPct = anchor
@@ -314,13 +375,22 @@ export default async function PlayerPage({
               scope,
               tolerance: COMP_TOLERANCE,
               limit: COMP_LIMIT,
-            })
-          )
+            }),
+          ),
         );
 
   // Both comps tables hang off the same anchor, so they share a subtitle stem.
   const anchorLabel =
-    anchorPct === null ? null : `${anchorPct.toFixed(2)}% of the cap \u00b1 ${COMP_TOLERANCE}`;
+    anchorPct === null
+      ? null
+      : `${anchorPct.toFixed(2)}% of the cap \u00b1 ${COMP_TOLERANCE}`;
+  // Summed from the career log already fetched above rather than a second
+  // query. Seasons with no figure on record contribute nothing, so the box
+  // says how many it covers instead of presenting a short total as complete.
+  const paidSeasons = salaries.filter((r) => r.salary !== null);
+  const careerEarnings = paidSeasons.reduce((sum, r) => sum + r.salary!, 0);
+  const unknownSeasons = salaries.length - paidSeasons.length;
+
   const truncation = (comps: { rows: unknown[]; totalCount: number } | null) =>
     comps && comps.totalCount > comps.rows.length
       ? ` \u2014 closest ${comps.rows.length} of ${comps.totalCount}`
@@ -328,12 +398,33 @@ export default async function PlayerPage({
 
   return (
     <div className="p-6 max-w-350 mx-auto text-white">
-      <h1 className="text-2xl font-semibold mb-6">{player.name}</h1>
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-center gap-4">
+          <PlayerHeadshot nbaPersonId={player.nbaPersonId} name={player.name} />
+          <h1 className="text-2xl font-semibold tracking-tight">
+            {player.name}
+          </h1>
+        </div>
+        {paidSeasons.length > 0 && (
+          <div className="rounded-lg border-2 border-accent bg-white/5 px-4 py-2 text-right">
+            <div className="text-sm text-white/60">Career Earnings</div>
+            <div className="font-mono text-2xl font-semibold tabular-nums text-accent">
+              {formatCurrency(careerEarnings)}
+            </div>
+            <div className="text-xs text-white/40">
+              {paidSeasons.length} season{paidSeasons.length === 1 ? "" : "s"}
+              {unknownSeasons > 0 &&
+                `, ${unknownSeasons} with no figure on record`}
+            </div>
+          </div>
+        )}
+      </div>
       <div className="flex flex-wrap items-start gap-8">
         <SimpleTable
           title="Salaries"
           subtitle={
-            salaries.length > 0 && "Select a season to compare it against the league."
+            salaries.length > 0 &&
+            "Select a season to compare it against the league."
           }
           columns={salariesColumns}
           rows={salaries}
@@ -376,14 +467,14 @@ export default async function PlayerPage({
       </div>
       <SimpleTable
         title="Career Averages"
-        columns={statsColumns}
+        columns={getStatsColumns("per_game")}
         rows={perGame}
         rowKey={(r) => r.id}
       />
       {totals.length > 0 && (
         <SimpleTable
           title="Career Totals"
-          columns={statsColumns}
+          columns={getStatsColumns("totals")}
           rows={totals}
           rowKey={(r) => r.id}
         />

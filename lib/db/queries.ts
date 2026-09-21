@@ -1,4 +1,15 @@
-import { and, asc, desc, eq, ilike, ne, sql, type AnyColumn, type SQL } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  ilike,
+  isNotNull,
+  ne,
+  sql,
+  type AnyColumn,
+  type SQL,
+} from "drizzle-orm";
 import { db } from "./index";
 import {
   players,
@@ -9,6 +20,7 @@ import {
   seasons,
   teams,
   teamPayrolls,
+  teamSeasons,
 } from "./schema";
 
 export const PAGE_SIZE = 100;
@@ -284,7 +296,14 @@ export async function getLeagueCap(season: string) {
 export async function getSalaries(params: ListParams) {
   const page = clampPage(params.page);
   const sortCol = salariesSortColumns[params.sort as SalariesSortKey] ?? salaries.salary;
-  const where = listWhere(salaries.season, salaries.team, params);
+  // A salary row with no figure is noise here: every column but the player,
+  // season and team renders blank. `and` drops the undefined that listWhere
+  // returns for the unfiltered case, so `where` is always defined and the
+  // count query below stays in step with the rows.
+  const where = and(
+    isNotNull(salaries.salary),
+    listWhere(salaries.season, salaries.team, params)
+  )!;
 
   const rowsQuery = db
     .select({ playerId: salaries.playerId, name: players.name, ...salarySelection })
@@ -306,18 +325,211 @@ export async function getSalaries(params: ListParams) {
   const countQuery = db.select({ count: sql<number>`count(*)` }).from(salaries);
 
   const [rows, countResult] = await Promise.all([
-    where ? rowsQuery.where(where) : rowsQuery,
-    where ? countQuery.where(where) : countQuery,
+    rowsQuery.where(where),
+    countQuery.where(where),
   ]);
 
   return { rows, totalCount: Number(countResult[0].count), page };
+}
+
+// ---- /teams ----
+
+export interface TeamSeasonRow {
+  teamId: number;
+  abbr: string;
+  name: string;
+  season: string;
+  wins: number | null;
+  losses: number | null;
+  winPct: number | null;
+  srs: number | null;
+  madePlayoffs: boolean | null;
+  champion: boolean;
+  payroll: number | null;
+  /** Payroll as a share of that season's league cap, 0-100. */
+  payrollPctOfCap: number | null;
+  rosterSize: number | null;
+}
+
+/** Seasons that have a team record, newest first. */
+export async function getTeamSeasons() {
+  const rows = await db
+    .selectDistinct({ season: teamSeasons.season })
+    .from(teamSeasons)
+    .orderBy(desc(teamSeasons.season));
+  return rows.map((r) => r.season);
+}
+
+/**
+ * One row per team for a season: record, payroll, and how that payroll sits
+ * against the league cap.
+ *
+ * Roster size is counted from `salaries` rather than the stats tables so it
+ * describes who was paid, which is what the payroll figure is the sum of.
+ */
+export async function getTeamsForSeason(season: string): Promise<TeamSeasonRow[]> {
+  const rosterSize = db
+    .select({
+      team: salaries.team,
+      season: salaries.season,
+      n: sql<number>`count(*)`.as("n"),
+    })
+    .from(salaries)
+    .where(isNotNull(salaries.salary))
+    .groupBy(salaries.team, salaries.season)
+    .as("roster");
+
+  return db
+    .select({
+      teamId: teams.id,
+      abbr: teams.abbr,
+      name: teams.name,
+      season: teamSeasons.season,
+      wins: teamSeasons.wins,
+      losses: teamSeasons.losses,
+      // ::float8 matters — node-postgres returns bare `numeric` as a STRING, so
+      // without the cast these arrive typed as numbers but behaving as text.
+      winPct: sql<number | null>`
+        (case when coalesce(${teamSeasons.wins}, 0) + coalesce(${teamSeasons.losses}, 0) > 0
+          then round(1000.0 * ${teamSeasons.wins}
+               / (${teamSeasons.wins} + ${teamSeasons.losses})) / 1000
+        end)::float8`,
+      srs: teamSeasons.srs,
+      madePlayoffs: teamSeasons.madePlayoffs,
+      champion: teamSeasons.champion,
+      payroll: teamPayrolls.payroll,
+      payrollPctOfCap: sql<number | null>`
+        (case when ${seasons.leagueCap} > 0 and ${teamPayrolls.payroll} is not null
+          then round(10000.0 * ${teamPayrolls.payroll} / ${seasons.leagueCap}) / 100
+        end)::float8`,
+      rosterSize: sql<number | null>`${rosterSize.n}::int`,
+    })
+    .from(teamSeasons)
+    .innerJoin(teams, eq(teams.id, teamSeasons.teamId))
+    .leftJoin(
+      teamPayrolls,
+      and(eq(teamPayrolls.teamId, teams.id), eq(teamPayrolls.season, teamSeasons.season))
+    )
+    .leftJoin(seasons, eq(seasons.season, teamSeasons.season))
+    .leftJoin(
+      rosterSize,
+      and(eq(rosterSize.team, teams.abbr), eq(rosterSize.season, teamSeasons.season))
+    )
+    .where(eq(teamSeasons.season, season))
+    .orderBy(desc(teamSeasons.wins), asc(teams.name));
+}
+
+// ---- /teams/[abbr] ----
+
+export async function getTeamByAbbr(abbr: string) {
+  const rows = await db
+    .select({ id: teams.id, abbr: teams.abbr, name: teams.name })
+    .from(teams)
+    .where(eq(teams.abbr, abbr.toUpperCase()));
+  return rows[0];
+}
+
+/** Every season on file for one team, newest first. */
+export async function getTeamHistory(teamId: number) {
+  return db
+    .select({
+      season: teamSeasons.season,
+      wins: teamSeasons.wins,
+      losses: teamSeasons.losses,
+      winPct: sql<number | null>`
+        (case when coalesce(${teamSeasons.wins}, 0) + coalesce(${teamSeasons.losses}, 0) > 0
+          then round(1000.0 * ${teamSeasons.wins}
+               / (${teamSeasons.wins} + ${teamSeasons.losses})) / 1000
+        end)::float8`,
+      srs: teamSeasons.srs,
+      madePlayoffs: teamSeasons.madePlayoffs,
+      champion: teamSeasons.champion,
+      payroll: teamPayrolls.payroll,
+      leagueCap: seasons.leagueCap,
+      payrollPctOfCap: sql<number | null>`
+        (case when ${seasons.leagueCap} > 0 and ${teamPayrolls.payroll} is not null
+          then round(10000.0 * ${teamPayrolls.payroll} / ${seasons.leagueCap}) / 100
+        end)::float8`,
+    })
+    .from(teamSeasons)
+    .leftJoin(
+      teamPayrolls,
+      and(eq(teamPayrolls.teamId, teamId), eq(teamPayrolls.season, teamSeasons.season))
+    )
+    .leftJoin(seasons, eq(seasons.season, teamSeasons.season))
+    .where(eq(teamSeasons.teamId, teamId))
+    .orderBy(desc(teamSeasons.season));
+}
+
+/** Seasons this team paid anybody, newest first — drives the roster filter. */
+export async function getTeamRosterSeasons(abbr: string) {
+  const rows = await db
+    .selectDistinct({ season: salaries.season })
+    .from(salaries)
+    .where(eq(salaries.team, abbr.toUpperCase()))
+    .orderBy(desc(salaries.season));
+  return rows.map((r) => r.season);
+}
+
+export type TeamRosterRow = Awaited<ReturnType<typeof getTeamRoster>>[number];
+
+/**
+ * Who this team paid, for one season or across all of them.
+ *
+ * Stats join on player and season only, not team: a player traded mid-season
+ * has one combined stat line with no single team on it, and dropping him from
+ * his own team's roster would be worse than showing the combined line.
+ */
+export async function getTeamRoster(abbr: string, season: string) {
+  const team = abbr.toUpperCase();
+  const where =
+    season === "ALL"
+      ? and(eq(salaries.team, team), isNotNull(salaries.salary))!
+      : and(eq(salaries.team, team), eq(salaries.season, season), isNotNull(salaries.salary))!;
+
+  return db
+    .select({
+      id: salaries.id,
+      playerId: players.id,
+      name: players.name,
+      season: salaries.season,
+      salary: salaries.salary,
+      pctOfTeamCap: pctOfTeamCapSql,
+      pctOfLeagueCap: pctOfLeagueCapSql,
+      gp: playerStatsPerGame.gp,
+      mp: playerStatsPerGame.mp,
+      pts: playerStatsPerGame.pts,
+      reb: playerStatsPerGame.reb,
+      ast: playerStatsPerGame.ast,
+    })
+    .from(salaries)
+    .innerJoin(players, eq(players.id, salaries.playerId))
+    .leftJoin(teams, eq(teams.abbr, salaries.team))
+    .leftJoin(
+      teamPayrolls,
+      and(eq(teamPayrolls.teamId, teams.id), eq(teamPayrolls.season, salaries.season))
+    )
+    .leftJoin(seasons, eq(seasons.season, salaries.season))
+    .leftJoin(
+      playerStatsPerGame,
+      and(
+        eq(playerStatsPerGame.playerId, salaries.playerId),
+        eq(playerStatsPerGame.season, salaries.season)
+      )
+    )
+    .where(where)
+    .orderBy(desc(salaries.season), orderByNullsLast(salaries.salary, "desc"));
 }
 
 // ---- Player detail page: full career log, no filtering/pagination ----
 
 export async function getPlayerById(playerId: number) {
   const rows = await db
-    .select({ id: players.id, name: players.name })
+    .select({
+      id: players.id,
+      name: players.name,
+      nbaPersonId: players.nbaPersonId,
+    })
     .from(players)
     .where(eq(players.id, playerId));
   return rows[0];

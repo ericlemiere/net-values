@@ -7,6 +7,7 @@ const links = [
   { href: "/stats", label: "Stats" },
   { href: "/advanced-stats", label: "Advanced Stats" },
   { href: "/salaries", label: "Salaries" },
+  { href: "/teams", label: "Teams" },
 ];
 
 export function NavLinks() {

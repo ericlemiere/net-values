@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Geist, Geist_Mono } from "next/font/google";
 import { NavLinks } from "@/components/NavLinks";
 import { PlayerSearch } from "@/components/PlayerSearch";
+import { TableNavProvider } from "@/components/TableNav";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -31,8 +32,15 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
-        <header className="bg-black">
-          <div className="max-w-[1400px] mx-auto flex items-center gap-6 px-6 py-3">
+        <div className="logo-watermark" aria-hidden="true" />
+        {/*
+          The header must out-rank <main>, not just tie it: both are positioned,
+          so each opens its own stacking context, and the search dropdown's
+          z-50 only ever competes INSIDE the header's. On a tie, <main> wins on
+          DOM order and its content (the stats page toggle) covers the results.
+        */}
+        <header className="relative z-30">
+          <div className="mx-auto flex max-w-350 items-center gap-6 px-6 py-3">
             <Link
               href="/"
               className="font-semibold text-white border-2 border-accent rounded px-2 py-1"
@@ -43,7 +51,9 @@ export default function RootLayout({
             <PlayerSearch />
           </div>
         </header>
-        <main className="flex flex-1 flex-col">{children}</main>
+        <main className="relative z-10 flex flex-1 flex-col">
+          <TableNavProvider>{children}</TableNavProvider>
+        </main>
       </body>
     </html>
   );

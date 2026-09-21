@@ -114,13 +114,13 @@ export function PlayerSearch() {
         aria-expanded={showList}
         aria-controls={listId}
         aria-autocomplete="list"
-        className="w-full rounded border border-white/15 bg-white/5 px-3 py-1.5 text-sm text-white placeholder-white/40 outline-none transition-colors focus:border-accent"
+        className="w-full rounded-md border border-stone-600 bg-white/10 px-3 py-1.5 text-sm text-white placeholder-white/40 outline-none transition-colors focus:bg-white/10"
       />
       {showList && (
         <ul
           id={listId}
           role="listbox"
-          className="absolute right-0 z-50 mt-1 max-h-80 w-full overflow-y-auto rounded border border-white/15 bg-black shadow-lg"
+          className="absolute right-0 z-50 mt-1 max-h-80 w-full overflow-y-auto rounded-md border-2 border-accent bg-black shadow-xl shadow-black/60"
         >
           {results.map((player, i) => {
             const span = careerSpan(player.firstSeason, player.lastSeason);
@@ -133,14 +133,14 @@ export function PlayerSearch() {
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() => go(player)}
                   onMouseEnter={() => setHighlighted(i)}
-                  className={`flex w-full items-baseline justify-between gap-3 px-3 py-2 text-left text-sm ${
-                    i === highlighted ? "bg-accent text-black" : "text-white"
+                  className={`flex w-full items-baseline justify-between gap-3 px-3 py-2 text-left text-sm transition-colors ${
+                    i === highlighted ? "bg-accent text-black" : "text-white hover:bg-white/5"
                   }`}
                 >
                   <span className="truncate">{player.name}</span>
                   {span && (
                     <span
-                      className={`shrink-0 text-xs tabular-nums ${
+                      className={`shrink-0 font-mono text-xs tabular-nums ${
                         i === highlighted ? "text-black/60" : "text-white/40"
                       }`}
                     >

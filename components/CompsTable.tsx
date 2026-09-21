@@ -1,8 +1,16 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { describe } from "@/lib/glossary";
 import { PlayerLink } from "./PlayerLink";
-import { alignClass, type ColumnAlign } from "./DataTable";
+import {
+  SHEET,
+  SHEET_HEAD,
+  SHEET_ROW_HOVER,
+  alignClass,
+  stripeClass,
+  type ColumnAlign,
+} from "./DataTable";
 import type { SalaryComp } from "@/lib/db/queries";
 
 type SortKey = "name" | "season" | "team" | "pctOfLeagueCap";
@@ -86,10 +94,10 @@ export function CompsTable({ title, subtitle, rows, showSeason = true, emptyMess
     <div className="mb-8 w-96 max-w-full">
       <h2 className="text-lg font-semibold text-white">{title}</h2>
       <div className="mb-2 min-h-[20px] text-sm text-white/60">{subtitle}</div>
-      <div className="h-80 overflow-y-auto overflow-x-auto rounded-lg border border-white/10 bg-white">
+      <div className={`h-80 ${SHEET}`}>
         <table className="w-full text-sm text-black">
           {/* Sticky so the sort controls stay put while the rows scroll under them. */}
-          <thead className="sticky top-0 z-10 bg-white">
+          <thead className={`sticky top-0 z-10 ${SHEET_HEAD}`}>
             <tr>
               {columns.map((col) => {
                 const isActive = sort === col.key;
@@ -97,20 +105,21 @@ export function CompsTable({ title, subtitle, rows, showSeason = true, emptyMess
                   <th
                     key={col.key}
                     aria-sort={isActive ? (dir === "asc" ? "ascending" : "descending") : "none"}
-                    className={`p-0 font-medium whitespace-nowrap border-b border-black/10 ${alignClass(
-                      col.align
-                    )}`}
+                    title={describe(col.key)}
+                    className={`whitespace-nowrap p-0 font-medium ${alignClass(col.align)} ${
+                      isActive ? "bg-accent" : ""
+                    }`}
                   >
                     <button
                       type="button"
                       onClick={() => toggle(col)}
-                      className={`flex w-full items-center gap-1 px-3 py-2 hover:bg-accent transition-colors ${
+                      className={`flex w-full items-center gap-1 px-3 py-2 transition-colors ${
                         col.align === "right"
                           ? "justify-end"
                           : col.align === "center"
                             ? "justify-center"
                             : "justify-start"
-                      }`}
+                      } ${isActive ? "hover:bg-accent/80" : "hover:bg-black/5"}`}
                     >
                       {col.label}
                       {isActive && <span className="text-black/50">{dir === "asc" ? "▲" : "▼"}</span>}
@@ -122,25 +131,26 @@ export function CompsTable({ title, subtitle, rows, showSeason = true, emptyMess
           </thead>
           <tbody>
             {sorted.map((row, i) => (
-              <tr
-                key={row.id}
-                className={`${i % 2 === 0 ? "bg-white" : "bg-gray-100"} hover:bg-accent transition-colors`}
-              >
-                <td className="px-3 py-1.5 whitespace-nowrap">
+              <tr key={row.id} className={`${stripeClass(i)} ${SHEET_ROW_HOVER}`}>
+                <td className="whitespace-nowrap px-3 py-1.5">
                   <PlayerLink id={row.playerId} name={row.name} />
                 </td>
                 {showSeason && (
-                  <td className="px-3 py-1.5 whitespace-nowrap text-center tabular-nums">{row.season}</td>
+                  <td className="whitespace-nowrap px-3 py-1.5 text-center font-mono text-[0.8125rem] tabular-nums">
+                    {row.season}
+                  </td>
                 )}
-                <td className="px-3 py-1.5 whitespace-nowrap text-center">{row.team ?? "—"}</td>
-                <td className="px-3 py-1.5 whitespace-nowrap text-right tabular-nums">
+                <td className="whitespace-nowrap px-3 py-1.5 text-center font-mono text-[0.8125rem]">
+                  {row.team ?? "—"}
+                </td>
+                <td className="whitespace-nowrap px-3 py-1.5 text-right font-mono text-[0.8125rem] tabular-nums">
                   {row.pctOfLeagueCap === null ? "—" : `${row.pctOfLeagueCap.toFixed(2)}%`}
                 </td>
               </tr>
             ))}
             {sorted.length === 0 && (
               <tr>
-                <td colSpan={columns.length} className="px-3 py-6 text-center text-black/40">
+                <td colSpan={columns.length} className="px-3 py-8 text-center text-black/40">
                   {emptyMessage}
                 </td>
               </tr>

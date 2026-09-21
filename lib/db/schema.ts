@@ -5,6 +5,7 @@ import {
   text,
   varchar,
   numeric,
+  boolean,
   uniqueIndex,
   index,
 } from "drizzle-orm/pg-core";
@@ -33,6 +34,36 @@ export const teamAliases = pgTable(
     alias: varchar("alias", { length: 3 }).notNull(),
   },
   (t) => [uniqueIndex("team_aliases_alias_idx").on(t.alias)]
+);
+
+/**
+ * Per-team, per-season record. Kept apart from team_payrolls, which holds the
+ * money for the same key — different sources, filled by different scripts.
+ *
+ * `champion` marks the team that won the title that season, so a season's
+ * winner is answerable from this table alone rather than a separate lookup.
+ */
+export const teamSeasons = pgTable(
+  "team_seasons",
+  {
+    id: serial("id").primaryKey(),
+    teamId: integer("team_id")
+      .notNull()
+      .references(() => teams.id),
+    season: text("season").notNull(),
+    wins: integer("wins"),
+    losses: integer("losses"),
+    // bref's Simple Rating System: point differential adjusted for strength of
+    // schedule, in points per game. 0 is league average.
+    srs: numeric("srs", { precision: 5, scale: 2, mode: "number" }),
+    madePlayoffs: boolean("made_playoffs"),
+    champion: boolean("champion").notNull().default(false),
+    source: varchar("source", { length: 20 }).notNull(),
+  },
+  (t) => [
+    uniqueIndex("team_seasons_team_season_idx").on(t.teamId, t.season),
+    index("team_seasons_season_idx").on(t.season),
+  ]
 );
 
 export const players = pgTable("players", {
@@ -206,5 +237,50 @@ export const salaries = pgTable(
   (t) => [
     uniqueIndex("salaries_player_season_team_idx").on(t.playerId, t.season, t.team),
     index("salaries_season_idx").on(t.season),
+  ]
+);
+
+/**
+ * NBA.com's own advanced numbers, kept separate from `advanced_stats` because
+ * that table holds basketball-reference's box-score formulas (PER, WS, BPM,
+ * VORP) and these come from a different source with different meaning: these
+ * are possession-based, measured rather than estimated from the box score.
+ *
+ * Only 1996-97 onward — nba.com has no play-by-play before that.
+ */
+export const nbaAdvanced = pgTable(
+  "nba_advanced",
+  {
+    id: serial("id").primaryKey(),
+    playerId: integer("player_id")
+      .notNull()
+      .references(() => players.id),
+    season: text("season").notNull(),
+    team: varchar("team", { length: 3 }),
+    gp: integer("gp"),
+    minutes: numeric("minutes", { precision: 8, scale: 2, mode: "number" }),
+    // Possessions played — the denominator the value model needs.
+    poss: integer("poss"),
+    offRating: numeric("off_rating", { precision: 6, scale: 2, mode: "number" }),
+    defRating: numeric("def_rating", { precision: 6, scale: 2, mode: "number" }),
+    netRating: numeric("net_rating", { precision: 6, scale: 2, mode: "number" }),
+    // Rate stats are stored 0-100 to match the rest of the schema.
+    astPct: numeric("ast_pct", { precision: 6, scale: 2, mode: "number" }),
+    // An unbounded ratio — assists with no turnovers has no natural ceiling.
+    astTo: numeric("ast_to", { precision: 9, scale: 2, mode: "number" }),
+    orebPct: numeric("oreb_pct", { precision: 6, scale: 2, mode: "number" }),
+    drebPct: numeric("dreb_pct", { precision: 6, scale: 2, mode: "number" }),
+    rebPct: numeric("reb_pct", { precision: 6, scale: 2, mode: "number" }),
+    tovPct: numeric("tov_pct", { precision: 6, scale: 2, mode: "number" }),
+    efgPct: numeric("efg_pct", { precision: 6, scale: 2, mode: "number" }),
+    tsPct: numeric("ts_pct", { precision: 6, scale: 2, mode: "number" }),
+    usgPct: numeric("usg_pct", { precision: 6, scale: 2, mode: "number" }),
+    pace: numeric("pace", { precision: 6, scale: 2, mode: "number" }),
+    pie: numeric("pie", { precision: 6, scale: 3, mode: "number" }),
+    source: varchar("source", { length: 20 }).notNull(),
+  },
+  (t) => [
+    uniqueIndex("nba_advanced_player_season_idx").on(t.playerId, t.season),
+    index("nba_advanced_season_idx").on(t.season),
   ]
 );

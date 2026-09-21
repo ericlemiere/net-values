@@ -10,9 +10,11 @@ doesn't expose PER/Win Shares/BPM/VORP (basketball-reference-only formulas),
 so advanced_stats is sourced entirely from the SQLite migration instead (see
 migrate_pre96.ts... actually scripts/migrate-legacy.ts, all years 1989-2023).
 
-GS (games started) is not available from any league-wide nba_api endpoint
-(only per-player playercareerstats exposes it, impractical at this scale) —
-left NULL for all nba_api-sourced rows.
+Neither position nor GS (games started) is available from any league-wide
+nba_api endpoint — leaguedashplayerstats returns neither, and
+leaguedashplayerbiostats has no position field either. Both are written NULL
+here and backfilled from basketball-reference by backfill_bref_stats.py, which
+is why this script preserves them on conflict rather than overwriting.
 """
 import sys
 import time
@@ -109,11 +111,19 @@ COLUMNS = [
     "drb", "reb", "ast", "stl", "blk", "tov", "pf", "pts", "source",
 ]
 
+# Columns this importer always writes as NULL (see above) but another source
+# can fill in — backfill_bref_stats.py patches both from bref. They are set on
+# INSERT, where nothing is known yet, and left alone on CONFLICT, so the daily
+# refresh can overwrite the season-to-date numbers without wiping them.
+PRESERVE_ON_CONFLICT = ("pos", "gs")
+
 
 def upsert_stat_row(cur, table, player_id, season, values):
     cols = ["player_id", "season"] + COLUMNS
     placeholders = ", ".join(["%s"] * len(cols))
-    updates = ", ".join(f"{c} = EXCLUDED.{c}" for c in COLUMNS)
+    updates = ", ".join(
+        f"{c} = EXCLUDED.{c}" for c in COLUMNS if c not in PRESERVE_ON_CONFLICT
+    )
     row = [player_id, season] + [values[c] for c in COLUMNS]
     cur.execute(
         f"""

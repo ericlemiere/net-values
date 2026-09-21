@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useTableNav } from "./TableNav";
 
 export type StatType = "per_game" | "totals";
 
@@ -19,22 +19,27 @@ export function StatTypeToggle({
   sort: string;
   dir: string;
 }) {
-  const router = useRouter();
+  const { navigate } = useTableNav();
 
   function go(next: StatType) {
     const sp = new URLSearchParams({ type: next, season, team, sort, dir, page: "1" });
-    router.push(`${basePath}?${sp.toString()}`);
+    navigate(`${basePath}?${sp.toString()}`);
   }
 
-  const baseBtn = "px-3 py-1 rounded-full text-sm font-medium transition-colors";
+  const baseBtn = "rounded-md px-3 py-1 text-sm font-medium transition-colors";
   const active = "bg-accent text-accent-foreground";
-  const inactive = "text-black/60 hover:text-black";
+  const inactive = "text-white/60 hover:text-white";
 
   return (
-    <div className="flex items-center gap-1 bg-white rounded-full p-1 border border-black/10">
+    <div
+      role="group"
+      aria-label="Stat type"
+      className="flex items-center gap-1 rounded-lg border-2 border-accent bg-white/5 p-1"
+    >
       <button
         type="button"
         onClick={() => go("per_game")}
+        aria-pressed={statType === "per_game"}
         className={`${baseBtn} ${statType === "per_game" ? active : inactive}`}
       >
         Averages
@@ -42,6 +47,7 @@ export function StatTypeToggle({
       <button
         type="button"
         onClick={() => go("totals")}
+        aria-pressed={statType === "totals"}
         className={`${baseBtn} ${statType === "totals" ? active : inactive}`}
       >
         Totals

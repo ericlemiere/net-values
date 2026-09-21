@@ -6,6 +6,11 @@ them on (player_id, season), so running it repeatedly just overwrites the
 season-to-date numbers with fresher ones. New players who debuted since the last
 run get created along the way.
 
+Position and games-started are not touched here either: nba_api supplies
+neither, so backfill_stats preserves whatever bref already put there. Run
+backfill_bref_stats.py <bref end-year> to pick them up for players who debuted
+since the last bref pass.
+
 Salaries are NOT touched here. They come from basketball-reference, which is
 crawl-delayed and barely changes in-season; run backfill_salaries.py for the
 current bref end-year when you want to pick up trades and signings (weekly is

@@ -6,6 +6,26 @@
   /* Single source of truth for the site's accent color. */
   --accent: #fff200;
   --accent-foreground: #171717;
+
+  /*
+   * The data sheet. Tables are the point of this site, so they get a light
+   * surface that reads as paper against the black page. The zebra is a warm
+   * neutral rather than Tailwind's gray-100, which is blue-tinted and turns
+   * muddy next to a pure yellow.
+   */
+  --surface: #ffffff;
+  --surface-alt: #f4f4f2;
+  /*
+   * Row/cell hover. Deliberately NOT --accent: full yellow is reserved for
+   * state you've chosen (sorted column, selected row), so hover has to read
+   * as weaker than it or the two become indistinguishable.
+   */
+  --surface-hover: #fff586;
+  /* Hairlines inside the sheet, where the background is light. */
+  --rule: rgba(0, 0, 0, 0.12);
+
+  /* Renders native selects, scrollbars and form controls dark. */
+  color-scheme: dark;
 }
 
 @theme inline {
@@ -13,6 +33,10 @@
   --color-foreground: var(--foreground);
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
+  --color-surface: var(--surface);
+  --color-surface-alt: var(--surface-alt);
+  --color-surface-hover: var(--surface-hover);
+  --color-rule: var(--rule);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
@@ -20,5 +44,98 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  /* Geist is loaded in layout.tsx; without this the whole site falls back to
+     the system sans and the font never actually applies. */
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+}
+
+/* One visible focus treatment for every interactive element on the site. */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/*
+ * The NBA logoman pinned to the bottom-right of the viewport, behind
+ * everything. Built as two layers confined to the silhouette's own shape:
+ *
+ *   under — the PNG's alpha used as a mask over a flat --logo-tint fill
+ *   over  — the PNG itself at --logo-opacity
+ *
+ * The mask clips the ::after layer too, so the tint only ever shows through
+ * the logo, never as a block of color in the corner.
+ *
+ * Note the file name lies: nba-logo-black-transparent.png is a *white*
+ * silhouette on transparency, not a black one. So --logo-opacity blends
+ * toward white, not black — 0 is pure --logo-tint and 1 is flat white. To
+ * darken the logo instead of washing it out, the PNG has to be inverted to
+ * black first (or the ::after layer swapped for a flat black fill).
+ */
+.logo-watermark {
+  --logo-src: url("/nba-logo-black-transparent.png");
+  --logo-tint: #fff20005;
+  --logo-opacity: 0.03;
+
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  height: 100dvh;
+  /* Intrinsic size of the PNG, so `contain` fills the box exactly. */
+  aspect-ratio: 1892 / 4633;
+  z-index: 0;
+  pointer-events: none;
+
+  background-color: var(--logo-tint);
+  -webkit-mask-image: var(--logo-src);
+  mask-image: var(--logo-src);
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  -webkit-mask-position: bottom right;
+  mask-position: bottom right;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+}
+
+.logo-watermark::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: var(--logo-src);
+  background-size: contain;
+  background-position: bottom right;
+  background-repeat: no-repeat;
+  opacity: var(--logo-opacity);
+}
+
+/*
+ * Page entrance. Applied by app/template.tsx, which React re-keys on every
+ * navigation, so this replays per page rather than only on first paint.
+ * Opacity only — no slide — so a 30-column table doesn't visibly shift.
+ */
+@keyframes page-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.page-fade {
+  animation: page-fade-in 260ms ease-out both;
+}
+
+/* Rows fading in under the cursor would fight the hover tint. */
+@media (prefers-reduced-motion: reduce) {
+  .page-fade {
+    animation: none;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

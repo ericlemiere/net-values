@@ -27,6 +27,7 @@ from pathlib import Path
 import bref
 from db import connect
 from player_index import PlayerIndex, match_row
+from salary_overrides import override_for
 
 DEFAULT_START, DEFAULT_END = 2012, 2027
 UNMATCHED_CSV = Path(__file__).parent / "unmatched_bref_salaries.csv"
@@ -85,7 +86,7 @@ def main():
     resolve_team = load_team_resolver(cur)
     index = PlayerIndex(cur)
 
-    stats = {"matched": 0, "unmatched": 0, "slugs_pinned": 0}
+    stats = {"matched": 0, "unmatched": 0, "slugs_pinned": 0, "overridden": 0}
     methods = {}
     unmatched = []
 
@@ -113,6 +114,13 @@ def main():
 
                 if slug and index.record_slug(cur, pid, slug):
                     stats["slugs_pinned"] += 1
+
+                # Applied here rather than in a pass afterwards so the payroll
+                # summed below counts the real figure, not bref's blank cell.
+                override = override_for(slug, season, canon_abbr)
+                if override is not None:
+                    salary = override
+                    stats["overridden"] += 1
 
                 cur.execute(
                     """

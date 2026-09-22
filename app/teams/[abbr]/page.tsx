@@ -19,16 +19,11 @@ import {
   getTeamRoster,
   getTeamRosterSeasons,
   type TeamRosterRow,
+  type TeamNetValue,
 } from "@/lib/db/queries";
 
 type HistoryRow = Awaited<ReturnType<typeof getTeamHistory>>[number] & {
-  netValue?: {
-    total: number;
-    average: number;
-    players: number;
-    rank: number;
-    teams: number;
-  };
+  netValue?: TeamNetValue;
 };
 
 const historyColumns: ColumnDef<HistoryRow>[] = [
@@ -99,6 +94,17 @@ const historyColumns: ColumnDef<HistoryRow>[] = [
     render: (r) => (r.netValue ? formatRank(r.netValue.rank) : "—"),
   },
   {
+    key: "deadMoney",
+    label: "Dead Money",
+    align: "right",
+    description:
+      "The part of Net Value owed to players this team paid but did not field — bought-out contracts it was still carrying. Always zero or negative, since the money bought no production.",
+    render: (r) =>
+      !r.netValue || r.netValue.deadMoneyPlayers === 0
+        ? "—"
+        : formatScore(r.netValue.deadMoney),
+  },
+  {
     key: "madePlayoffs",
     label: "Playoffs",
     align: "center",
@@ -112,7 +118,23 @@ function rosterColumns(showSeason: boolean): ColumnDef<TeamRosterRow>[] {
     {
       key: "name",
       label: "Player",
-      render: (r) => <PlayerLink id={r.playerId} name={r.name} />,
+      render: (r) => (
+        <span className="flex items-center gap-2 whitespace-nowrap">
+          <PlayerLink id={r.playerId} name={r.name} />
+          {/* Money owed to somebody who played the season somewhere else. The
+              stat columns on this row are his, but they were earned for
+              another team, so the row says whose money it was rather than
+              looking like a player who showed up and did nothing. */}
+          {r.playedHere === false && (
+            <span
+              title="Bought out — this team owed the money, he played elsewhere"
+              className="rounded border border-black/20 bg-black/5 px-1 py-px text-[0.625rem] font-medium uppercase tracking-wide text-black/50"
+            >
+              Waived
+            </span>
+          )}
+        </span>
+      ),
     },
     ...(showSeason
       ? [
@@ -142,43 +164,60 @@ function rosterColumns(showSeason: boolean): ColumnDef<TeamRosterRow>[] {
       render: (r) => formatPercent(r.pctOfLeagueCap),
     },
     {
+      key: "netValueShare",
+      label: "Net Value",
+      align: "right",
+      description:
+        "This team's share of the player's Net Value. On a bought-out contract it is the charge alone, since the production went to whoever he played for.",
+      render: (r) => formatScore(r.netValueShare),
+    },
+    {
       key: "gp",
       label: "GP",
       align: "right",
-      render: (r) => formatNumber(r.gp),
+      // Dashed out for a waived player: the games are real but they were
+      // played for another team, and printing them here reads as this team's.
+      render: (r) => (r.playedHere === false ? "—" : formatNumber(r.gp)),
     },
     {
       key: "mp",
       label: "MPG",
       align: "right",
       description: "Minutes played. Per game.",
-      render: (r) => formatStat(r.mp),
+      render: (r) => (r.playedHere === false ? "—" : formatStat(r.mp)),
     },
     {
       key: "pts",
       label: "PTS",
       align: "right",
       description: "Points. Per game.",
-      render: (r) => formatStat(r.pts),
+      render: (r) => (r.playedHere === false ? "—" : formatStat(r.pts)),
     },
     {
       key: "reb",
       label: "REB",
       align: "right",
       description: "Total rebounds. Per game.",
-      render: (r) => formatStat(r.reb),
+      render: (r) => (r.playedHere === false ? "—" : formatStat(r.reb)),
     },
     {
       key: "ast",
       label: "AST",
       align: "right",
       description: "Assists. Per game.",
-      render: (r) => formatStat(r.ast),
+      render: (r) => (r.playedHere === false ? "—" : formatStat(r.ast)),
     },
   ];
 }
 
-/** A labelled figure in the header strip. */
+/**
+ * A labelled figure in the header strip.
+ *
+ * Laid out the way the player page lays its header boxes out: on a phone each
+ * box is a full-width row with the label on the left and the number hard
+ * right, so four of them read as a list instead of a cramped grid. From `md`
+ * they sit side by side and stack label over value.
+ */
 function Stat({
   label,
   value,
@@ -189,12 +228,20 @@ function Stat({
   caption?: string;
 }) {
   return (
-    <div className="rounded-lg border-2 border-accent bg-white/5 px-2 md:px-4 py-2">
-      <div className="text-sm md:text-sm text-white/60">{label}</div>
-      <div className="font-mono md:text-xl font-semibold tabular-nums text-accent">
-        {value}
+    <div className="w-full rounded-lg border-2 border-accent bg-background-box px-3 py-2 md:w-auto md:px-4">
+      <div className="flex items-center justify-between gap-3 md:block">
+        <div className="text-sm text-white/60">
+          {label}
+          <div className="text-xs text-white/40 md:hidden">{caption}</div>
+        </div>
+        <div className="shrink-0 text-right font-mono text-lg font-semibold tabular-nums text-accent md:text-left md:text-xl">
+          {value}
+        </div>
       </div>
-      {caption && <div className="text-xs text-white/40">{caption}</div>}
+      {/* Reserved even when empty so boxes beside each other stay level. */}
+      <div className="hidden min-h-4 text-xs text-white/40 md:block">
+        {caption}
+      </div>
     </div>
   );
 }
@@ -236,23 +283,21 @@ export default async function TeamPage({
   const seasonsCovered = history.length;
 
   return (
-    <div className="mx-auto max-w-350 p-6 text-white">
-      <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">{team.name}</h1>
-        </div>
-      </div>
+    <div className="mx-auto w-full min-w-0 max-w-350 p-6 text-white">
+      <h1 className="mb-6 min-w-0 wrap-break-word text-2xl font-semibold tracking-tight">
+        {team.name}
+      </h1>
 
-      <div className="grid grid-cols-2 md:flex md:flex-row w-fit gap-3 mb-8">
+      <div className="mb-8 flex w-full flex-col items-stretch gap-3 md:w-fit md:flex-row">
         <Stat
           label="Record"
           value={`${totalWins}-${totalLosses}`}
-          caption="Since 1991"
+          caption={`Since 1991 (${((totalWins / (totalWins + totalLosses)) * 100).toFixed(1)}%)`}
         />
         <Stat
           label="Playoff seasons"
           value={`${playoffRuns} of ${seasonsCovered}`}
-          caption="Since 1991"
+          caption={`Since 1991 (${((playoffRuns / seasonsCovered) * 100).toFixed(1)}%)`}
         />
         <Stat
           label="Championships"
@@ -263,7 +308,16 @@ export default async function TeamPage({
           <Stat
             label="Team Net Value"
             value={formatScore(latestNetValue.total)}
-            caption={`${latestNetValue.season} — #${latestNetValue.rank} of ${latestNetValue.teams}`}
+            caption={`#${latestNetValue.rank} of ${latestNetValue.teams} for ${latestNetValue.season}`}
+          />
+        )}
+        {latestNetValue && latestNetValue.deadMoneyPlayers > 0 && (
+          <Stat
+            label="Dead money"
+            value={formatScore(latestNetValue.deadMoney)}
+            caption={`${latestNetValue.deadMoneyPlayers} bought-out contract${
+              latestNetValue.deadMoneyPlayers === 1 ? "" : "s"
+            }`}
           />
         )}
       </div>
@@ -278,7 +332,7 @@ export default async function TeamPage({
           emptyMessage="No seasons on file for this team."
         />
 
-        <div className="mb-2 flex flex-wrap items-center justify-between gap-4">
+        <div className="mb-2 flex min-w-0 flex-col items-stretch justify-between gap-4 md:flex-row md:items-center">
           <h2 className="text-lg font-semibold text-white">Roster</h2>
           <RosterSeasonFilter
             abbr={team.abbr}

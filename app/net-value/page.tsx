@@ -9,7 +9,11 @@ import {
   formatScore,
   formatStat,
 } from "@/lib/format";
-import { getNetValueExamples, type NetValueExample } from "@/lib/db/queries";
+import {
+  AVAILABILITY_FLOOR,
+  getNetValueExamples,
+  type NetValueExample,
+} from "@/lib/db/queries";
 
 export const metadata = {
   title: "Net Value - The Net Values",
@@ -84,9 +88,12 @@ export default async function NetValuePage() {
   // What his pay claims before the season-wide re-centring, so the worked
   // example can show that shift as its own step rather than having a number
   // appear from nowhere.
+  const chargedShare = hero
+    ? AVAILABILITY_FLOOR + (1 - AVAILABILITY_FLOOR) * hero.availability
+    : 0;
   const rawClaim =
     hero && pricing
-      ? (hero.salary / pricing.pool) * pricing.produced * hero.availability
+      ? (hero.salary / pricing.pool) * pricing.produced * chargedShare
       : 0;
   const drift = hero ? hero.expectedProduction - rawClaim : 0;
   const salarySharePct =
@@ -189,13 +196,19 @@ export default async function NetValuePage() {
             <Step
               n={5}
               title="Scale it by how much of the season he was available"
-              working={`${Math.round(hero.minutes).toLocaleString()} min played ÷ ${Math.round(
-                hero.fullWorkload,
-              ).toLocaleString()} min full workload = ${availabilityShare.toFixed(
-                2,
-              )}  →  ${formatStat(rawClaim)} points`}
+              working={[
+                `${Math.round(hero.minutes).toLocaleString()} min played ÷ ${Math.round(
+                  hero.fullWorkload,
+                ).toLocaleString()} min full workload = ${availabilityShare.toFixed(2)} available`,
+                `${AVAILABILITY_FLOOR} + ${1 - AVAILABILITY_FLOOR} × ${availabilityShare.toFixed(
+                  2,
+                )} = ${chargedShare.toFixed(2)} charged  →  ${formatStat(rawClaim)} points`,
+              ]}
             >
-              {`A full season's work is a starter playing 30 minutes a night, every game. That is ${Math.round(hero.fullWorkload / 30)} games in ${season}, so ${Math.round(hero.fullWorkload).toLocaleString()} minutes. Taking it from the schedule means lockout and suspended seasons size themselves. He played ${Math.round(hero.minutes).toLocaleString()}. Production already falls when a player misses games, so charging him against a full season's salary on top of that would penalise the injury twice.`}
+              {`A full season's work is a starter playing 30 minutes a night, every game. That is ${Math.round(hero.fullWorkload / 30)} games in ${season}, so ${Math.round(hero.fullWorkload).toLocaleString()} minutes. Taking it from the schedule means lockout and suspended seasons size themselves. He played ${Math.round(hero.minutes).toLocaleString()}.`}
+              <br />
+              <br />
+              {`Production already falls when a player misses games, so charging him against a full season's salary on top of that would penalise the injury twice. But only half the contract bends to it. Scaling all the way down to nothing would multiply the salary out of the sum entirely, and a player who never took the floor would be charged for nothing at all — which is how a $45.6M contract and a $464,050 one once came out with the same score. Half of what a contract buys is being available; half is what you do once you are.`}
             </Step>
 
             <Step
@@ -207,7 +220,7 @@ export default async function NetValuePage() {
                 hero.expectedProduction,
               )} points bought`}
             >
-              {`Availability is never more than 1, so across the league these expectations add up to a little less than what was actually produced, which would leave the average player looking slightly positive. Every expectation in ${season} is shifted by the same ${formatStat(Math.abs(drift))} points to correct it. It is the same nudge for everyone, so it changes nobody's rank, and it is what makes a score of zero mean "paid the going rate".`}
+              {`The charged share is never more than 1, so across the league these expectations add up to a little less than what was actually produced, which would leave the average player looking slightly positive. Every expectation in ${season} is shifted by the same ${formatStat(Math.abs(drift))} points to correct it. It is the same nudge for everyone, so it changes nobody's rank, and it is what makes a score of zero mean "paid the going rate".`}
             </Step>
 
             <Step
@@ -241,7 +254,8 @@ export default async function NetValuePage() {
             Minutes played as a share of a full season&rsquo;s work, meaning a
             starter at 30 minutes a night for every game on the schedule, capped
             at 1. Minutes rather than games played, because minutes is what
-            production scales with.
+            production scales with. Half a contract is charged whatever this
+            comes to, so a season spent injured still costs something.
           </Term>
         </dl>
       </section>
@@ -299,22 +313,36 @@ export default async function NetValuePage() {
           <table className="min-w-full text-xs whitespace-nowrap sm:text-sm">
             <thead className="border-b border-white/15 text-white/60">
               <tr>
-                <th className="px-3 py-2 text-left font-medium sm:px-4">Player</th>
-                <th className="px-3 py-2 text-right font-medium sm:px-4">Produced</th>
-                <th className="px-3 py-2 text-right font-medium sm:px-4">Paid</th>
-                <th className="px-3 py-2 text-right font-medium sm:px-4">Per dollar</th>
-                <th className="px-3 py-2 text-right font-medium sm:px-4">Subtracted</th>
+                <th className="px-3 py-2 text-left font-medium sm:px-4">
+                  Player
+                </th>
+                <th className="px-3 py-2 text-right font-medium sm:px-4">
+                  Produced
+                </th>
+                <th className="px-3 py-2 text-right font-medium sm:px-4">
+                  Paid
+                </th>
+                <th className="px-3 py-2 text-right font-medium sm:px-4">
+                  Per dollar
+                </th>
+                <th className="px-3 py-2 text-right font-medium sm:px-4">
+                  Subtracted
+                </th>
               </tr>
             </thead>
             <tbody className="font-mono tabular-nums text-white/80">
               <tr className="border-b border-white/10">
-                <td className="px-3 py-2 font-sans sm:px-4">A star on a max deal</td>
+                <td className="px-3 py-2 font-sans sm:px-4">
+                  A star on a max deal
+                </td>
                 <td className="px-3 py-2 text-right sm:px-4">9.0</td>
                 <td className="px-3 py-2 text-right sm:px-4">$50,000,000</td>
                 <td className="px-3 py-2 text-right text-white/40 sm:px-4">
                   0.18 per $1M
                 </td>
-                <td className="px-3 py-2 text-right text-accent sm:px-4">+5.8</td>
+                <td className="px-3 py-2 text-right text-accent sm:px-4">
+                  +5.8
+                </td>
               </tr>
               <tr>
                 <td className="px-3 py-2 font-sans sm:px-4">
@@ -325,7 +353,9 @@ export default async function NetValuePage() {
                 <td className="px-3 py-2 text-right text-accent sm:px-4">
                   0.33 per $1M
                 </td>
-                <td className="px-3 py-2 text-right text-white/40 sm:px-4">+0.3</td>
+                <td className="px-3 py-2 text-right text-white/40 sm:px-4">
+                  +0.3
+                </td>
               </tr>
             </tbody>
           </table>
@@ -407,15 +437,21 @@ export default async function NetValuePage() {
               <table className="min-w-full text-xs whitespace-nowrap sm:text-sm">
                 <thead className="border-b border-white/15 text-white/60">
                   <tr>
-                    <th className="px-3 py-2 text-left font-medium sm:px-4">Season</th>
-                    <th className="px-3 py-2 text-right font-medium sm:px-4">Salary</th>
+                    <th className="px-3 py-2 text-left font-medium sm:px-4">
+                      Season
+                    </th>
+                    <th className="px-3 py-2 text-right font-medium sm:px-4">
+                      Salary
+                    </th>
                     <th className="px-3 py-2 text-right font-medium sm:px-4">
                       Share of cap
                     </th>
                     <th className="px-3 py-2 text-right font-medium sm:px-4">
                       Produced
                     </th>
-                    <th className="px-3 py-2 text-right font-medium sm:px-4">Bought</th>
+                    <th className="px-3 py-2 text-right font-medium sm:px-4">
+                      Bought
+                    </th>
                     <th className="px-3 py-2 text-right font-medium sm:px-4">
                       Net Value
                     </th>
@@ -460,7 +496,7 @@ export default async function NetValuePage() {
         )}
 
         <h2 className="mt-8 text-xl font-semibold tracking-tight">
-          {season}: best and worst
+          Best of {season}
         </h2>
         <div className="mt-4">
           <SimpleTable
@@ -468,6 +504,11 @@ export default async function NetValuePage() {
             rows={latestTop}
             rowKey={(r) => `${r.playerId}-${r.season}`}
           />
+        </div>
+        <h2 className="mt-8 text-xl font-semibold tracking-tight">
+          Worst of {season}
+        </h2>
+        <div className="mt-4">
           <SimpleTable
             columns={exampleColumns(false)}
             rows={latestBottom}

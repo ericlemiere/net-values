@@ -110,25 +110,28 @@ export default async function TeamsPage({
   const totalPayroll = withPayroll.reduce((sum, r) => sum + r.payroll!, 0);
 
   return (
-    <div className="mx-auto max-w-350 p-6 text-white">
+    <div className="mx-auto w-full min-w-0 max-w-350 p-6 text-white">
       <PageHeader
         title="Teams"
         meta={
           leagueCap !== null && (
-            <div className="inline-flex items-baseline gap-3 rounded-lg border-2 border-accent bg-white/5 px-4 py-2">
+            <div className="inline-flex max-w-full flex-wrap items-baseline justify-center gap-x-3 gap-y-1 rounded-lg border-2 border-accent bg-background px-2 py-2 md:justify-start md:px-4">
               <span className="text-sm text-white/60">
                 {season} League Salary Cap
               </span>
-              <span className="font-mono text-lg font-semibold tabular-nums text-accent">
+              <span className="font-mono font-semibold tabular-nums text-accent md:text-lg">
                 {formatCurrency(leagueCap)}
               </span>
             </div>
           )
         }
       />
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-4">
+      {/* Stacked on a phone so the count chip keeps its own line instead of
+          being squeezed against the dropdown, which is how the salaries and
+          stats pages lay the same pair out. */}
+      <div className="mb-4 flex min-w-0 flex-col items-stretch justify-between gap-4 md:flex-row md:items-center">
         <TeamSeasonFilter seasons={seasons} currentSeason={season} />
-        <div className={COUNT_CHIP}>
+        <div className={`shrink-0 ${COUNT_CHIP}`}>
           {rows.length} teams
           {withPayroll.length > 0 && (
             <>

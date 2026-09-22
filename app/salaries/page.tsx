@@ -60,7 +60,22 @@ function getColumns(
       label: "Team",
       align: "center",
       defaultDir: "asc",
-      render: (r) => <TeamLink abbr={r.team} />,
+      // A bought-out contract is two rows, one per team paying it. The marker
+      // says which of them was only writing cheques, so the Net Value beside
+      // it — a charge with no production against it — reads as intended.
+      render: (r) => (
+        <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+          <TeamLink abbr={r.team} />
+          {r.playedHere === false && (
+            <span
+              title="Bought out — this team owed the money, he played elsewhere"
+              className="rounded border border-black/20 bg-black/5 px-1 py-px text-[0.625rem] font-medium uppercase tracking-wide text-black/50"
+            >
+              Waived
+            </span>
+          )}
+        </span>
+      ),
     },
     {
       key: "salary",
@@ -113,7 +128,10 @@ function getColumns(
       label: "NV Rank",
       align: "center",
       defaultDir: "asc",
-      render: (r) => formatRank(r.netValueRank),
+      description:
+        "Where the player's Net Value ranked in the league that season. Blank on a bought-out contract, where the Net Value beside it is one team's share rather than the player's whole season.",
+      render: (r) =>
+        r.playedHere === false ? "—" : formatRank(r.netValueRank),
     },
   ];
 }

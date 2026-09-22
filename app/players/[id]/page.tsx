@@ -291,6 +291,32 @@ const advancedColumns: ColumnDef<AdvRow>[] = [
   },
 ];
 
+/**
+ * The team cell of the salary log: who he played for, and who else was paying.
+ *
+ * A season with one contract is just the team, which is almost all of them. A
+ * bought-out season names the team he played for and lists the money still
+ * owed underneath, because a $36.6M salary with Portland's name on it is
+ * otherwise unreadable — the figure belongs to two teams at once and only one
+ * of them ever saw him play.
+ */
+function ContractTeams({ row }: { row: SalRow }) {
+  const contracts = row.contracts ?? [];
+  const owed = contracts.filter((c) => !c.playedHere && c.salary);
+  if (owed.length === 0) return <TeamLink abbr={row.team} />;
+
+  return (
+    <span className="flex flex-col gap-0.5 whitespace-nowrap">
+      <TeamLink abbr={row.team} />
+      {owed.map((c) => (
+        <span key={c.team} className="text-xs text-black/50">
+          <TeamLink abbr={c.team} /> {formatCurrency(c.salary)} owed
+        </span>
+      ))}
+    </span>
+  );
+}
+
 function getSalariesColumns(
   currentCap: Awaited<ReturnType<typeof getCurrentCap>>,
 ): ColumnDef<SalRow>[] {
@@ -300,12 +326,14 @@ function getSalariesColumns(
       key: "team",
       label: "Team",
       noRowLink: true,
-      render: (r) => <TeamLink abbr={r.team} />,
+      render: (r) => <ContractTeams row={r} />,
     },
     {
       key: "salary",
       label: "Salary",
       align: "right",
+      description:
+        "Everything the player was paid that season. Where a contract was bought out, that is the old team's money plus the new team's added together.",
       render: (r) => formatCurrency(r.salary),
     },
     {

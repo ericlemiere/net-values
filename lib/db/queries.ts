@@ -22,6 +22,7 @@ import {
   teamPayrolls,
   teamSeasons,
   netValues,
+  netValueShares,
 } from "./schema";
 
 export const PAGE_SIZE = 100;
@@ -334,7 +335,15 @@ const salarySelection = {
   leagueCap: seasons.leagueCap,
   pctOfTeamCap: pctOfTeamCapSql,
   pctOfLeagueCap: pctOfLeagueCapSql,
-  netValueScore: sql<number | null>`${netValues.netValueScore}::float8`,
+  /**
+   * This row's own Net Value, meaning this team's share of the player's.
+   *
+   * The table lists one row per contract, so a bought-out season is two rows,
+   * and hanging the player's whole score on both would print the same figure
+   * twice for money that was split. Falls back to the whole score where there
+   * is no share to read, which is every ordinary single-contract season.
+   */
+  netValueScore: sql<number | null>`coalesce(${netValueShares.score}, ${netValues.netValueScore})::float8`,
   netValue: sql<number | null>`${netValues.netValue}::float8`,
   netValueRank: netValues.seasonRank,
   salaryRank: netValues.salaryRank,
@@ -343,6 +352,8 @@ const salarySelection = {
     number | null
   >`${netValues.expectedProduction}::float8`,
   availability: sql<number | null>`${netValues.availability}::float8`,
+  /** False on a row that is a team paying a player who played elsewhere. */
+  playedHere: netValueShares.playedHere,
 };
 
 const salariesSortColumns = {
@@ -353,7 +364,8 @@ const salariesSortColumns = {
   teamPayroll: teamPayrolls.payroll,
   pctOfTeamCap: pctOfTeamCapSql,
   pctOfLeagueCap: pctOfLeagueCapSql,
-  netValueScore: netValues.netValueScore,
+  // Matches what the column renders — the share where there is one.
+  netValueScore: sql`coalesce(${netValueShares.score}, ${netValues.netValueScore})`,
   netValue: netValues.netValue,
   netValueRank: netValues.seasonRank,
   salaryRank: netValues.salaryRank,
@@ -411,6 +423,15 @@ export async function getSalaries(params: ListParams) {
       and(
         eq(netValues.playerId, salaries.playerId),
         eq(netValues.season, salaries.season),
+      ),
+    )
+    // Joined on the team too, so each contract row picks up its own slice.
+    .leftJoin(
+      netValueShares,
+      and(
+        eq(netValueShares.playerId, salaries.playerId),
+        eq(netValueShares.season, salaries.season),
+        eq(netValueShares.team, salaries.team),
       ),
     )
     .orderBy(orderByNullsLast(sortCol, params.dir), asc(players.name))
@@ -606,6 +627,18 @@ export async function getTeamRoster(abbr: string, season: string) {
       salary: salaries.salary,
       pctOfTeamCap: pctOfTeamCapSql,
       pctOfLeagueCap: pctOfLeagueCapSql,
+      /**
+       * This team's own piece of the player's Net Value, not the whole thing.
+       * On a bought-out contract the two differ sharply: the team owed the
+       * money carries the charge with no production against it.
+       */
+      netValueShare: sql<number | null>`${netValueShares.score}::float8`,
+      /**
+       * False when this team paid him but he played elsewhere. The stat
+       * columns beside it were earned for somebody else, so the row has to say
+       * so rather than read as a player who turned up and did nothing.
+       */
+      playedHere: netValueShares.playedHere,
       gp: playerStatsPerGame.gp,
       mp: playerStatsPerGame.mp,
       pts: playerStatsPerGame.pts,
@@ -614,6 +647,14 @@ export async function getTeamRoster(abbr: string, season: string) {
     })
     .from(salaries)
     .innerJoin(players, eq(players.id, salaries.playerId))
+    .leftJoin(
+      netValueShares,
+      and(
+        eq(netValueShares.playerId, salaries.playerId),
+        eq(netValueShares.season, salaries.season),
+        eq(netValueShares.team, team),
+      ),
+    )
     .leftJoin(teams, eq(teams.abbr, salaries.team))
     .leftJoin(
       teamPayrolls,
@@ -647,6 +688,15 @@ export async function getTeamRoster(abbr: string, season: string) {
  */
 export const FULL_CONTRACT_SHARE_OF_CAP = 0.005;
 
+/**
+ * The share of a contract charged no matter how little the player appeared.
+ *
+ * Mirrors AVAILABILITY_FLOOR in scraper/compute_net_values.py, which is where
+ * it actually takes effect — this copy only exists so the explainer can show
+ * the arithmetic it used. Change it there first.
+ */
+export const AVAILABILITY_FLOOR = 0.5;
+
 export interface TeamNetValue {
   season: string;
   /**
@@ -661,17 +711,40 @@ export interface TeamNetValue {
   players: number;
   rank: number;
   teams: number;
+  /**
+   * The part of `total` owed to players this team paid but did not field —
+   * bought-out contracts it is still carrying. Always zero or negative, since
+   * a team gets no production for the money. Broken out because it is a
+   * different kind of problem from a roster that underperformed.
+   */
+  deadMoney: number;
+  deadMoneyPlayers: number;
 }
 
-/** Team Net Value and its league rank, per season, for one team. */
+/**
+ * Team Net Value and its league rank, per season, for one team.
+ *
+ * Summed from `net_value_shares` rather than whole players, so a bought-out
+ * contract is charged to the team that owes it instead of the team the player
+ * ended up on. Portland waived Deandre Ayton and still owed $25.6M of his
+ * 2025-26 salary while he played 72 games for the Lakers on $8.1M; the shares
+ * put -1.57 on Portland and +0.10 on Los Angeles, which between them are
+ * exactly his -1.47.
+ */
 export async function getTeamNetValues(abbr: string): Promise<TeamNetValue[]> {
   const rows = await db.execute(sql`
     WITH qualifying AS (
-      SELECT nv.team, nv.season, nv.net_value_score
-      FROM ${netValues} nv
-      JOIN ${seasons} s ON s.season = nv.season
-      WHERE nv.team IS NOT NULL
-        AND nv.net_value_score IS NOT NULL
+      SELECT sh.team, sh.season, sh.score, sh.played_here
+      FROM ${netValueShares} sh
+      JOIN ${netValues} nv
+        ON nv.player_id = sh.player_id AND nv.season = sh.season
+      JOIN ${seasons} s ON s.season = sh.season
+      WHERE sh.score IS NOT NULL
+        -- Measured against the player's WHOLE contract, not this team's slice
+        -- of it. A buyout leaves the new team paying a fraction of a deal that
+        -- was a full contract when it was signed, and that fraction is not a
+        -- two-way deal just because it is small.
+        --
         -- ::float8 is required, not defensive. Both salary and league_cap are
         -- integers, so Postgres infers this parameter as an integer too; the
         -- neon driver then rejects 0.005 outright, and a client that rounded
@@ -681,19 +754,22 @@ export async function getTeamNetValues(abbr: string): Promise<TeamNetValue[]> {
     ),
     totals AS (
       SELECT season, team,
-             SUM(net_value_score) AS total,
-             AVG(net_value_score) AS average,
-             COUNT(*) AS players
+             SUM(score) AS total,
+             AVG(score) AS average,
+             COUNT(*) AS players,
+             COALESCE(SUM(score) FILTER (WHERE NOT played_here), 0) AS dead_money,
+             COUNT(*) FILTER (WHERE NOT played_here) AS dead_money_players
       FROM qualifying
       GROUP BY season, team
     ),
     ranked AS (
-      SELECT season, team, total, average, players,
+      SELECT season, team, total, average, players, dead_money, dead_money_players,
              RANK() OVER (PARTITION BY season ORDER BY total DESC) AS rank,
              COUNT(*) OVER (PARTITION BY season) AS teams
       FROM totals
     )
-    SELECT season, total::float8, average::float8, players::int, rank::int, teams::int
+    SELECT season, total::float8, average::float8, players::int, rank::int, teams::int,
+           dead_money::float8 AS "deadMoney", dead_money_players::int AS "deadMoneyPlayers"
     FROM ranked
     WHERE team = ${abbr.toUpperCase()}
     ORDER BY season DESC
@@ -925,28 +1001,126 @@ export async function getPlayerCareerAdvancedStats(playerId: number) {
     .orderBy(asc(advancedStats.season));
 }
 
+/** One of the contracts that paid a player in a single season. */
+export interface PlayerContract {
+  team: string | null;
+  salary: number | null;
+  /** False on money owed by a team he no longer played for — a buyout. */
+  playedHere: boolean;
+}
+
+export type PlayerCareerSalary = Awaited<
+  ReturnType<typeof getPlayerCareerSalaries>
+>[number];
+
+/**
+ * A player's career salary log, one row per SEASON rather than per contract.
+ *
+ * Two contracts in one year used to mean two rows carrying the same net value
+ * between them, which read as though the player had been paid twice and scored
+ * twice. A bought-out season is still one season: Damian Lillard's 2025-26 is
+ * $22.5M owed by Milwaukee, who waived him, plus $14.1M from Portland, who
+ * signed him — one row of $36.6M, with the split spelled out in `contracts`.
+ *
+ * The split comes from net_value_shares, so the page shows the same division
+ * the model charged. That also collapses the seasons where two rows were never
+ * two contracts in the first place: a legacy season repeats one full-season
+ * figure against each team the player passed through, and the model already
+ * knows to count it once.
+ */
 export async function getPlayerCareerSalaries(playerId: number) {
-  return db
-    .select(salarySelection)
-    .from(salaries)
-    .leftJoin(teams, eq(teams.abbr, salaries.team))
-    .leftJoin(
-      teamPayrolls,
-      and(
-        eq(teamPayrolls.teamId, teams.id),
-        eq(teamPayrolls.season, salaries.season),
-      ),
+  const rows = await db.execute(sql`
+    WITH paid AS (
+      SELECT s.id, s.season, s.team, s.salary, s.source
+      FROM ${salaries} s
+      WHERE s.player_id = ${playerId}
+    ),
+    collapsed AS (
+      SELECT season,
+             -- Stable per season, so ?salary= keeps pointing at the same row
+             -- as the comps anchor.
+             MIN(id) AS id,
+             CASE WHEN BOOL_OR(source = 'sqlite_migration') THEN MAX(salary)
+                  ELSE SUM(salary) END AS salary,
+             (ARRAY_AGG(team ORDER BY salary DESC NULLS LAST, team))[1] AS fallback_team
+      FROM paid
+      GROUP BY season
+    ),
+    split AS (
+      SELECT sh.season,
+             JSON_AGG(
+               JSON_BUILD_OBJECT('team', sh.team, 'salary', sh.salary,
+                                 'playedHere', sh.played_here)
+               ORDER BY sh.played_here DESC, sh.salary DESC NULLS LAST
+             ) AS contracts,
+             SUM(sh.salary) FILTER (WHERE sh.played_here) AS played_salary
+      FROM ${netValueShares} sh
+      WHERE sh.player_id = ${playerId}
+      GROUP BY sh.season
+    ),
+    -- Seasons with no net value at all, so no shares to read: a salary we have
+    -- no league cap for. The raw rows are all there is to show.
+    unpriced AS (
+      SELECT season,
+             JSON_AGG(
+               JSON_BUILD_OBJECT('team', team, 'salary', salary, 'playedHere', TRUE)
+               ORDER BY salary DESC NULLS LAST
+             ) AS contracts
+      FROM paid
+      GROUP BY season
     )
-    .leftJoin(seasons, eq(seasons.season, salaries.season))
-    .leftJoin(
-      netValues,
-      and(
-        eq(netValues.playerId, salaries.playerId),
-        eq(netValues.season, salaries.season),
-      ),
-    )
-    .where(eq(salaries.playerId, playerId))
-    .orderBy(asc(salaries.season));
+    SELECT c.id,
+           c.season,
+           COALESCE(nv.team, c.fallback_team) AS team,
+           c.salary::int AS salary,
+           COALESCE(sp.contracts, up.contracts) AS contracts,
+           tp.payroll AS "teamPayroll",
+           se.league_cap AS "leagueCap",
+           -- Against the payroll of the team he actually played for, using
+           -- only what THAT team paid him. Charging Portland's buyout against
+           -- the Lakers' books would read as a far bigger slice of their
+           -- payroll than Ayton ever took up.
+           round(100.0 * COALESCE(sp.played_salary, c.salary)
+                 / NULLIF(tp.payroll, 0), 2) AS "pctOfTeamCap",
+           -- Against the league cap it is the whole season's pay, because that
+           -- is what the player cost the league, whoever wrote the cheques.
+           round(100.0 * c.salary / NULLIF(se.league_cap, 0), 2) AS "pctOfLeagueCap",
+           nv.net_value_score::float8 AS "netValueScore",
+           nv.net_value::float8 AS "netValue",
+           nv.season_rank AS "netValueRank",
+           nv.salary_rank AS "salaryRank",
+           nv.production::float8 AS production,
+           nv.expected_production::float8 AS "expectedProduction",
+           nv.availability::float8 AS availability
+    FROM collapsed c
+    LEFT JOIN split sp ON sp.season = c.season
+    LEFT JOIN unpriced up ON up.season = c.season
+    LEFT JOIN ${netValues} nv
+           ON nv.player_id = ${playerId} AND nv.season = c.season
+    LEFT JOIN ${teams} t ON t.abbr = COALESCE(nv.team, c.fallback_team)
+    LEFT JOIN ${teamPayrolls} tp ON tp.team_id = t.id AND tp.season = c.season
+    LEFT JOIN ${seasons} se ON se.season = c.season
+    ORDER BY c.season ASC
+  `);
+
+  return rows.rows as unknown as {
+    id: number;
+    season: string;
+    team: string | null;
+    salary: number | null;
+    contracts: PlayerContract[];
+    teamPayroll: number | null;
+    leagueCap: number | null;
+    pctOfTeamCap: number | null;
+    pctOfLeagueCap: number | null;
+    netValueScore: number | null;
+    netValue: number | null;
+    netValueRank: number | null;
+    salaryRank: number | null;
+    production: number | null;
+    expectedProduction: number | null;
+    availability: number | null;
+  }[];
 }
 
 export interface SalaryComp {

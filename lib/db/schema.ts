@@ -363,3 +363,57 @@ export const netValues = pgTable(
     index("net_values_season_idx").on(t.season),
   ]
 );
+
+/**
+ * One net_values row split across the teams that actually paid for it.
+ *
+ * A bought-out player is on two teams' books at once: the team that waived him
+ * still owes the contract, and the team he signed with pays the rest. Charging
+ * the whole thing to either one is wrong — the old team's mistake would land on
+ * the new team's ledger, or a real cost would vanish. So the charge is
+ * apportioned by what each team actually paid, while the production is credited
+ * to the one team he played for.
+ *
+ * Deandre Ayton, 2025-26: Portland owed $25.6M after waiving him, the Lakers
+ * paid $8.1M and got all 72 games.
+ *
+ *     LAL   0.60 production  -  24% of the charge  =  +0.10
+ *     POR   0.00 production  -  76% of the charge  =  -1.57
+ *                                                     -----
+ *     his net_value_score                             -1.47
+ *
+ * The rows for a player-season always sum back to his `net_values` score, which
+ * is what keeps team totals from double-counting or losing a dollar. Written by
+ * the same pass that writes net_values, and truncated with it.
+ */
+export const netValueShares = pgTable(
+  "net_value_shares",
+  {
+    id: serial("id").primaryKey(),
+    playerId: integer("player_id")
+      .notNull()
+      .references(() => players.id),
+    season: text("season").notNull(),
+    team: varchar("team", { length: 3 }).notNull(),
+    /**
+     * What this team paid him this season. Zero on the rare row that exists
+     * only to carry production: a player whose stat line names a team our
+     * salary data has no contract for, which happens mid-season while a trade
+     * is still settling on the source pages.
+     */
+    salary: integer("salary"),
+    /** His full season production, on the one team he played for. Else zero. */
+    productionCredit: numeric("production_credit", { precision: 8, scale: 3, mode: "number" }),
+    /** This team's share of what his pay was expected to buy. */
+    charge: numeric("charge", { precision: 8, scale: 3, mode: "number" }),
+    /** `productionCredit - charge` — this team's piece of his net value. */
+    score: numeric("score", { precision: 6, scale: 2, mode: "number" }),
+    /** True on the team whose uniform he actually wore. */
+    playedHere: boolean("played_here").notNull(),
+    source: varchar("source", { length: 20 }).notNull(),
+  },
+  (t) => [
+    uniqueIndex("net_value_shares_player_season_team_idx").on(t.playerId, t.season, t.team),
+    index("net_value_shares_season_team_idx").on(t.season, t.team),
+  ]
+);

@@ -93,8 +93,14 @@ export default async function NetValuePage() {
     hero && pricing && pricing.pool ? (100 * hero.salary) / pricing.pool : 0;
   const availabilityShare = hero?.availability ?? 0;
 
+  /*
+   * `w-full min-w-0` on the column is what keeps the page inside a phone: it
+   * is a flex item, so without it the widest table's own width becomes the
+   * column's minimum and the whole page scrolls sideways instead of the table
+   * scrolling inside its frame.
+   */
   return (
-    <div className="mx-auto max-w-4xl p-6 text-white">
+    <div className="mx-auto w-full min-w-0 max-w-4xl px-4 py-6 text-white sm:p-6">
       <h1 className="text-3xl font-semibold tracking-tight">Net Value</h1>
       <p className="mt-3 max-w-prose text-white/70">
         Every player is paid to produce. Net Value is the gap between what a
@@ -109,8 +115,8 @@ export default async function NetValuePage() {
         more than his contract paid for.
       </p>
 
-      <div className="my-8 w-fit max-w-full overflow-x-auto rounded-lg border-2 border-accent bg-white/5 px-5 py-4">
-        <p className="font-mono whitespace-nowrap text-accent">
+      <div className="my-8 w-fit max-w-full overflow-x-auto rounded-lg border-2 border-accent bg-white/5 px-4 py-3 sm:px-5 sm:py-4">
+        <p className="font-mono text-sm whitespace-normal text-accent sm:text-base sm:whitespace-nowrap">
           Net Value = value produced − value bought
         </p>
       </div>
@@ -266,7 +272,7 @@ export default async function NetValuePage() {
           point is worth, every team&rsquo;s VORP was fitted against how many
           games that team really won, across 937 full 82-game team-seasons:
         </p>
-        <p className="mt-3 overflow-x-auto rounded-md border border-white/15 bg-white/5 px-3 py-2 font-mono text-sm whitespace-nowrap text-accent">
+        <p className="mt-3 overflow-x-auto rounded-md border border-white/15 bg-white/5 px-3 py-2 font-mono text-xs whitespace-normal text-accent sm:text-sm sm:whitespace-nowrap">
           team wins = 20.1 + 2.17 × team VORP&nbsp;&nbsp;&nbsp;(r = 0.95)
         </p>
         <p className="mt-3 max-w-prose text-sm text-white/70">
@@ -290,36 +296,36 @@ export default async function NetValuePage() {
           cost?
         </p>
         <div className="mt-4 overflow-x-auto rounded-lg border border-white/15">
-          <table className="min-w-full text-sm">
+          <table className="min-w-full text-xs whitespace-nowrap sm:text-sm">
             <thead className="border-b border-white/15 text-white/60">
               <tr>
-                <th className="px-4 py-2 text-left font-medium">Player</th>
-                <th className="px-4 py-2 text-right font-medium">Produced</th>
-                <th className="px-4 py-2 text-right font-medium">Paid</th>
-                <th className="px-4 py-2 text-right font-medium">Per dollar</th>
-                <th className="px-4 py-2 text-right font-medium">Subtracted</th>
+                <th className="px-3 py-2 text-left font-medium sm:px-4">Player</th>
+                <th className="px-3 py-2 text-right font-medium sm:px-4">Produced</th>
+                <th className="px-3 py-2 text-right font-medium sm:px-4">Paid</th>
+                <th className="px-3 py-2 text-right font-medium sm:px-4">Per dollar</th>
+                <th className="px-3 py-2 text-right font-medium sm:px-4">Subtracted</th>
               </tr>
             </thead>
             <tbody className="font-mono tabular-nums text-white/80">
               <tr className="border-b border-white/10">
-                <td className="px-4 py-2 font-sans">A star on a max deal</td>
-                <td className="px-4 py-2 text-right">9.0</td>
-                <td className="px-4 py-2 text-right">$50,000,000</td>
-                <td className="px-4 py-2 text-right text-white/40">
+                <td className="px-3 py-2 font-sans sm:px-4">A star on a max deal</td>
+                <td className="px-3 py-2 text-right sm:px-4">9.0</td>
+                <td className="px-3 py-2 text-right sm:px-4">$50,000,000</td>
+                <td className="px-3 py-2 text-right text-white/40 sm:px-4">
                   0.18 per $1M
                 </td>
-                <td className="px-4 py-2 text-right text-accent">+5.8</td>
+                <td className="px-3 py-2 text-right text-accent sm:px-4">+5.8</td>
               </tr>
               <tr>
-                <td className="px-4 py-2 font-sans">
+                <td className="px-3 py-2 font-sans sm:px-4">
                   A 12th man on the minimum
                 </td>
-                <td className="px-4 py-2 text-right">0.4</td>
-                <td className="px-4 py-2 text-right">$1,200,000</td>
-                <td className="px-4 py-2 text-right text-accent">
+                <td className="px-3 py-2 text-right sm:px-4">0.4</td>
+                <td className="px-3 py-2 text-right sm:px-4">$1,200,000</td>
+                <td className="px-3 py-2 text-right text-accent sm:px-4">
                   0.33 per $1M
                 </td>
-                <td className="px-4 py-2 text-right text-white/40">+0.3</td>
+                <td className="px-3 py-2 text-right text-white/40 sm:px-4">+0.3</td>
               </tr>
             </tbody>
           </table>
@@ -341,7 +347,7 @@ export default async function NetValuePage() {
           inflate with the cap. Across the whole database it runs from about −7
           to +9, and every season averages exactly zero.
         </p>
-        <dl className="mt-4 grid gap-3 sm:grid-cols-4">
+        <dl className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <Term name="+5 and up">
             An all-time bargain. Usually a superstar still on a rookie deal.
           </Term>
@@ -386,7 +392,7 @@ export default async function NetValuePage() {
         />
 
         {overCap.length > 0 && (
-          <aside className="mt-6 rounded-lg border border-white/15 bg-white/5 p-5">
+          <aside className="mt-6 rounded-lg border border-white/15 bg-white/5 p-4 sm:p-5">
             <h3 className="font-semibold text-white">
               Two seasons are kept out of that list
             </h3>
@@ -398,19 +404,19 @@ export default async function NetValuePage() {
                 )}. A quirk of the collective bargaining agreement let Chicago re-sign their own free agent for any amount, and nobody else in NBA history has been paid above the cap. The next highest share anyone has taken is 81%.`}
             </p>
             <div className="mt-4 overflow-x-auto rounded-lg border border-white/15">
-              <table className="min-w-full text-sm">
+              <table className="min-w-full text-xs whitespace-nowrap sm:text-sm">
                 <thead className="border-b border-white/15 text-white/60">
                   <tr>
-                    <th className="px-4 py-2 text-left font-medium">Season</th>
-                    <th className="px-4 py-2 text-right font-medium">Salary</th>
-                    <th className="px-4 py-2 text-right font-medium">
+                    <th className="px-3 py-2 text-left font-medium sm:px-4">Season</th>
+                    <th className="px-3 py-2 text-right font-medium sm:px-4">Salary</th>
+                    <th className="px-3 py-2 text-right font-medium sm:px-4">
                       Share of cap
                     </th>
-                    <th className="px-4 py-2 text-right font-medium">
+                    <th className="px-3 py-2 text-right font-medium sm:px-4">
                       Produced
                     </th>
-                    <th className="px-4 py-2 text-right font-medium">Bought</th>
-                    <th className="px-4 py-2 text-right font-medium">
+                    <th className="px-3 py-2 text-right font-medium sm:px-4">Bought</th>
+                    <th className="px-3 py-2 text-right font-medium sm:px-4">
                       Net Value
                     </th>
                   </tr>
@@ -418,22 +424,22 @@ export default async function NetValuePage() {
                 <tbody className="font-mono tabular-nums text-white/80">
                   {overCap.map((r) => (
                     <tr key={r.season} className="border-t border-white/10">
-                      <td className="px-4 py-2">{r.season}</td>
-                      <td className="px-4 py-2 text-right">
+                      <td className="px-3 py-2 sm:px-4">{r.season}</td>
+                      <td className="px-3 py-2 text-right sm:px-4">
                         {formatCurrency(r.salary)}
                       </td>
-                      <td className="px-4 py-2 text-right">
+                      <td className="px-3 py-2 text-right sm:px-4">
                         {r.leagueCap
                           ? `${formatStat((100 * r.salary) / r.leagueCap)}%`
                           : "—"}
                       </td>
-                      <td className="px-4 py-2 text-right">
+                      <td className="px-3 py-2 text-right sm:px-4">
                         {formatStat(r.production)}
                       </td>
-                      <td className="px-4 py-2 text-right">
+                      <td className="px-3 py-2 text-right sm:px-4">
                         {formatStat(r.expectedProduction)}
                       </td>
-                      <td className="px-4 py-2 text-right">
+                      <td className="px-3 py-2 text-right sm:px-4">
                         {formatScore(r.netValueScore)}
                       </td>
                     </tr>

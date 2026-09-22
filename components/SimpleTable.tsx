@@ -47,7 +47,7 @@ export function SimpleTable<Row>({
     <div className={`mb-8 min-w-0 ${fit ? "w-full lg:w-fit" : "w-full"}`}>
       {title && <h2 className="text-lg font-semibold text-white">{title}</h2>}
       {(title || subtitle) && (
-        <div className="mb-2 min-h-[20px] text-sm text-white/60">
+        <div className="mb-2 min-h-5 text-sm text-white/60">
           {subtitle}
         </div>
       )}

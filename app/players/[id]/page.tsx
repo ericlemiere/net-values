@@ -389,13 +389,20 @@ function HeaderBox({
   caption?: string;
 }) {
   return (
-    <div className="rounded-lg border-2 border-accent bg-background-box px-4 py-2 text-right">
-      <div className="text-sm text-white/60">{label}</div>
-      <div className="font-mono text-2xl font-semibold tabular-nums text-accent">
-        {value}
+    <div className="w-full rounded-lg border-2 border-accent bg-background-box px-3 py-2 md:w-auto md:px-4 md:text-right">
+      <div className="flex items-center md:items-start justify-between gap-3 md:block">
+        <div className="text-sm text-white/60">
+          {label}
+          <div className="text-xs text-white/40 md:hidden">{caption}</div>
+        </div>
+        <div className="shrink-0 text-right font-mono text-lg font-semibold tabular-nums text-accent md:text-2xl">
+          {value}
+        </div>
       </div>
       {/* Reserved even when empty so boxes beside each other stay level. */}
-      <div className="min-h-4 text-xs text-white/40">{caption}</div>
+      <div className="hidden min-h-4 text-xs text-white/40 md:block">
+        {caption}
+      </div>
     </div>
   );
 }
@@ -494,15 +501,15 @@ export default async function PlayerPage({
       : "";
 
   return (
-    <div className="p-6 max-w-350 mx-auto text-white">
-      <div className="mb-6 flex flex-wrap flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="flex items-center gap-4">
+    <div className="mx-auto max-w-350 w-full min-w-0 p-6 text-white">
+      <div className="mb-6 flex flex-col justify-between gap-4 md:flex-row md:items-center">
+        <div className="flex min-w-0 items-center gap-4">
           <PlayerHeadshot nbaPersonId={player.nbaPersonId} name={player.name} />
-          <h1 className="text-2xl font-semibold tracking-tight">
+          <h1 className="min-w-0 wrap-break-word text-2xl font-semibold tracking-tight">
             {player.name}
           </h1>
         </div>
-        <div className="flex flex-col w-fit md:flex-row items-stretch gap-3">
+        <div className="flex w-full flex-col items-stretch gap-3 md:w-auto md:flex-row">
           {paidSeasons.length > 0 && (
             <HeaderBox
               label="Career Earnings"
@@ -531,7 +538,7 @@ export default async function PlayerPage({
           )}
         </div>
       </div>
-      <div className="flex flex-wrap items-start gap-8">
+      <div className="flex min-w-0 flex-col items-start gap-8">
         <SimpleTable
           title="Salaries"
           subtitle={
@@ -545,7 +552,7 @@ export default async function PlayerPage({
           rowHref={(r) => `/players/${playerId}?salary=${r.id}`}
           isActive={(r) => r.id === anchor?.id}
         />
-        <div className="flex flex-wrap items-start gap-8">
+        <div className="flex w-full min-w-0 flex-col md:flex-row items-start gap-8">
           <CompsTable
             title={`${anchor!.season} Season Cap Comps`}
             subtitle={

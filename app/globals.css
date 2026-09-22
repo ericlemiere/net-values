@@ -63,6 +63,90 @@ body {
 }
 
 /*
+ * Scrollbars inside a sheet.
+ *
+ * A native scrollbar paints inside the element's padding box, so on a rounded,
+ * accent-bordered sheet its square track runs straight through the yellow
+ * corner and chops it off. Painting no track at all, and insetting a pill
+ * thumb from the edges, leaves the border unbroken.
+ *
+ * Both syntaxes are here on purpose: Chrome and Firefox take the standard
+ * properties (and ignore the -webkit- pseudo-elements when they're set),
+ * Safari before 18.2 only understands the pseudo-elements. The page is
+ * color-scheme: dark, but the sheet is white paper, so the thumb is keyed to
+ * the paper rather than inherited from the page.
+ */
+.sheet-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 0, 0, 0.3) transparent;
+}
+
+.sheet-scrollbar::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+/* The corner is the square where the two scrollbars meet on a table that
+   scrolls both ways; left opaque it would notch the bottom-right radius. */
+.sheet-scrollbar::-webkit-scrollbar-track,
+.sheet-scrollbar::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+.sheet-scrollbar::-webkit-scrollbar-thumb {
+  /* The transparent border plus content-box clip is what insets the pill from
+     the sheet's edges so it clears the rounded corners. */
+  background-color: rgba(0, 0, 0, 0.3);
+  background-clip: content-box;
+  border: 3px solid transparent;
+  border-radius: 999px;
+}
+
+.sheet-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(0, 0, 0, 0.45);
+}
+
+/*
+ * The header nav's active-page marker.
+ *
+ * It's one element parked at the nav's origin and moved onto the active link
+ * by a measured transform, rather than an underline on the link itself, so
+ * that switching pages is a single bar travelling between labels instead of
+ * one underline blinking out and another blinking in. NavLinks measures the
+ * link and supplies the transform and width; everything about how it moves
+ * lives here.
+ */
+.nav-underline {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 2px;
+  border-radius: 999px;
+  background: var(--accent);
+  /* It sits under the labels' hit areas and must not steal their clicks. */
+  pointer-events: none;
+  transition: opacity 180ms ease-out;
+  will-change: transform, width;
+}
+
+/*
+ * Added only once the bar is already on screen, so it travels between labels
+ * but doesn't slide in from the nav's left edge the first time it appears.
+ *
+ * The easing decelerates hard (a quint ease-out): the bar leaves quickly, so
+ * the move reads as a response to the click, and settles slowly enough to be
+ * followed. Width trails a little behind the travel, which lets the bar reach
+ * the new label before finishing its resize rather than changing shape in
+ * mid-air.
+ */
+.nav-underline-slide {
+  transition:
+    transform 340ms cubic-bezier(0.22, 1, 0.36, 1),
+    width 260ms cubic-bezier(0.22, 1, 0.36, 1) 40ms,
+    opacity 180ms ease-out;
+}
+
+/*
  * The NBA logoman pinned to the bottom-right of the viewport, behind
  * everything. The outer layer is a masked accent silhouette; the ::after
  * layer is the same silhouette slightly scaled down in the page background,

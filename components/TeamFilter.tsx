@@ -1,6 +1,7 @@
 "use client";
 
 import { useTableNav } from "./TableNav";
+import { FilterDropdown } from "./FilterDropdown";
 
 export interface TeamOption {
   abbr: string;
@@ -26,33 +27,29 @@ export function TeamFilter({
 }) {
   const { navigate } = useTableNav();
 
+  const options = [
+    { value: "ALL", label: "All teams" },
+    ...teams.map((t) => ({ value: t.abbr, label: `${t.abbr} - ${t.name}` })),
+  ];
+
   return (
-    <label className="flex items-center gap-2 text-sm text-white bg-background-box rounded-md p-2 w-full md:w-auto justify-between md:justify-start">
-      <span className="text-white/70">Team</span>
-      <select
-        className="rounded-md border border-white/20 bg-white/5 px-2 py-1 text-white transition-colors hover:border-white/40"
-        value={currentTeam}
-        onChange={(e) => {
-          // Changing the filter always returns to page 1 — the old offset is
-          // meaningless against a different, usually much smaller, result set.
-          const sp = new URLSearchParams({
-            ...extraParams,
-            season,
-            team: e.target.value,
-            sort,
-            dir,
-            page: "1",
-          });
-          navigate(`${basePath}?${sp.toString()}`);
-        }}
-      >
-        <option value="ALL">All teams</option>
-        {teams.map((t) => (
-          <option key={t.abbr} value={t.abbr}>
-            {t.abbr} — {t.name}
-          </option>
-        ))}
-      </select>
-    </label>
+    <FilterDropdown
+      label="Team"
+      value={currentTeam}
+      options={options}
+      onChange={(nextTeam) => {
+        // Changing the filter always returns to page 1 - the old offset is
+        // meaningless against a different, usually much smaller, result set.
+        const sp = new URLSearchParams({
+          ...extraParams,
+          season,
+          team: nextTeam,
+          sort,
+          dir,
+          page: "1",
+        });
+        navigate(`${basePath}?${sp.toString()}`);
+      }}
+    />
   );
 }

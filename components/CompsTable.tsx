@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { formatScore } from "@/lib/format";
 import { describe } from "@/lib/glossary";
 import { PlayerLink } from "./PlayerLink";
@@ -102,6 +102,15 @@ export function CompsTable({
 }: CompsTableProps) {
   const [sort, setSort] = useState<SortKey | null>(null);
   const [dir, setDir] = useState<"asc" | "desc">("asc");
+  const scrollRef = useRef<HTMLDivElement>(null);
+  /**
+   * Whether the rows actually overflow the panel. A panel holding five comps
+   * still has room for all of them, and a gutter held open beside them reads
+   * as a scrollbar that's broken, so the gutter is only reserved once there's
+   * something to scroll. Measured rather than counted off row heights, which
+   * are the font's business and not ours.
+   */
+  const [overflows, setOverflows] = useState(false);
 
   const columns = useMemo(
     () => ALL_COLUMNS.filter((c) => showSeason || c.key !== "season"),
@@ -114,6 +123,21 @@ export function CompsTable({
     if (!col) return rows;
     return [...rows].sort((a, b) => compare(col.value(a), col.value(b), dir));
   }, [rows, columns, sort, dir]);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const measure = () => setOverflows(el.scrollHeight > el.clientHeight);
+    measure();
+    /*
+     * Re-measured on resize, because the columns reflow with the viewport.
+     * This can't oscillate: the gutter only takes width, and the table inside
+     * is `w-max`, so nothing it does changes the height being measured.
+     */
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [sorted]);
 
   function toggle(col: Column) {
     if (sort === col.key) {
@@ -130,10 +154,14 @@ export function CompsTable({
     // narrower one with empty space.
     <div className="mb-8 w-full min-w-0 lg:w-fit lg:max-w-full">
       <h2 className="text-lg font-semibold text-white">{title}</h2>
-      <div className="mb-2 min-h-[20px] text-sm text-white/60">{subtitle}</div>
-      {/* scrollbar-gutter keeps the vertical scrollbar from squeezing the
-          content into a horizontal scroll of its own. */}
-      <div className={`h-80 ${SHEET}`} style={{ scrollbarGutter: "stable" }}>
+      <div className="mb-2 min-h-5 text-sm text-white/60">{subtitle}</div>
+      {/* Once the rows scroll, the gutter keeps the vertical scrollbar from
+          squeezing the content into a horizontal scroll of its own. */}
+      <div
+        ref={scrollRef}
+        className={`h-80 ${SHEET}`}
+        style={{ scrollbarGutter: overflows ? "stable" : "auto" }}
+      >
         <table className="w-max min-w-full text-sm text-black">
           {/* Sticky so the sort controls stay put while the rows scroll under them. */}
           <thead className={`sticky top-0 z-10 ${SHEET_HEAD}`}>

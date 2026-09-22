@@ -14,7 +14,7 @@ export function Step({
   working?: ReactNode | string[];
 }) {
   return (
-    <li className="flex gap-4">
+    <li className="flex gap-3 sm:gap-4">
       <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 border-accent font-mono text-sm font-semibold text-accent">
         {n}
       </span>
@@ -22,9 +22,15 @@ export function Step({
         <h3 className="font-semibold text-white">{title}</h3>
         <p className="mt-1 max-w-prose text-sm text-white/70">{children}</p>
         {working && (
-          <div className="mt-2 overflow-x-auto rounded-md border border-white/15 bg-white/5 px-3 py-2 font-mono text-sm text-accent">
+          <div className="mt-2 overflow-x-auto rounded-md border border-white/15 bg-white/5 px-3 py-2 font-mono text-xs text-accent sm:text-sm">
             {(Array.isArray(working) ? working : [working]).map((line, i) => (
-              <p key={i} className="whitespace-nowrap">
+              /*
+               * On a phone the arithmetic wraps rather than scrolling: a step
+               * is read once, in place, and a line the reader has to drag
+               * sideways to finish is worse than one that takes two rows.
+               * Past `sm` there's room for the whole line, so it holds.
+               */
+              <p key={i} className="whitespace-normal sm:whitespace-nowrap">
                 {line}
               </p>
             ))}

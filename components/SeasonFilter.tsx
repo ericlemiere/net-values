@@ -1,6 +1,7 @@
 "use client";
 
 import { useTableNav } from "./TableNav";
+import { FilterDropdown } from "./FilterDropdown";
 
 export function SeasonFilter({
   basePath,
@@ -21,32 +22,28 @@ export function SeasonFilter({
 }) {
   const { navigate } = useTableNav();
 
+  const options = [
+    { value: "ALL", label: "All seasons" },
+    ...seasons.map((s) => ({ value: s, label: s })),
+  ];
+
   return (
-    <label className="flex items-center gap-2 text-sm text-white bg-background-box rounded-md p-2 w-full md:w-fit justify-between">
-      <span className="text-white/70">Season</span>
-      <select
-        className="rounded-md border border-white/20 bg-white/5 px-2 py-1 text-white transition-colors hover:border-white/40"
-        value={currentSeason}
-        onChange={(e) => {
-          // Keep the team filter when the season changes, and vice versa.
-          const sp = new URLSearchParams({
-            ...extraParams,
-            season: e.target.value,
-            team: currentTeam,
-            sort,
-            dir,
-            page: "1",
-          });
-          navigate(`${basePath}?${sp.toString()}`);
-        }}
-      >
-        <option value="ALL">All seasons</option>
-        {seasons.map((s) => (
-          <option key={s} value={s}>
-            {s}
-          </option>
-        ))}
-      </select>
-    </label>
+    <FilterDropdown
+      label="Season"
+      value={currentSeason}
+      options={options}
+      onChange={(nextSeason) => {
+        // Keep the team filter when the season changes, and vice versa.
+        const sp = new URLSearchParams({
+          ...extraParams,
+          season: nextSeason,
+          team: currentTeam,
+          sort,
+          dir,
+          page: "1",
+        });
+        navigate(`${basePath}?${sp.toString()}`);
+      }}
+    />
   );
 }

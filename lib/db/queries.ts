@@ -309,6 +309,10 @@ export async function getCurrentCap() {
         / nullif(sum(${netValues.production}), 0))`,
     })
     .from(netValues)
+    // Salaries are on file for the upcoming season before a game has been
+    // played, so the most recent season in the table has no production in it
+    // at all. Pricing a win off that one divides by nothing.
+    .where(isNotNull(netValues.production))
     .groupBy(netValues.season)
     .orderBy(desc(netValues.season))
     .limit(1);
@@ -733,9 +737,19 @@ const exampleSelection = {
 
 /** Named player-seasons for the explainer, read live so the page can't drift. */
 export async function getNetValueExamples() {
+  /*
+   * The most recent SCORED season, which is not the most recent season on
+   * file: next season's salaries are loaded as soon as contracts are signed,
+   * so its rows carry a payroll and no production. Everything below prices a
+   * season's production against its payroll, and the worked example on the
+   * explainer page ranks players within the season, both of which come out as
+   * nonsense (a division by zero, and an arbitrary player at the top of an
+   * unranked list) if the season hasn't been played yet.
+   */
   const latest = await db
     .select({ season: netValues.season })
     .from(netValues)
+    .where(isNotNull(netValues.netValueScore))
     .orderBy(desc(netValues.season))
     .limit(1);
   const season = latest[0]?.season ?? "";
@@ -746,6 +760,10 @@ export async function getNetValueExamples() {
       .from(netValues)
       .innerJoin(players, eq(players.id, netValues.playerId))
       .innerJoin(seasons, eq(seasons.season, netValues.season))
+      // Next season's rows carry a salary and no score yet, and Postgres sorts
+      // NULLs to the top of a descending order, so without this the all-time
+      // best list is ten unplayed contracts.
+      .where(isNotNull(netValues.netValueScore))
       .orderBy(desc(netValues.netValueScore))
       .limit(10),
     // Worst list excludes contracts paid above the whole league cap — see
@@ -755,7 +773,12 @@ export async function getNetValueExamples() {
       .from(netValues)
       .innerJoin(players, eq(players.id, netValues.playerId))
       .innerJoin(seasons, eq(seasons.season, netValues.season))
-      .where(sql`${netValues.salary} <= ${seasons.leagueCap}`)
+      .where(
+        and(
+          sql`${netValues.salary} <= ${seasons.leagueCap}`,
+          isNotNull(netValues.netValueScore),
+        ),
+      )
       .orderBy(asc(netValues.netValueScore))
       .limit(10),
     db
@@ -763,7 +786,7 @@ export async function getNetValueExamples() {
       .from(netValues)
       .innerJoin(players, eq(players.id, netValues.playerId))
       .innerJoin(seasons, eq(seasons.season, netValues.season))
-      .where(eq(netValues.season, season))
+      .where(and(eq(netValues.season, season), isNotNull(netValues.seasonRank)))
       .orderBy(asc(netValues.seasonRank))
       .limit(10),
     db
@@ -771,7 +794,7 @@ export async function getNetValueExamples() {
       .from(netValues)
       .innerJoin(players, eq(players.id, netValues.playerId))
       .innerJoin(seasons, eq(seasons.season, netValues.season))
-      .where(eq(netValues.season, season))
+      .where(and(eq(netValues.season, season), isNotNull(netValues.seasonRank)))
       .orderBy(desc(netValues.seasonRank))
       .limit(10),
     db

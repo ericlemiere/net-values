@@ -42,7 +42,7 @@ export function alignClass(align?: ColumnAlign) {
  * and "selected" were both #fff200 you couldn't tell them apart.
  */
 export const SHEET =
-  "w-full max-w-full overflow-x-auto overscroll-x-contain touch-pan-x rounded-lg border-2 border-accent bg-surface";
+  "sheet-scrollbar w-full max-w-full overflow-x-auto overscroll-x-contain touch-pan-x rounded-lg border-2 border-accent bg-surface";
 
 /** Header cells sit on the sheet and are separated from it by an accent rule. */
 export const SHEET_HEAD = "bg-surface border-b-2 border-accent";

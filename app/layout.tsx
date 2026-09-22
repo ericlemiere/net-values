@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { LogoWatermark } from "@/components/LogoWatermark";
 import { SiteHeader } from "@/components/SiteHeader";
 import { TableNavProvider } from "@/components/TableNav";
 import "./globals.css";
@@ -16,11 +17,12 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "The Net Values",
-  description: "NBA player stats, advanced stats, and salaries",
+  description:
+    "A way to evaluate an NBA player's Net Value based on their production on the court and salary.",
   icons: {
-    icon: [{ url: "/tnv.png" }],
-    apple: [{ url: "/tnv.png" }],
-    shortcut: [{ url: "/tnv.png" }],
+    icon: [{ url: "/tnv2.png" }],
+    apple: [{ url: "/tnv2.png" }],
+    shortcut: [{ url: "/tnv2.png" }],
   },
 };
 
@@ -35,7 +37,7 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
-        <div className="logo-watermark" aria-hidden="true" />
+        <LogoWatermark />
         <SiteHeader />
         {/* Offset by the header's height, which no longer takes up flow space. */}
         <main className="site-main relative z-10 flex min-w-0 flex-1 flex-col">

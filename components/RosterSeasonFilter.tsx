@@ -23,7 +23,11 @@ export function RosterSeasonFilter({
         { value: "ALL", label: "All seasons" },
         ...seasons.map((s) => ({ value: s, label: s })),
       ]}
-      onChange={(season) => navigate(`/teams/${abbr}?roster=${season}`)}
+      // The roster sits below the team's season history, so scrolling to the
+      // top on every change would throw the table off screen.
+      onChange={(season) =>
+        navigate(`/teams/${abbr}?roster=${season}`, { scroll: false })
+      }
     />
   );
 }

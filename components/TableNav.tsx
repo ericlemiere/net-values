@@ -22,9 +22,19 @@ import { Spinner } from "./Spinner";
  * them through a single `useTransition` is what makes that pending state
  * observable, so the table can say it's working.
  */
+interface NavigateOptions {
+  /**
+   * Next scrolls to the top of the page on every navigation unless told not
+   * to. For a filter that sits partway down a long page — the roster picker on
+   * a team page — that reads as the page jumping away from the control the
+   * user just used, so those pass `scroll: false`.
+   */
+  scroll?: boolean;
+}
+
 interface TableNavValue {
   pending: boolean;
-  navigate: (href: string) => void;
+  navigate: (href: string, options?: NavigateOptions) => void;
 }
 
 const TableNavContext = createContext<TableNavValue>({
@@ -40,7 +50,10 @@ export function TableNavProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const navigate = useCallback(
-    (href: string) => startTransition(() => router.push(href)),
+    (href: string, options?: NavigateOptions) =>
+      startTransition(() =>
+        router.push(href, { scroll: options?.scroll ?? true }),
+      ),
     [router],
   );
   return (

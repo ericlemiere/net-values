@@ -107,7 +107,7 @@ export default async function NetValuePage() {
    * scrolling inside its frame.
    */
   return (
-    <div className="mx-auto w-full min-w-0 max-w-4xl px-4 py-6 text-white sm:p-6 bg-background/80 md:bg-transparent">
+    <div className="mx-auto w-full min-w-0 max-w-4xl px-4 py-6 text-white sm:p-6">
       <h1 className="text-3xl font-semibold tracking-tight">Net Value</h1>
       <p className="mt-3 max-w-prose text-white/70">
         Every player is paid to produce. Net Value is the gap between what a
@@ -122,7 +122,7 @@ export default async function NetValuePage() {
         more than his contract paid for.
       </p>
 
-      <div className="my-8 w-fit max-w-full overflow-x-auto rounded-lg border-2 border-accent bg-white/5 px-4 py-3 sm:px-5 sm:py-4">
+      <div className="my-8 w-fit max-w-full overflow-x-auto rounded-lg border-2 border-accent bg-background-box/80 px-4 py-3 sm:px-5 sm:py-4">
         <p className="font-mono text-sm whitespace-normal text-accent sm:text-base sm:whitespace-nowrap">
           Net Value = value produced − value bought
         </p>

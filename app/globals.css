@@ -226,16 +226,16 @@ body {
   z-index: 1;
   pointer-events: none;
 
-  /* Always draw at full strength first, then settle to desktop opacity. */
-  opacity: 0.9;
+  /* Always start at full strength; fade runs after draw completes. */
+  opacity: 1;
   animation: logo-fade-desktop 800ms ease-out
     calc(var(--logo-draw-duration) + 40ms) forwards;
 }
 
 @media (max-width: 1200px) {
   .logo-watermark {
-    opacity: 0.35;
-    animation-name: logo-fade-mobile;
+    animation: logo-fade-mobile 800ms ease-out
+      calc(var(--logo-draw-duration) + 40ms) forwards;
   }
 }
 
@@ -264,15 +264,14 @@ body {
    * reduced-motion rule below collapses the duration rather than dropping the
    * animation, which lands on that same finished state immediately.
    */
-  stroke-dasharray: 1.001;
+  stroke-dasharray: 1;
   stroke-dashoffset: 1;
   animation: logo-draw var(--logo-draw-duration) ease-out forwards;
 }
 
 @keyframes logo-draw {
   to {
-    /* Tiny overshoot avoids a visible seam where the stroke closes. */
-    stroke-dashoffset: -0.001;
+    stroke-dashoffset: 0;
   }
 }
 

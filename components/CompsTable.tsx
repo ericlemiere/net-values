@@ -221,7 +221,7 @@ export function CompsTable({
                   </td>
                 )}
                 <td className="whitespace-nowrap px-3 py-1.5 text-center font-mono text-[0.8125rem]">
-                  <TeamLink abbr={row.team} />
+                  <TeamLink abbr={row.team} label={row.teamLabel} />
                 </td>
                 <td className="whitespace-nowrap px-3 py-1.5 text-right font-mono text-[0.8125rem] tabular-nums">
                   {row.pctOfLeagueCap === null

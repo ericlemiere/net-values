@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import { SimpleTable } from "@/components/SimpleTable";
 import { PlayerLink } from "@/components/PlayerLink";
@@ -18,6 +19,7 @@ import {
   getTeamHistory,
   getTeamRoster,
   getTeamRosterSeasons,
+  getTeamIdentities,
   type TeamRosterRow,
   type TeamNetValue,
 } from "@/lib/db/queries";
@@ -26,22 +28,62 @@ type HistoryRow = Awaited<ReturnType<typeof getTeamHistory>>[number] & {
   netValue?: TeamNetValue;
 };
 
-const historyColumns: ColumnDef<HistoryRow>[] = [
+/**
+ * The mark on a season played under an older identity.
+ *
+ * The abbreviation, which is what a dense table wants and what the rest of the
+ * site shows — "NOH" beside 2012-13 rather than "New Orleans Hornets". It only
+ * falls back to the name for the one case an abbreviation cannot carry:
+ * Charlotte was the Bobcats from 2004-05 to 2013-14 under the same CHA it uses
+ * today, so there the name is the only thing that differs.
+ *
+ * Null when the row is the franchise as it stands now, which is most of them.
+ */
+function eraMark(row: HistoryRow, currentAbbr: string, currentName: string) {
+  if (row.eraAbbr && row.eraAbbr !== currentAbbr) return row.eraAbbr;
+  if (row.eraName && row.eraName !== currentName) return row.eraName;
+  return null;
+}
+
+function historyColumnsFor(
+  currentAbbr: string,
+  currentName: string,
+): ColumnDef<HistoryRow>[] {
+  return [
   {
     key: "season",
     label: "Season",
-    render: (r) => (
-      <span className="flex items-center gap-2 whitespace-nowrap">
-        {r.champion && (
-          <span title="Won the championship" aria-label="Won the championship">
-            🏆
+    // The heading names the franchise as it stands today, so seasons played
+    // under an older identity say so here. Only when it differs — marking all
+    // 36 of Portland's rows would be noise, and marking Seattle's 18 is the
+    // whole point.
+    render: (r) => {
+      const era = eraMark(r, currentAbbr, currentName);
+      return (
+        <span className="flex items-center gap-2 whitespace-nowrap">
+          {r.champion && (
+            <span title="Won the championship" aria-label="Won the championship">
+              🏆
+            </span>
+          )}
+          <span
+            className={`font-mono text-[0.8125rem] tabular-nums ${
+              r.champion ? "font-semibold" : ""
+            }`}
+          >
+            {r.season}
           </span>
-        )}
-        <span className={r.champion ? "font-semibold" : undefined}>
-          {r.season}
+          {era && (
+            <span
+              className="rounded border border-black/15 bg-black/5 px-1 py-px text-[0.625rem] font-medium tracking-wide text-black/50"
+              title={r.eraName ?? undefined}
+            >
+              {era}
+            </span>
+          )}
         </span>
-      </span>
-    ),
+      );
+    },
   },
   { key: "wins", label: "W", align: "right", render: (r) => r.wins ?? "—" },
   { key: "losses", label: "L", align: "right", render: (r) => r.losses ?? "—" },
@@ -111,7 +153,8 @@ const historyColumns: ColumnDef<HistoryRow>[] = [
     render: (r) =>
       r.madePlayoffs === null ? "—" : r.madePlayoffs ? "Yes" : "—",
   },
-];
+  ];
+}
 
 function rosterColumns(showSeason: boolean): ColumnDef<TeamRosterRow>[] {
   return [
@@ -141,7 +184,11 @@ function rosterColumns(showSeason: boolean): ColumnDef<TeamRosterRow>[] {
           {
             key: "season",
             label: "Season",
-            render: (r: TeamRosterRow) => r.season,
+            render: (r: TeamRosterRow) => (
+              <span className="font-mono text-[0.8125rem] tabular-nums">
+                {r.season}
+              </span>
+            ),
           },
         ]
       : []),
@@ -211,6 +258,45 @@ function rosterColumns(showSeason: boolean): ColumnDef<TeamRosterRow>[] {
 }
 
 /**
+ * The roster table, awaiting its own query.
+ *
+ * Split out so the season filter can restream just this much of the page. Its
+ * subtitle counts the rows, so it has to live on this side of the await.
+ */
+async function RosterTable({
+  rosterPromise,
+  rosterSeason,
+}: {
+  rosterPromise: Promise<TeamRosterRow[]>;
+  rosterSeason: string;
+}) {
+  const roster = await rosterPromise;
+  return (
+    <SimpleTable
+      subtitle={
+        rosterSeason === "ALL"
+          ? `Everyone this team paid, ${roster.length} player-seasons.`
+          : `${roster.length} players paid in ${rosterSeason}.`
+      }
+      columns={rosterColumns(rosterSeason === "ALL")}
+      rows={roster}
+      rowKey={(r) => r.id}
+      emptyMessage="No salary data for this team and season."
+    />
+  );
+}
+
+/** Holds the roster's space on a cold load, before the query comes back. */
+function RosterFallback() {
+  return (
+    <div className="mb-8">
+      <div className="mb-2 min-h-5 text-sm text-white/60">Loading roster…</div>
+      <div className="h-96 rounded-lg border-2 border-accent bg-surface" />
+    </div>
+  );
+}
+
+/**
  * A labelled figure in the header strip.
  *
  * Laid out the way the player page lays its header boxes out: on a phone each
@@ -257,11 +343,15 @@ export default async function TeamPage({
   const team = await getTeamByAbbr(abbr);
   if (!team) notFound();
 
-  const [rawHistory, rosterSeasons, teamNetValues] = await Promise.all([
-    getTeamHistory(team.id),
-    getTeamRosterSeasons(team.abbr),
-    getTeamNetValues(team.abbr),
-  ]);
+  const [rawHistory, rosterSeasons, teamNetValues, identities] =
+    await Promise.all([
+      getTeamHistory(team.id),
+      getTeamRosterSeasons(team.abbr),
+      getTeamNetValues(team.abbr),
+      getTeamIdentities(team.id),
+    ]);
+  // Only the names it no longer uses; the current one is the heading.
+  const formerNames = identities.filter((i) => i.lastSeason !== null);
   const netValueBySeason = new Map(teamNetValues.map((n) => [n.season, n]));
   const history: HistoryRow[] = rawHistory.map((h) => ({
     ...h,
@@ -274,7 +364,11 @@ export default async function TeamPage({
     sp.roster && (sp.roster === "ALL" || rosterSeasons.includes(sp.roster))
       ? sp.roster
       : (rosterSeasons[0] ?? "ALL");
-  const roster = await getTeamRoster(team.abbr, rosterSeason);
+  // Deliberately not awaited. Handing the promise to a child inside Suspense
+  // lets the rest of the page render and reach the browser while this query is
+  // still running, so changing the season restreams the roster alone instead
+  // of holding up everything above it.
+  const rosterPromise = getTeamRoster(team.abbr, rosterSeason);
 
   const titles = history.filter((h) => h.champion);
   const playoffRuns = history.filter((h) => h.madePlayoffs).length;
@@ -284,9 +378,20 @@ export default async function TeamPage({
 
   return (
     <div className="mx-auto w-full min-w-0 max-w-350 p-6 text-white">
-      <h1 className="mb-6 min-w-0 wrap-break-word text-2xl font-semibold tracking-tight">
+      <h1 className="min-w-0 wrap-break-word text-2xl font-semibold tracking-tight">
         {team.name}
       </h1>
+      {/* A franchise keeps one page across every name it has used, so the page
+          says which those were rather than leaving a reader to wonder why the
+          Thunder have eighteen seasons in Seattle. */}
+      {formerNames.length > 0 && (
+        <p className="mt-1 text-sm text-white/50">
+          {formerNames
+            .map((i) => `${i.name} (${i.abbr}) through ${i.lastSeason}`)
+            .join(" \u00b7 ")}
+        </p>
+      )}
+      <div className="mb-6" />
 
       <div className="mb-8 flex w-full flex-col items-stretch gap-3 md:w-fit md:flex-row">
         <Stat
@@ -322,35 +427,33 @@ export default async function TeamPage({
         )}
       </div>
 
-      <TableOverlay>
-        <SimpleTable
-          title="Payroll by Season"
-          subtitle="Payroll against the league cap, with how the team finished."
-          columns={historyColumns}
-          rows={history}
-          rowKey={(r) => r.season}
-          emptyMessage="No seasons on file for this team."
-        />
+      {/* Deliberately outside TableOverlay. Nothing on this page filters the
+          history, so dimming it whenever the roster season changes was the
+          whole reason the page looked like it was reloading. */}
+      <SimpleTable
+        title="Payroll by Season"
+        subtitle="Payroll against the league cap, with how the team finished."
+        columns={historyColumnsFor(team.abbr, team.name)}
+        rows={history}
+        rowKey={(r) => r.season}
+        emptyMessage="No seasons on file for this team."
+      />
 
-        <div className="mb-2 flex min-w-0 flex-col items-stretch justify-between gap-4 md:flex-row md:items-center">
-          <h2 className="text-lg font-semibold text-white">Roster</h2>
-          <RosterSeasonFilter
-            abbr={team.abbr}
-            seasons={rosterSeasons}
-            currentSeason={rosterSeason}
-          />
-        </div>
-        <SimpleTable
-          subtitle={
-            rosterSeason === "ALL"
-              ? `Everyone this team paid, ${roster.length} player-seasons.`
-              : `${roster.length} players paid in ${rosterSeason}.`
-          }
-          columns={rosterColumns(rosterSeason === "ALL")}
-          rows={roster}
-          rowKey={(r) => r.id}
-          emptyMessage="No salary data for this team and season."
+      <div className="mb-2 flex min-w-0 flex-col items-stretch justify-between gap-4 md:flex-row md:items-center">
+        <h2 className="text-lg font-semibold text-white">Roster</h2>
+        <RosterSeasonFilter
+          abbr={team.abbr}
+          seasons={rosterSeasons}
+          currentSeason={rosterSeason}
         />
+      </div>
+      <TableOverlay>
+        <Suspense fallback={<RosterFallback />}>
+          <RosterTable
+            rosterPromise={rosterPromise}
+            rosterSeason={rosterSeason}
+          />
+        </Suspense>
       </TableOverlay>
     </div>
   );

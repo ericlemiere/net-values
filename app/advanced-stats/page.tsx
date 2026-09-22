@@ -34,7 +34,7 @@ function getColumns(showSeason: boolean): ColumnDef<Row>[] {
       key: "team",
       label: "Team",
       defaultDir: "asc",
-      render: (r) => <TeamLink abbr={r.team} />,
+      render: (r) => <TeamLink abbr={r.team} label={r.teamLabel} />,
     },
     {
       key: "pos",

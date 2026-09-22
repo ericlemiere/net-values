@@ -39,7 +39,11 @@ function getStatsColumns(mode: "per_game" | "totals"): ColumnDef<StatsRow>[] {
   const note = (key: string) => (GLOSSARY[key] ?? "") + per;
   return [
     { key: "season", label: "Season", render: (r) => r.season },
-    { key: "team", label: "Team", render: (r) => <TeamLink abbr={r.team} /> },
+    {
+      key: "team",
+      label: "Team",
+      render: (r) => <TeamLink abbr={r.team} label={r.teamLabel} />,
+    },
     { key: "pos", label: "Pos", render: (r) => r.pos ?? "—" },
     {
       key: "age",
@@ -224,7 +228,11 @@ function getStatsColumns(mode: "per_game" | "totals"): ColumnDef<StatsRow>[] {
 
 const advancedColumns: ColumnDef<AdvRow>[] = [
   { key: "season", label: "Season", render: (r) => r.season },
-  { key: "team", label: "Team", render: (r) => <TeamLink abbr={r.team} /> },
+  {
+      key: "team",
+      label: "Team",
+      render: (r) => <TeamLink abbr={r.team} label={r.teamLabel} />,
+    },
   { key: "pos", label: "Pos", render: (r) => r.pos ?? "—" },
   {
     key: "age",
@@ -303,14 +311,16 @@ const advancedColumns: ColumnDef<AdvRow>[] = [
 function ContractTeams({ row }: { row: SalRow }) {
   const contracts = row.contracts ?? [];
   const owed = contracts.filter((c) => !c.playedHere && c.salary);
-  if (owed.length === 0) return <TeamLink abbr={row.team} />;
+  if (owed.length === 0)
+    return <TeamLink abbr={row.team} label={row.teamLabel} />;
 
   return (
     <span className="flex flex-col gap-0.5 whitespace-nowrap">
-      <TeamLink abbr={row.team} />
+      <TeamLink abbr={row.team} label={row.teamLabel} />
       {owed.map((c) => (
         <span key={c.team} className="text-xs text-black/50">
-          <TeamLink abbr={c.team} /> {formatCurrency(c.salary)} owed
+          <TeamLink abbr={c.team} label={c.teamLabel} />{" "}
+          {formatCurrency(c.salary)} owed
         </span>
       ))}
     </span>

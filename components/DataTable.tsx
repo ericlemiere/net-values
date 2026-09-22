@@ -145,7 +145,7 @@ export function DataTable<Row>({
   return (
     <div className="min-w-0 max-w-screen">
       <div className="mb-4 flex min-w-0 flex-wrap items-center justify-between gap-4">
-        <div className="flex flex-col md:flex-row min-w-0 md:items-center gap-4 w-full">
+        <div className="flex flex-col md:flex-row min-w-0 md:items-center gap-4">
           <SeasonFilter
             basePath={basePath}
             seasons={seasons}

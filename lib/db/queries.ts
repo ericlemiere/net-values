@@ -23,9 +23,19 @@ import {
   teamSeasons,
   netValues,
   netValueShares,
+  teamIdentities,
+  teamAliases,
 } from "./schema";
 
 export const PAGE_SIZE = 100;
+
+export interface TeamIdentity {
+  abbr: string;
+  name: string;
+  firstSeason: string;
+  /** Null on the identity the franchise still goes by. */
+  lastSeason: string | null;
+}
 
 export interface ListParams {
   season: string; // "ALL" or e.g. "2022-2023"
@@ -64,6 +74,29 @@ function orderByNullsLast(column: AnyColumn | SQL, dir: "asc" | "desc") {
     : sql`${column} desc nulls last`;
 }
 
+/**
+ * What this franchise was called in that season, or NULL if it never changed.
+ *
+ * Every table stores the canonical abbreviation, which is the right key — one
+ * franchise, one row, one URL — but the wrong label for a season played under
+ * another name. These restate the label without touching the key, so a 1995-96
+ * row reads SEA and still links to /teams/OKC.
+ *
+ * A correlated subquery rather than a join: team_identities holds fifteen rows,
+ * and joining it into queries that already reach four tables would risk
+ * multiplying rows for no gain. NULL for the twenty-four franchises that have
+ * never changed identity, so callers fall back to the canonical value.
+ */
+function eraAbbrSql(team: AnyColumn | SQL, season: AnyColumn | SQL) {
+  return sql<string | null>`(
+    SELECT ti.abbr FROM ${teamIdentities} ti
+    JOIN ${teams} era_team ON era_team.id = ti.team_id
+    WHERE era_team.abbr = ${team}
+      AND ${season} >= ti.first_season
+      AND (ti.last_season IS NULL OR ${season} <= ti.last_season)
+    LIMIT 1)`;
+}
+
 async function distinctSeasons(
   table: typeof playerStatsPerGame | typeof advancedStats | typeof salaries,
 ) {
@@ -80,11 +113,50 @@ async function distinctSeasons(
 // The canonical 30 franchises. Every stat/salary table stores team as a
 // canonical abbreviation (historical codes like SEA/NJN/VAN were mapped on
 // import), so one list serves all three pages.
+/**
+ * The thirty franchises, each with every identity it has gone by.
+ *
+ * Two queries merged here rather than one with a correlated subquery. That
+ * subquery would have to match team_identities.team_id against teams.id, and
+ * drizzle leaves a column unqualified when the query reads from a single
+ * table — so `teams.id` renders as a bare "id", which inside the subquery
+ * binds to team_identities' OWN id and quietly matches nothing. The other
+ * era lookups correlate on `team` and `season`, names no table in their
+ * subquery has, so they resolve outward and are safe. This one is not, and
+ * fifteen rows are not worth the trap.
+ */
 export async function getTeams() {
-  return db
-    .select({ abbr: teams.abbr, name: teams.name })
-    .from(teams)
-    .orderBy(asc(teams.name));
+  const [rows, identities] = await Promise.all([
+    db
+      .select({ id: teams.id, abbr: teams.abbr, name: teams.name })
+      .from(teams)
+      .orderBy(asc(teams.name)),
+    db
+      .select({
+        teamId: teamIdentities.teamId,
+        abbr: teamIdentities.abbr,
+        name: teamIdentities.name,
+        firstSeason: teamIdentities.firstSeason,
+        lastSeason: teamIdentities.lastSeason,
+      })
+      .from(teamIdentities)
+      .orderBy(asc(teamIdentities.firstSeason)),
+  ]);
+
+  const byTeam = new Map<number, TeamIdentity[]>();
+  for (const { teamId, ...era } of identities) {
+    const list = byTeam.get(teamId);
+    if (list) list.push(era);
+    else byTeam.set(teamId, [era]);
+  }
+
+  // Null rather than an empty array for the franchises that never changed, so
+  // callers can fall through to the canonical name with a single check.
+  return rows.map((t) => ({
+    abbr: t.abbr,
+    name: t.name,
+    eras: byTeam.get(t.id) ?? null,
+  }));
 }
 
 export async function getStatsSeasons() {
@@ -150,6 +222,7 @@ async function getPlayerStatsFrom(
       name: players.name,
       season: t.season,
       team: t.team,
+      teamLabel: eraAbbrSql(t.team, t.season),
       pos: t.pos,
       age: t.age,
       gp: t.gp,
@@ -236,6 +309,7 @@ export async function getAdvancedStats(params: ListParams) {
       name: players.name,
       season: advancedStats.season,
       team: advancedStats.team,
+      teamLabel: eraAbbrSql(advancedStats.team, advancedStats.season),
       pos: advancedStats.pos,
       age: advancedStats.age,
       gp: advancedStats.gp,
@@ -330,6 +404,7 @@ const salarySelection = {
   id: salaries.id,
   season: salaries.season,
   team: salaries.team,
+  teamLabel: eraAbbrSql(salaries.team, salaries.season),
   salary: salaries.salary,
   teamPayroll: teamPayrolls.payroll,
   leagueCap: seasons.leagueCap,
@@ -465,6 +540,9 @@ export interface TeamSeasonRow {
   /** Payroll as a share of that season's league cap, 0-100. */
   payrollPctOfCap: number | null;
   rosterSize: number | null;
+  /** The name and code in use that season; null if they never changed. */
+  eraName: string | null;
+  eraAbbr: string | null;
 }
 
 /** Seasons that have a team record, newest first. */
@@ -502,6 +580,19 @@ export async function getTeamsForSeason(
       teamId: teams.id,
       abbr: teams.abbr,
       name: teams.name,
+      /** The name and code in use that season; null if they never changed. */
+      eraName: sql<string | null>`(
+        SELECT ti.name FROM ${teamIdentities} ti
+        WHERE ti.team_id = ${teams.id}
+          AND ${teamSeasons.season} >= ti.first_season
+          AND (ti.last_season IS NULL OR ${teamSeasons.season} <= ti.last_season)
+        LIMIT 1)`,
+      eraAbbr: sql<string | null>`(
+        SELECT ti.abbr FROM ${teamIdentities} ti
+        WHERE ti.team_id = ${teams.id}
+          AND ${teamSeasons.season} >= ti.first_season
+          AND (ti.last_season IS NULL OR ${teamSeasons.season} <= ti.last_season)
+        LIMIT 1)`,
       season: teamSeasons.season,
       wins: teamSeasons.wins,
       losses: teamSeasons.losses,
@@ -558,6 +649,27 @@ export async function getTeamHistory(teamId: number) {
   return db
     .select({
       season: teamSeasons.season,
+      /**
+       * What the franchise went by that season, null if it never changed. The
+       * page heading names it as it stands today, so these are what tell a
+       * reader which of the rows were Seattle's.
+       *
+       * Both, because neither alone covers every case: the abbreviation is the
+       * compact label a table wants, but Charlotte's Bobcats decade kept the
+       * abbreviation it still uses and changed only the name.
+       */
+      eraAbbr: sql<string | null>`(
+        SELECT ti.abbr FROM ${teamIdentities} ti
+        WHERE ti.team_id = ${teamSeasons.teamId}
+          AND ${teamSeasons.season} >= ti.first_season
+          AND (ti.last_season IS NULL OR ${teamSeasons.season} <= ti.last_season)
+        LIMIT 1)`,
+      eraName: sql<string | null>`(
+        SELECT ti.name FROM ${teamIdentities} ti
+        WHERE ti.team_id = ${teamSeasons.teamId}
+          AND ${teamSeasons.season} >= ti.first_season
+          AND (ti.last_season IS NULL OR ${teamSeasons.season} <= ti.last_season)
+        LIMIT 1)`,
       wins: teamSeasons.wins,
       losses: teamSeasons.losses,
       winPct: sql<number | null>`
@@ -586,6 +698,27 @@ export async function getTeamHistory(teamId: number) {
     .leftJoin(seasons, eq(seasons.season, teamSeasons.season))
     .where(eq(teamSeasons.teamId, teamId))
     .orderBy(desc(teamSeasons.season));
+}
+
+/**
+ * Every name this franchise has gone by, oldest first.
+ *
+ * Empty for the twenty-four franchises that have never changed, which is what
+ * lets the page say nothing rather than say "always known as" to no purpose.
+ */
+export async function getTeamIdentities(
+  teamId: number,
+): Promise<TeamIdentity[]> {
+  return db
+    .select({
+      abbr: teamIdentities.abbr,
+      name: teamIdentities.name,
+      firstSeason: teamIdentities.firstSeason,
+      lastSeason: teamIdentities.lastSeason,
+    })
+    .from(teamIdentities)
+    .where(eq(teamIdentities.teamId, teamId))
+    .orderBy(asc(teamIdentities.firstSeason));
 }
 
 /** Seasons this team paid anybody, newest first — drives the roster filter. */
@@ -782,6 +915,8 @@ export interface NetValueExample {
   name: string;
   season: string;
   team: string | null;
+  /** What that franchise was called then, null if it never changed. */
+  teamLabel: string | null;
   salary: number;
   production: number;
   minutes: number;
@@ -799,6 +934,7 @@ const exampleSelection = {
   name: players.name,
   season: netValues.season,
   team: netValues.team,
+  teamLabel: eraAbbrSql(netValues.team, netValues.season),
   salary: netValues.salary,
   production: sql<number>`${netValues.production}::float8`,
   minutes: sql<number>`${netValues.minutes}::float8`,
@@ -935,6 +1071,7 @@ async function getPlayerCareerStatsFrom(
       id: t.id,
       season: t.season,
       team: t.team,
+      teamLabel: eraAbbrSql(t.team, t.season),
       pos: t.pos,
       age: t.age,
       gp: t.gp,
@@ -981,6 +1118,7 @@ export async function getPlayerCareerAdvancedStats(playerId: number) {
       id: advancedStats.id,
       season: advancedStats.season,
       team: advancedStats.team,
+      teamLabel: eraAbbrSql(advancedStats.team, advancedStats.season),
       pos: advancedStats.pos,
       age: advancedStats.age,
       gp: advancedStats.gp,
@@ -1004,6 +1142,8 @@ export async function getPlayerCareerAdvancedStats(playerId: number) {
 /** One of the contracts that paid a player in a single season. */
 export interface PlayerContract {
   team: string | null;
+  /** What that franchise was called then, null if it never changed. */
+  teamLabel: string | null;
   salary: number | null;
   /** False on money owed by a team he no longer played for — a buyout. */
   playedHere: boolean;
@@ -1050,7 +1190,14 @@ export async function getPlayerCareerSalaries(playerId: number) {
       SELECT sh.season,
              JSON_AGG(
                JSON_BUILD_OBJECT('team', sh.team, 'salary', sh.salary,
-                                 'playedHere', sh.played_here)
+                                 'playedHere', sh.played_here,
+                                 'teamLabel', (
+                                   SELECT ti.abbr FROM ${teamIdentities} ti
+                                     JOIN ${teams} era_team ON era_team.id = ti.team_id
+                                    WHERE era_team.abbr = sh.team
+                                      AND sh.season >= ti.first_season
+                                      AND (ti.last_season IS NULL OR sh.season <= ti.last_season)
+                                    LIMIT 1))
                ORDER BY sh.played_here DESC, sh.salary DESC NULLS LAST
              ) AS contracts,
              SUM(sh.salary) FILTER (WHERE sh.played_here) AS played_salary
@@ -1072,6 +1219,12 @@ export async function getPlayerCareerSalaries(playerId: number) {
     SELECT c.id,
            c.season,
            COALESCE(nv.team, c.fallback_team) AS team,
+           (SELECT ti.abbr FROM ${teamIdentities} ti
+              JOIN ${teams} era_team ON era_team.id = ti.team_id
+             WHERE era_team.abbr = COALESCE(nv.team, c.fallback_team)
+               AND c.season >= ti.first_season
+               AND (ti.last_season IS NULL OR c.season <= ti.last_season)
+             LIMIT 1) AS "teamLabel",
            c.salary::int AS salary,
            COALESCE(sp.contracts, up.contracts) AS contracts,
            tp.payroll AS "teamPayroll",
@@ -1107,6 +1260,7 @@ export async function getPlayerCareerSalaries(playerId: number) {
     id: number;
     season: string;
     team: string | null;
+    teamLabel: string | null;
     salary: number | null;
     contracts: PlayerContract[];
     teamPayroll: number | null;
@@ -1129,6 +1283,8 @@ export interface SalaryComp {
   name: string;
   season: string;
   team: string | null;
+  /** What that franchise was called then, null if it never changed. */
+  teamLabel: string | null;
   pctOfLeagueCap: number | null;
   netValueScore: number | null;
 }
@@ -1184,6 +1340,7 @@ export async function getSalaryComps({
         name: players.name,
         season: salaries.season,
         team: salaries.team,
+        teamLabel: eraAbbrSql(salaries.team, salaries.season),
         // Cast to float8: the driver hands plain numeric back as a string,
         // which the table's client-side sort would compare lexically.
         pctOfLeagueCap: sql<number | null>`(${pctOfLeagueCapSql})::float8`,
@@ -1265,6 +1422,75 @@ const foldedName = sql`translate(${players.name}, ${FOLD_FROM}, ${FOLD_TO})`;
  * Ranking: names that start with the query first, then whoever played most
  * recently — typing "curry" should surface Stephen before Dell.
  */
+export interface TeamSearchResult {
+  /** Canonical abbreviation — what /teams/[abbr] is keyed on. */
+  abbr: string;
+  name: string;
+  /**
+   * The former identity the query actually matched, when that is not what the
+   * franchise is called now. Typing "sonics" finds the Thunder, and this is
+   * what lets the result say why rather than looking like a mismatch.
+   */
+  matchedAs: string | null;
+}
+
+/**
+ * Team search for the header's type-ahead.
+ *
+ * Matches the name and abbreviation a franchise uses now, every name it used
+ * before, and the source-specific codes in team_aliases. So "sonics", "seattle"
+ * and "SEA" all reach Oklahoma City, "bullets" and "WSB" reach Washington, and
+ * "bobcats" reaches Charlotte — none of which the canonical row alone contains.
+ *
+ * One row per franchise: DISTINCT ON keeps the best match, preferring the
+ * current identity over a former one over a bare alias, so searching "charlotte"
+ * returns the Hornets once rather than three times.
+ */
+export async function searchTeams(
+  query: string,
+  limit = 5,
+): Promise<TeamSearchResult[]> {
+  const q = query.trim();
+  if (q.length < 2) return [];
+  const literal = foldDiacritics(q).replace(/[\\%_]/g, (c) => `\\${c}`);
+  const pattern = `%${literal}%`;
+  const prefix = `${literal}%`;
+
+  const rows = await db.execute(sql`
+    WITH hits AS (
+      -- tier 0: what the franchise is called today
+      SELECT t.id, t.abbr, t.name, NULL::text AS matched, 0 AS tier,
+             (t.name ILIKE ${prefix} OR t.abbr ILIKE ${prefix}) AS starts
+      FROM ${teams} t
+      WHERE t.name ILIKE ${pattern} OR t.abbr ILIKE ${pattern}
+      UNION ALL
+      -- tier 1: a name or code it used to go by
+      SELECT t.id, t.abbr, t.name, ti.name || ' (' || ti.abbr || ')', 1,
+             (ti.name ILIKE ${prefix} OR ti.abbr ILIKE ${prefix})
+      FROM ${teamIdentities} ti
+      JOIN ${teams} t ON t.id = ti.team_id
+      WHERE ti.name ILIKE ${pattern} OR ti.abbr ILIKE ${pattern}
+      UNION ALL
+      -- tier 2: a source's spelling, e.g. bref's BRK or Spotrac's UTH
+      SELECT t.id, t.abbr, t.name, ta.alias, 2, (ta.alias ILIKE ${prefix})
+      FROM ${teamAliases} ta
+      JOIN ${teams} t ON t.id = ta.team_id
+      WHERE ta.alias ILIKE ${pattern}
+    ),
+    best AS (
+      SELECT DISTINCT ON (id) id, abbr, name, matched, starts
+      FROM hits ORDER BY id, tier, starts DESC
+    )
+    SELECT abbr, name, matched AS "matchedAs"
+    FROM best
+    -- A prefix hit first: typing "por" should reach Portland before it reaches
+    -- whoever merely contains those letters.
+    ORDER BY starts DESC, name ASC
+    LIMIT ${limit}
+  `);
+  return rows.rows as unknown as TeamSearchResult[];
+}
+
 export async function searchPlayers(
   query: string,
   limit = 10,

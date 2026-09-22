@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { NavLinks } from "@/components/NavLinks";
-import { PlayerSearch } from "@/components/PlayerSearch";
+import { SiteSearch } from "@/components/SiteSearch";
 
 export function SiteHeader() {
   const pathname = usePathname();
@@ -29,7 +29,7 @@ export function SiteHeader() {
           The Net Values
         </Link>
         <NavLinks />
-        <PlayerSearch className="ml-auto w-72" />
+        <SiteSearch className="ml-auto w-72" />
       </div>
 
       {/* Medium screens: search sits below the nav links. */}
@@ -43,7 +43,7 @@ export function SiteHeader() {
           </Link>
           <NavLinks className="flex-1 flex-wrap gap-x-4 gap-y-1" />
         </div>
-        <PlayerSearch className="mt-2 w-full" />
+        <SiteSearch className="mt-2 w-full" />
       </div>
 
       {/* Small screens: compact bar with a drawer for links + search. */}
@@ -97,7 +97,7 @@ export function SiteHeader() {
           linkClassName="text-base"
           onNavigate={() => setMenuOpen(false)}
         />
-        <PlayerSearch className="mt-4 w-full" />
+        <SiteSearch className="mt-4 w-full" />
       </div>
     </header>
   );

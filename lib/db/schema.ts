@@ -417,3 +417,49 @@ export const netValueShares = pgTable(
     index("net_value_shares_season_team_idx").on(t.season, t.team),
   ]
 );
+
+/**
+ * What a franchise was called, and when.
+ *
+ * `teams` holds one canonical row per franchise, which is what every other
+ * table's `team` column refers to and what URLs are built from. That is the
+ * right key — a franchise is one continuous thing — but it is the wrong label
+ * for a season it played under another name. Seattle's 1995-96 team reads as
+ * "Oklahoma City Thunder" without this, and Vancouver's as Memphis.
+ *
+ * One row per identity, so a franchise that changed twice has three. Keyed by
+ * season range rather than by alias, which is what `team_aliases` does and why
+ * that table can't serve this: it maps a code to a franchise with no notion of
+ * when the code was current, it can't hold NOH's two disjoint spells either
+ * side of the Katrina years, and it has no entry at all for a rename that kept
+ * the same code — Charlotte was the Bobcats from 2004-05 to 2013-14 under the
+ * abbreviation it still uses.
+ *
+ * Only franchises that actually changed identity within the data are listed.
+ * Everyone else falls back to `teams`, so this stays at the handful of rows it
+ * describes rather than restating all thirty.
+ *
+ * Deliberately NOT here: BRK, CHO, PHO, SAN and UTH. Those are
+ * basketball-reference's spelling of a code that is current, not a name the
+ * franchise ever went by, and showing them as history would be a fiction.
+ */
+export const teamIdentities = pgTable(
+  "team_identities",
+  {
+    id: serial("id").primaryKey(),
+    teamId: integer("team_id")
+      .notNull()
+      .references(() => teams.id),
+    /** The abbreviation in use then — SEA, VAN, WSB, NJN, CHH, NOH, NOK. */
+    abbr: varchar("abbr", { length: 3 }).notNull(),
+    name: text("name").notNull(),
+    firstSeason: text("first_season").notNull(),
+    /** Null while the identity is the current one, so it needs no yearly edit. */
+    lastSeason: text("last_season"),
+    source: varchar("source", { length: 20 }).notNull(),
+  },
+  (t) => [
+    uniqueIndex("team_identities_team_first_idx").on(t.teamId, t.firstSeason),
+    index("team_identities_team_idx").on(t.teamId),
+  ]
+);

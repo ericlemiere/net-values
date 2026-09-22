@@ -65,7 +65,7 @@ function getColumns(
       // it — a charge with no production against it — reads as intended.
       render: (r) => (
         <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
-          <TeamLink abbr={r.team} />
+          <TeamLink abbr={r.team} label={r.teamLabel} />
           {r.playedHere === false && (
             <span
               title="Bought out — this team owed the money, he played elsewhere"
@@ -203,10 +203,21 @@ export default async function SalariesPage({
         pageSize={PAGE_SIZE}
       />
       <p className="text-sm text-white/60 mt-8">
-        Salaries and team payrolls are sourced from Basketball-Reference
-        (2011-12 onward) and from Hoopshype for earlier seasons (1990-91 through
-        2010-11). Percentages are computed against that season&rsquo;s team
-        payroll and league salary cap.
+        Team payrolls come from Basketball-Reference for 2011-12 onward and from
+        Hoopshype for 1990-91 through 2010-11. Salaries split the same way, but
+        not cleanly: Basketball-Reference lists a figure only for players on a
+        team&rsquo;s books at the time it was read, so Hoopshype still fills
+        gaps in the modern era too, through 2022-23. Percentages are computed
+        against that season&rsquo;s team payroll and league salary cap.
+      </p>
+      <p className="text-sm text-white/60 mt-3">
+        Every team-season from 1990-91 on now carries a payroll. Phoenix before
+        2011-12 and Washington before 1997-98 were long missing — the original
+        import read each player&rsquo;s team from a roster table that never had
+        them — and were recovered from the same Hoopshype source. Three
+        training-camp contracts totalling $88,367 are still unmatched, listed in
+        the scraper&rsquo;s unmatched_recovered_salaries.csv rather than guessed
+        onto a player.
       </p>
     </div>
   );

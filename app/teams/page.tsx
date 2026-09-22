@@ -16,6 +16,9 @@ const columns: ColumnDef<TeamSeasonRow>[] = [
   {
     key: "name",
     label: "Team",
+    // Named as it was that season, linked as it is now. Without this the
+    // 1995-96 table lists the Oklahoma City Thunder going 64-18 in a city that
+    // had no franchise for another twelve years.
     render: (r) => (
       <span className="flex items-center gap-2 whitespace-nowrap">
         {/* The title is the whole reason a season is memorable, so it reads as
@@ -28,13 +31,23 @@ const columns: ColumnDef<TeamSeasonRow>[] = [
         <Link
           href={`/teams/${r.abbr}`}
           className={`hover:underline ${r.champion ? "font-semibold" : ""}`}
+          title={
+            r.eraName && r.eraName !== r.name
+              ? `${r.eraName} — now the ${r.name}`
+              : undefined
+          }
         >
-          {r.name}
+          {r.eraName ?? r.name}
         </Link>
       </span>
     ),
   },
-  { key: "abbr", label: "Abbr", align: "center", render: (r) => r.abbr },
+  {
+    key: "abbr",
+    label: "Abbr",
+    align: "center",
+    render: (r) => r.eraAbbr ?? r.abbr,
+  },
   {
     key: "wins",
     label: "W",

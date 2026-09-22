@@ -41,7 +41,7 @@ function exampleColumns(showSeason: boolean): ColumnDef<NetValueExample>[] {
       key: "team",
       label: "Team",
       align: "center",
-      render: (r) => <TeamLink abbr={r.team} />,
+      render: (r) => <TeamLink abbr={r.team} label={r.teamLabel} />,
     },
     {
       key: "salary",
@@ -107,7 +107,7 @@ export default async function NetValuePage() {
    * scrolling inside its frame.
    */
   return (
-    <div className="mx-auto w-full min-w-0 max-w-4xl px-4 py-6 text-white sm:p-6 bg-background/80">
+    <div className="mx-auto w-full min-w-0 max-w-4xl px-4 py-6 text-white sm:p-6 bg-background/80 md:bg-transparent">
       <h1 className="text-3xl font-semibold tracking-tight">Net Value</h1>
       <p className="mt-3 max-w-prose text-white/70">
         Every player is paid to produce. Net Value is the gap between what a
@@ -286,7 +286,7 @@ export default async function NetValuePage() {
           point is worth, every team&rsquo;s VORP was fitted against how many
           games that team really won, across 937 full 82-game team-seasons:
         </p>
-        <p className="mt-3 overflow-x-auto rounded-md border border-white/15 bg-white/5 px-3 py-2 font-mono text-xs whitespace-normal text-accent sm:text-sm sm:whitespace-nowrap">
+        <p className="mt-3 overflow-x-auto rounded-md border border-white/15 bg-background-box/90 px-3 py-2 font-mono text-xs whitespace-normal text-accent sm:text-sm sm:whitespace-nowrap">
           team wins = 20.1 + 2.17 × team VORP&nbsp;&nbsp;&nbsp;(r = 0.95)
         </p>
         <p className="mt-3 max-w-prose text-sm text-white/70">
@@ -309,7 +309,7 @@ export default async function NetValuePage() {
           the question people actually mean: how much more was he worth than he
           cost?
         </p>
-        <div className="mt-4 overflow-x-auto rounded-lg border border-white/15">
+        <div className="mt-4 overflow-x-auto rounded-lg border border-white/15 bg-background-box/90">
           <table className="min-w-full text-xs whitespace-nowrap sm:text-sm">
             <thead className="border-b border-white/15 text-white/60">
               <tr>
@@ -422,7 +422,7 @@ export default async function NetValuePage() {
         />
 
         {overCap.length > 0 && (
-          <aside className="mt-6 rounded-lg border border-white/15 bg-white/5 p-4 sm:p-5">
+          <aside className="mt-6 rounded-lg border border-white/15 bg-background-box/90 p-4 sm:p-5">
             <h3 className="font-semibold text-white">
               Two seasons are kept out of that list
             </h3>

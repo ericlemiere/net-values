@@ -22,7 +22,7 @@ export function Step({
         <h3 className="font-semibold text-white">{title}</h3>
         <p className="mt-1 max-w-prose text-sm text-white/70">{children}</p>
         {working && (
-          <div className="mt-2 overflow-x-auto rounded-md border border-white/15 bg-white/5 px-3 py-2 font-mono text-xs text-accent sm:text-sm">
+          <div className="mt-2 overflow-x-auto rounded-md border border-white/15 bg-background-box/90 px-3 py-2 font-mono text-xs text-accent sm:text-sm">
             {(Array.isArray(working) ? working : [working]).map((line, i) => (
               /*
                * On a phone the arithmetic wraps rather than scrolling: a step
@@ -50,7 +50,7 @@ export function Term({
   children: ReactNode;
 }) {
   return (
-    <div className="rounded-lg border border-white/15 bg-white/5 px-4 py-3">
+    <div className="rounded-lg border border-white/15 bg-background-box/90 px-4 py-3">
       <dt className="font-mono text-sm font-semibold text-accent">{name}</dt>
       <dd className="mt-1 text-sm text-white/70">{children}</dd>
     </div>

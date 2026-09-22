@@ -100,7 +100,7 @@ export default async function NetValuePage() {
    * scrolling inside its frame.
    */
   return (
-    <div className="mx-auto w-full min-w-0 max-w-4xl px-4 py-6 text-white sm:p-6">
+    <div className="mx-auto w-full min-w-0 max-w-4xl px-4 py-6 text-white sm:p-6 bg-background/80">
       <h1 className="text-3xl font-semibold tracking-tight">Net Value</h1>
       <p className="mt-3 max-w-prose text-white/70">
         Every player is paid to produce. Net Value is the gap between what a

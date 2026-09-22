@@ -9,6 +9,7 @@ import {
   getTeams,
   PAGE_SIZE,
 } from "@/lib/db/queries";
+import { parsePosition } from "@/lib/positions";
 
 type Row = Awaited<ReturnType<typeof getAdvancedStats>>["rows"][number];
 
@@ -125,6 +126,7 @@ export default async function AdvancedStatsPage({
   searchParams: Promise<{
     season?: string;
     team?: string;
+    pos?: string;
     sort?: string;
     dir?: string;
     page?: string;
@@ -137,6 +139,7 @@ export default async function AdvancedStatsPage({
   ]);
   const season = sp.season ?? seasons[0] ?? "ALL";
   const team = sp.team ?? "ALL";
+  const pos = parsePosition(sp.pos);
   const sort = sp.sort ?? "name";
   const dir = sp.dir === "desc" ? "desc" : "asc";
   const page = Number(sp.page ?? "1");
@@ -144,6 +147,7 @@ export default async function AdvancedStatsPage({
   const { rows, totalCount } = await getAdvancedStats({
     season,
     team,
+    pos,
     sort,
     dir,
     page,
@@ -161,6 +165,7 @@ export default async function AdvancedStatsPage({
         currentSeason={season}
         teams={teams}
         currentTeam={team}
+        currentPos={pos}
         sort={sort}
         dir={dir}
         page={page}

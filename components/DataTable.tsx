@@ -3,6 +3,7 @@ import { NavLink, TableOverlay } from "./TableNav";
 import { describe } from "@/lib/glossary";
 import { SeasonFilter } from "./SeasonFilter";
 import { TeamFilter, type TeamOption } from "./TeamFilter";
+import { PositionFilter } from "./PositionFilter";
 
 export type ColumnAlign = "left" | "right" | "center";
 
@@ -104,6 +105,7 @@ interface DataTableProps<Row> {
   currentSeason: string;
   teams: TeamOption[];
   currentTeam: string;
+  currentPos: string;
   sort: string;
   dir: "asc" | "desc";
   page: number;
@@ -133,6 +135,7 @@ export function DataTable<Row>({
   currentSeason,
   teams,
   currentTeam,
+  currentPos,
   sort,
   dir,
   page,
@@ -151,6 +154,7 @@ export function DataTable<Row>({
             seasons={seasons}
             currentSeason={currentSeason}
             currentTeam={currentTeam}
+            currentPos={currentPos}
             sort={sort}
             dir={dir}
             extraParams={extraParams}
@@ -159,7 +163,17 @@ export function DataTable<Row>({
             basePath={basePath}
             teams={teams}
             currentTeam={currentTeam}
+            currentPos={currentPos}
             season={currentSeason}
+            sort={sort}
+            dir={dir}
+            extraParams={extraParams}
+          />
+          <PositionFilter
+            basePath={basePath}
+            currentPos={currentPos}
+            season={currentSeason}
+            team={currentTeam}
             sort={sort}
             dir={dir}
             extraParams={extraParams}
@@ -192,6 +206,7 @@ export function DataTable<Row>({
                     {
                       season: currentSeason,
                       team: currentTeam,
+                      pos: currentPos,
                       sort: col.key,
                       dir: nextDir,
                       page: 1,
@@ -271,6 +286,7 @@ export function DataTable<Row>({
             {
               season: currentSeason,
               team: currentTeam,
+              pos: currentPos,
               sort,
               dir,
               page: Math.max(1, page - 1),
@@ -294,6 +310,7 @@ export function DataTable<Row>({
             {
               season: currentSeason,
               team: currentTeam,
+              pos: currentPos,
               sort,
               dir,
               page: Math.min(totalPages, page + 1),

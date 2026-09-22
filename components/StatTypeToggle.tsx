@@ -9,6 +9,7 @@ export function StatTypeToggle({
   statType,
   season,
   team,
+  pos,
   sort,
   dir,
 }: {
@@ -16,13 +17,22 @@ export function StatTypeToggle({
   statType: StatType;
   season: string;
   team: string;
+  pos: string;
   sort: string;
   dir: string;
 }) {
   const { navigate } = useTableNav();
 
   function go(next: StatType) {
-    const sp = new URLSearchParams({ type: next, season, team, sort, dir, page: "1" });
+    const sp = new URLSearchParams({
+      type: next,
+      season,
+      team,
+      pos,
+      sort,
+      dir,
+      page: "1",
+    });
     navigate(`${basePath}?${sp.toString()}`);
   }
 

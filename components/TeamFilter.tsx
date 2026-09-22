@@ -41,6 +41,7 @@ export function TeamFilter({
   basePath,
   teams,
   currentTeam,
+  currentPos,
   season,
   sort,
   dir,
@@ -49,6 +50,7 @@ export function TeamFilter({
   basePath: string;
   teams: TeamOption[];
   currentTeam: string;
+  currentPos: string;
   season: string;
   sort: string;
   dir: string;
@@ -76,6 +78,7 @@ export function TeamFilter({
           ...extraParams,
           season,
           team: nextTeam,
+          pos: currentPos,
           sort,
           dir,
           page: "1",

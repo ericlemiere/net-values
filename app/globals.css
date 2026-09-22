@@ -222,7 +222,7 @@ body {
   top: var(--logo-top);
   height: var(--logo-height);
   /* The SVG's viewBox, so the figure fills the box exactly. */
-  aspect-ratio: 216.705 / 529.156;
+  aspect-ratio: 218.005 / 529.156;
   z-index: 1;
   pointer-events: none;
 

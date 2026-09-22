@@ -12,6 +12,7 @@ import {
   getTeams,
   PAGE_SIZE,
 } from "@/lib/db/queries";
+import { parsePosition } from "@/lib/positions";
 
 type Row = Awaited<ReturnType<typeof getPlayerStatsPerGame>>["rows"][number];
 
@@ -239,6 +240,7 @@ export default async function StatsPage({
   searchParams: Promise<{
     season?: string;
     team?: string;
+    pos?: string;
     sort?: string;
     dir?: string;
     page?: string;
@@ -249,6 +251,7 @@ export default async function StatsPage({
   const [seasons, teams] = await Promise.all([getStatsSeasons(), getTeams()]);
   const season = sp.season ?? seasons[0] ?? "ALL";
   const team = sp.team ?? "ALL";
+  const pos = parsePosition(sp.pos);
   const sort = sp.sort ?? "pts";
   const dir = sp.dir === "asc" ? "asc" : "desc";
   const page = Number(sp.page ?? "1");
@@ -256,8 +259,8 @@ export default async function StatsPage({
 
   const { rows, totalCount } =
     statType === "totals"
-      ? await getPlayerStatsTotals({ season, team, sort, dir, page })
-      : await getPlayerStatsPerGame({ season, team, sort, dir, page });
+      ? await getPlayerStatsTotals({ season, team, pos, sort, dir, page })
+      : await getPlayerStatsPerGame({ season, team, pos, sort, dir, page });
 
   return (
     <div className="p-6 max-w-350 mx-auto text-white">
@@ -269,6 +272,7 @@ export default async function StatsPage({
             statType={statType}
             season={season}
             team={team}
+            pos={pos}
             sort={sort}
             dir={dir}
           />
@@ -283,6 +287,7 @@ export default async function StatsPage({
         currentSeason={season}
         teams={teams}
         currentTeam={team}
+        currentPos={pos}
         sort={sort}
         dir={dir}
         page={page}

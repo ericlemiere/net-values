@@ -2,12 +2,7 @@ import { DataTable, type ColumnDef } from "@/components/DataTable";
 import { PageHeader } from "@/components/PageHeader";
 import { PlayerLink } from "@/components/PlayerLink";
 import { TeamLink } from "@/components/TeamLink";
-import {
-  formatCurrency,
-  formatPercent,
-  formatRank,
-  formatScore,
-} from "@/lib/format";
+import { formatCurrency, formatPercent, formatScore } from "@/lib/format";
 import {
   getCurrentCap,
   getLeagueCap,
@@ -16,6 +11,7 @@ import {
   getTeams,
   PAGE_SIZE,
 } from "@/lib/db/queries";
+import { parsePosition } from "@/lib/positions";
 
 type Row = Awaited<ReturnType<typeof getSalaries>>["rows"][number];
 
@@ -55,6 +51,18 @@ function getColumns(
           },
         ]
       : []),
+    {
+      key: "pos",
+      label: "Pos",
+      align: "center",
+      defaultDir: "asc",
+      // Contracts carry no position of their own, so this is the position he
+      // was listed at nearest the contract year. It is the only way the
+      // upcoming season - all salaries, no games played yet - has one at all.
+      description:
+        "Position, taken from the nearest season the player has a stat line for. Contracts for a season not yet played show the position he last played.",
+      render: (r) => r.pos ?? "\u2014",
+    },
     {
       key: "team",
       label: "Team",
@@ -123,16 +131,6 @@ function getColumns(
       align: "center",
       render: (r) => formatScore(r.netValueScore),
     },
-    {
-      key: "netValueRank",
-      label: "NV Rank",
-      align: "center",
-      defaultDir: "asc",
-      description:
-        "Where the player's Net Value ranked in the league that season. Blank on a bought-out contract, where the Net Value beside it is one team's share rather than the player's whole season.",
-      render: (r) =>
-        r.playedHere === false ? "—" : formatRank(r.netValueRank),
-    },
   ];
 }
 
@@ -142,6 +140,7 @@ export default async function SalariesPage({
   searchParams: Promise<{
     season?: string;
     team?: string;
+    pos?: string;
     sort?: string;
     dir?: string;
     page?: string;
@@ -154,6 +153,7 @@ export default async function SalariesPage({
   ]);
   const season = sp.season ?? seasons[0] ?? "ALL";
   const team = sp.team ?? "ALL";
+  const pos = parsePosition(sp.pos);
   const sort = sp.sort ?? "name";
   const dir = sp.dir === "desc" ? "desc" : "asc";
   const page = Number(sp.page ?? "1");
@@ -161,7 +161,7 @@ export default async function SalariesPage({
   // Null when season is "ALL" — a single cap figure would be meaningless
   // across seasons, so the banner is omitted entirely in that case.
   const [{ rows, totalCount }, leagueCap, currentCap] = await Promise.all([
-    getSalaries({ season, team, sort, dir, page }),
+    getSalaries({ season, team, pos, sort, dir, page }),
     getLeagueCap(season),
     getCurrentCap(),
   ]);
@@ -196,6 +196,7 @@ export default async function SalariesPage({
         currentSeason={season}
         teams={teams}
         currentTeam={team}
+        currentPos={pos}
         sort={sort}
         dir={dir}
         page={page}

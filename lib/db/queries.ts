@@ -40,6 +40,7 @@ export interface TeamIdentity {
 export interface ListParams {
   season: string; // "ALL" or e.g. "2022-2023"
   team: string; // "ALL" or a canonical abbreviation, e.g. "LAL"
+  pos: string; // "ALL" or one of POSITIONS
   sort: string;
   dir: "asc" | "desc";
   page: number;
@@ -59,11 +60,18 @@ function clampPage(page: number) {
 function listWhere(
   seasonCol: AnyColumn,
   teamCol: AnyColumn,
+  // An expression, not just a column: /salaries has no position of its own and
+  // reaches for one with a subquery.
+  posCol: AnyColumn | SQL,
   params: ListParams,
 ) {
   const clauses: SQL[] = [];
   if (params.season !== "ALL") clauses.push(eq(seasonCol, params.season));
   if (params.team !== "ALL") clauses.push(eq(teamCol, params.team));
+  // split_part rather than a LIKE prefix: it can't confuse "SF" with "SG" and
+  // reads as what it is - take the code before the hyphen.
+  if (params.pos !== "ALL")
+    clauses.push(sql`split_part(${posCol}, '-', 1) = ${params.pos}`);
   if (clauses.length === 0) return undefined;
   return clauses.length === 1 ? clauses[0] : and(...clauses);
 }
@@ -96,6 +104,43 @@ function eraAbbrSql(team: AnyColumn | SQL, season: AnyColumn | SQL) {
       AND (ti.last_season IS NULL OR ${season} <= ti.last_season)
     LIMIT 1)`;
 }
+
+/**
+ * The position a player was listed at around a given season.
+ *
+ * Position lives on a stat line, not on a contract, and the two do not always
+ * line up: salaries for the upcoming season are on file before a game has been
+ * played, so the newest season on /salaries carries hundreds of contracts and
+ * no stat lines at all. Reading pos from the matching season alone left every
+ * position on that page empty.
+ *
+ * So this takes the nearest season he has a position for - the most recent one
+ * at or before the contract, which is his position as of signing, falling back
+ * to the earliest one after it for a player paid before he ever plays. NULL
+ * only for a player with no stat line anywhere.
+ *
+ * The outer references are written out qualified rather than passed as
+ * columns. `player_id` and `season` both exist on the table this subquery
+ * reads, so an unqualified outer reference - which is what drizzle renders
+ * from a single-table query, as getTeams' comment explains - would bind to the
+ * INNER row and quietly match everything.
+ */
+function nearestPosSql(outerPlayerId: SQL, outerSeason: SQL) {
+  return sql<string | null>`(
+    SELECT near.pos FROM ${playerStatsPerGame} near
+    WHERE near.player_id = ${outerPlayerId}
+      AND near.pos IS NOT NULL
+    ORDER BY (near.season <= ${outerSeason}) DESC,
+             CASE WHEN near.season <= ${outerSeason} THEN near.season END DESC,
+             near.season ASC
+    LIMIT 1)`;
+}
+
+/** The salaries page's own position expression, correlated to a salary row. */
+const salaryPosSql = nearestPosSql(
+  sql`salaries.player_id`,
+  sql`salaries.season`,
+);
 
 async function distinctSeasons(
   table: typeof playerStatsPerGame | typeof advancedStats | typeof salaries,
@@ -213,7 +258,7 @@ async function getPlayerStatsFrom(
   const page = clampPage(params.page);
   const sortColumns = statSortColumnsFor(t);
   const sortCol = sortColumns[params.sort as StatsSortKey] ?? t.pts;
-  const where = listWhere(t.season, t.team, params);
+  const where = listWhere(t.season, t.team, t.pos, params);
 
   const rowsQuery = db
     .select({
@@ -300,7 +345,12 @@ export async function getAdvancedStats(params: ListParams) {
   const page = clampPage(params.page);
   const sortCol =
     advancedSortColumns[params.sort as AdvancedSortKey] ?? advancedStats.vorp;
-  const where = listWhere(advancedStats.season, advancedStats.team, params);
+  const where = listWhere(
+    advancedStats.season,
+    advancedStats.team,
+    advancedStats.pos,
+    params,
+  );
 
   const rowsQuery = db
     .select({
@@ -405,6 +455,7 @@ const salarySelection = {
   season: salaries.season,
   team: salaries.team,
   teamLabel: eraAbbrSql(salaries.team, salaries.season),
+  pos: salaryPosSql,
   salary: salaries.salary,
   teamPayroll: teamPayrolls.payroll,
   leagueCap: seasons.leagueCap,
@@ -435,6 +486,7 @@ const salariesSortColumns = {
   name: players.name,
   season: salaries.season,
   team: salaries.team,
+  pos: salaryPosSql,
   salary: salaries.salary,
   teamPayroll: teamPayrolls.payroll,
   pctOfTeamCap: pctOfTeamCapSql,
@@ -470,7 +522,7 @@ export async function getSalaries(params: ListParams) {
   // count query below stays in step with the rows.
   const where = and(
     isNotNull(salaries.salary),
-    listWhere(salaries.season, salaries.team, params),
+    listWhere(salaries.season, salaries.team, salaryPosSql, params),
   )!;
 
   const rowsQuery = db
@@ -513,7 +565,9 @@ export async function getSalaries(params: ListParams) {
     .limit(PAGE_SIZE)
     .offset((page - 1) * PAGE_SIZE);
 
-  const countQuery = db.select({ count: sql<number>`count(*)` }).from(salaries);
+  const countQuery = db
+    .select({ count: sql<number>`count(*)` })
+    .from(salaries);
 
   const [rows, countResult] = await Promise.all([
     rowsQuery.where(where),

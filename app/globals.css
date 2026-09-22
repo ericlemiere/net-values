@@ -203,8 +203,6 @@ body {
   --logo-stroke-width: 1;
   /* Quick first-paint draw for hard refresh and initial page load. */
   --logo-draw-duration: 520ms;
-  /* Resting opacity after the first-load draw finishes. */
-  --logo-rest-opacity: 0.9;
 
   /*
    * One geometry for both copies. Anchoring on `top` rather than `bottom`
@@ -228,15 +226,16 @@ body {
   z-index: 1;
   pointer-events: none;
 
-  /* Always draw at full strength first, then fade to the resting opacity. */
-  opacity: 1;
-  animation: logo-fade 2s ease-out calc(var(--logo-draw-duration) + 40ms)
-    forwards;
+  /* Always draw at full strength first, then settle to desktop opacity. */
+  opacity: 0.9;
+  animation: logo-fade-desktop 800ms ease-out
+    calc(var(--logo-draw-duration) + 40ms) forwards;
 }
 
 @media (max-width: 1200px) {
   .logo-watermark {
-    --logo-rest-opacity: 0.2;
+    opacity: 0.35;
+    animation-name: logo-fade-mobile;
   }
 }
 
@@ -277,9 +276,21 @@ body {
   }
 }
 
-@keyframes logo-fade {
+@keyframes logo-fade-desktop {
+  from {
+    opacity: 1;
+  }
   to {
-    opacity: var(--logo-rest-opacity);
+    opacity: 0.9;
+  }
+}
+
+@keyframes logo-fade-mobile {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0.35;
   }
 }
 

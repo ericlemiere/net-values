@@ -425,7 +425,7 @@ body {
   font-weight: 500;
   letter-spacing: -0.015em;
   color: rgba(255, 255, 255, 0.8);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 0.5px solid var(--accent);
   transition:
     color 160ms ease-out,
     opacity 240ms ease-out,
@@ -496,18 +496,54 @@ body {
 }
 
 /*
- * Player and team links inside a selection chip on the seasons page.
+ * Every link that lives inside a table.
  *
- * Everywhere else on the site these links sit on the sheet's white paper,
- * where yellow is illegible, so PlayerLink and TeamLink only underline on
- * hover. The chips are the exception: they are dark panels, an All-NBA team is
- * a wall of names with nothing else to distinguish a link from a label, and
- * the accent reads clearly there. Scoped to the chip so the shared components
- * keep their own behaviour everywhere else.
+ * A sheet is a dense grid of black text, and a link that only reveals itself
+ * on hover is a link nobody knows to look for — you have to sweep the cursor
+ * across the table to find out which columns go anywhere. So the underline is
+ * always drawn, in a grey light enough to stay out of the way of reading.
+ *
+ * Hover then has somewhere to go: the same underline in full black and two
+ * pixels thicker. That reads as the line responding rather than a new line
+ * appearing, and it needs no colour change, which matters on paper this white
+ * — the accent is unreadable here and is reserved for chosen state anyway.
+ *
+ * `text-underline-offset` keeps the rule clear of the descenders in a name
+ * like "Jokić", and both animated properties are interpolatable, so this
+ * really does thicken rather than snap.
  */
-.award-chip a:hover {
+.sheet-link {
+  text-decoration-line: underline;
+  text-decoration-color: rgba(0, 0, 0, 0.25);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+  transition:
+    text-decoration-color 0.1s ease-out,
+    text-decoration-thickness 0.1s ease-out,
+    text-underline-offset 0.1s ease-out;
+}
+
+.sheet-link:hover {
+  text-decoration-color: #000;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 4px;
+}
+
+/*
+ * The same links inside a selection chip on the seasons page.
+ *
+ * Those chips are dark panels, so a black underline is invisible on them and
+ * the accent — unreadable on white paper — reads clearly. Same idea as above,
+ * a line that is always there and strengthens under the cursor, in the only
+ * two colours that work on that background.
+ */
+.award-chip .sheet-link {
+  text-decoration-color: rgba(255, 255, 255, 0.3);
+}
+
+.award-chip .sheet-link:hover {
   color: var(--accent);
-  text-decoration: underline;
+  text-decoration-color: var(--accent);
 }
 
 /*

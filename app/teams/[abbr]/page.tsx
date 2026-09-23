@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import { SimpleTable } from "@/components/SimpleTable";
 import { PlayerLink } from "@/components/PlayerLink";
+import { SeasonLink } from "@/components/SeasonLink";
 import { awardKey, type Award } from "@/lib/awards";
 import { RosterSeasonFilter } from "@/components/RosterSeasonFilter";
 import { TableOverlay } from "@/components/TableNav";
@@ -195,7 +196,7 @@ function rosterColumns(
             label: "Season",
             render: (r: TeamRosterRow) => (
               <span className="font-mono text-[0.8125rem] tabular-nums">
-                {r.season}
+                <SeasonLink season={r.season} />
               </span>
             ),
           },

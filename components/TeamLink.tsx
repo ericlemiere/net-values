@@ -26,7 +26,7 @@ export function TeamLink({
   return (
     <Link
       href={`/teams/${abbr}`}
-      className="hover:underline"
+      className="sheet-link"
       title={shown === abbr ? undefined : `${shown} — now ${abbr}`}
     >
       {shown}

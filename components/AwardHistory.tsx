@@ -2,6 +2,7 @@ import Link from "next/link";
 import { PageHeader } from "@/components/PageHeader";
 import { PlayerLink } from "@/components/PlayerLink";
 import { TeamLink } from "@/components/TeamLink";
+import { SeasonLink } from "@/components/SeasonLink";
 import { SimpleTable } from "@/components/SimpleTable";
 import type { ColumnDef } from "@/components/DataTable";
 import { formatScore } from "@/lib/format";
@@ -25,15 +26,7 @@ export async function AwardHistory({ award }: { award: AwardCode }) {
     {
       key: "season",
       label: "Season",
-      render: (r) => (
-        <Link
-          href={`/seasons?season=${encodeURIComponent(r.season)}`}
-          className="hover:underline"
-          title={`Everything else that happened in ${r.season}`}
-        >
-          {r.season}
-        </Link>
-      ),
+      render: (r) => <SeasonLink season={r.season} />,
     },
     {
       key: "name",

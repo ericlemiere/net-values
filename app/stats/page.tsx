@@ -2,6 +2,7 @@ import { DataTable, type ColumnDef } from "@/components/DataTable";
 import { PlayerLink } from "@/components/PlayerLink";
 import { awardKey, type Award } from "@/lib/awards";
 import { TeamLink } from "@/components/TeamLink";
+import { SeasonLink } from "@/components/SeasonLink";
 import { PageHeader } from "@/components/PageHeader";
 import { StatTypeToggle, type StatType } from "@/components/StatTypeToggle";
 import { formatNumber, formatStat } from "@/lib/format";
@@ -48,7 +49,7 @@ function getColumns(
             key: "season",
             label: "Season",
             defaultDir: "asc" as const,
-            render: (r: Row) => r.season,
+            render: (r: Row) => <SeasonLink season={r.season} />,
           },
         ]
       : []),

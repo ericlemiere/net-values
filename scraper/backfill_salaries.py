@@ -54,7 +54,25 @@ def team_salaries(abbr, end_year):
         if not name:
             continue
         out.append((name, slugs[i] if i < len(slugs) else None, bref.parse_money(r.get("salary", ""))))
-    return out
+
+    # bref lists a player twice on the same team when he was signed twice that
+    # season, and a two-way line carries no figure at all. Both rows key to the
+    # same (player, season, team), so left alone the blank one lands last and
+    # erases what was there — Justin Champagnie's $1.8M on the 2024-25 Wizards
+    # came out as nothing.
+    #
+    # Only the blanks are dropped, and only where the same player has a real
+    # figure on the same page. Duplicates that both carry a number are left
+    # exactly as they were: they are separate contracts (a 10-day on top of a
+    # deal, a buyout beside the salary it replaced), the payroll below is meant
+    # to sum them, and picking one over the other would be a guess that quietly
+    # rewrites figures already on file.
+    have_figure = {(slug or name) for name, slug, salary in out if salary is not None}
+    return [
+        (name, slug, salary)
+        for name, slug, salary in out
+        if salary is not None or (slug or name) not in have_figure
+    ]
 
 
 def load_team_resolver(cur):
@@ -127,7 +145,13 @@ def main():
                     INSERT INTO salaries (player_id, season, team, salary, source)
                     VALUES (%s, %s, %s, %s, 'bref')
                     ON CONFLICT (player_id, season, team) DO UPDATE
-                      SET salary = EXCLUDED.salary, source = EXCLUDED.source
+                      -- A blank cell is "bref doesn't publish this one", not
+                      -- "this player earned nothing", so it must never clear a
+                      -- figure already on file — including one the legacy
+                      -- migration supplied for a season bref has no number for.
+                      SET salary = COALESCE(EXCLUDED.salary, salaries.salary),
+                          source = CASE WHEN EXCLUDED.salary IS NULL
+                                        THEN salaries.source ELSE EXCLUDED.source END
                     """,
                     (pid, season, canon_abbr, salary),
                 )

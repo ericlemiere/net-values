@@ -20,7 +20,7 @@ export function PlayerLink({
 }) {
   return (
     <span className="inline-flex items-center whitespace-nowrap">
-      <Link href={`/players/${id}`} className="hover:underline">
+      <Link href={`/players/${id}`} className="sheet-link">
         {name}
       </Link>
       {awards && awards.length > 0 && <AwardBadges awards={awards} />}

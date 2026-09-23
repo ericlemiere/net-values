@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { TeamLink } from "@/components/TeamLink";
 import { CareerAwardBadges } from "@/components/AwardBadges";
+import { SeasonLink } from "@/components/SeasonLink";
 import { PlayerHeadshot } from "@/components/PlayerHeadshot";
 import { SimpleTable } from "@/components/SimpleTable";
 import { CompsTable } from "@/components/CompsTable";
@@ -41,7 +42,7 @@ function getStatsColumns(mode: "per_game" | "totals"): ColumnDef<StatsRow>[] {
   const per = mode === "totals" ? " Season total." : " Per game.";
   const note = (key: string) => (GLOSSARY[key] ?? "") + per;
   return [
-    { key: "season", label: "Season", render: (r) => r.season },
+    { key: "season", label: "Season", render: (r) => <SeasonLink season={r.season} /> },
     {
       key: "team",
       label: "Team",
@@ -230,7 +231,7 @@ function getStatsColumns(mode: "per_game" | "totals"): ColumnDef<StatsRow>[] {
 }
 
 const advancedColumns: ColumnDef<AdvRow>[] = [
-  { key: "season", label: "Season", render: (r) => r.season },
+  { key: "season", label: "Season", render: (r) => <SeasonLink season={r.season} /> },
   {
       key: "team",
       label: "Team",
@@ -334,7 +335,14 @@ function getSalariesColumns(
   currentCap: Awaited<ReturnType<typeof getCurrentCap>>,
 ): ColumnDef<SalRow>[] {
   return [
-    { key: "season", label: "Season", render: (r) => r.season },
+    {
+      key: "season",
+      label: "Season",
+      // Opted out of the row-wide link, which anchors the comps below: an
+      // anchor inside an anchor is invalid and the browser unnests it.
+      noRowLink: true,
+      render: (r) => <SeasonLink season={r.season} />,
+    },
     {
       key: "team",
       label: "Team",

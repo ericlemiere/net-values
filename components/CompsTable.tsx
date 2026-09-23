@@ -6,6 +6,7 @@ import { describe } from "@/lib/glossary";
 import { PlayerLink } from "./PlayerLink";
 import { awardKey, type Award } from "@/lib/awards";
 import { TeamLink } from "./TeamLink";
+import { SeasonLink } from "./SeasonLink";
 import {
   SHEET,
   SHEET_HEAD,
@@ -225,7 +226,7 @@ export function CompsTable({
                 </td>
                 {showSeason && (
                   <td className="whitespace-nowrap px-3 py-1.5 text-center font-mono text-[0.8125rem] tabular-nums">
-                    {row.season}
+                    <SeasonLink season={row.season} />
                   </td>
                 )}
                 <td className="whitespace-nowrap px-3 py-1.5 text-center font-mono text-[0.8125rem]">

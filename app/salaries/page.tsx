@@ -3,6 +3,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { PlayerLink } from "@/components/PlayerLink";
 import { awardKey, type Award } from "@/lib/awards";
 import { TeamLink } from "@/components/TeamLink";
+import { SeasonLink } from "@/components/SeasonLink";
 import { formatCurrency, formatPercent, formatScore } from "@/lib/format";
 import {
   getCurrentCap,
@@ -54,7 +55,7 @@ function getColumns(
             label: "Season",
             align: "center" as const,
             defaultDir: "asc" as const,
-            render: (r: Row) => r.season,
+            render: (r: Row) => <SeasonLink season={r.season} />,
           },
         ]
       : []),

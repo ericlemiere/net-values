@@ -12,6 +12,7 @@ export const NAV_LINKS = [
   { href: "/stats", label: "Stats" },
   { href: "/advanced-stats", label: "Advanced Stats" },
   { href: "/seasons", label: "Seasons" },
+  { href: "/mvp", label: "Awards" },
   { href: "/net-value", label: "Net Value" },
 ];
 

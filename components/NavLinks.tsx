@@ -4,11 +4,14 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 
-const links = [
+/** The site's primary destinations, in nav order. Shared with the mobile drawer
+ *  so the two navs can never drift apart. */
+export const NAV_LINKS = [
   { href: "/salaries", label: "Salaries" },
   { href: "/teams", label: "Teams" },
   { href: "/stats", label: "Stats" },
   { href: "/advanced-stats", label: "Advanced Stats" },
+  { href: "/seasons", label: "Seasons" },
   { href: "/net-value", label: "Net Value" },
 ];
 
@@ -101,7 +104,7 @@ export function NavLinks({
       ref={navRef}
       className={`relative flex gap-4 text-sm ${className ?? ""}`.trim()}
     >
-      {links.map((link) => {
+      {NAV_LINKS.map((link) => {
         const isActive = pathname === link.href;
         return (
           <Link

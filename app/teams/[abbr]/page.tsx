@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import { SimpleTable } from "@/components/SimpleTable";
 import { PlayerLink } from "@/components/PlayerLink";
+import { awardKey, type Award } from "@/lib/awards";
 import { RosterSeasonFilter } from "@/components/RosterSeasonFilter";
 import { TableOverlay } from "@/components/TableNav";
 import type { ColumnDef } from "@/components/DataTable";
@@ -17,6 +18,7 @@ import {
   getTeamByAbbr,
   getTeamNetValues,
   getTeamHistory,
+  getAwardsForRows,
   getTeamRoster,
   getTeamRosterSeasons,
   getTeamIdentities,
@@ -156,14 +158,21 @@ function historyColumnsFor(
   ];
 }
 
-function rosterColumns(showSeason: boolean): ColumnDef<TeamRosterRow>[] {
+function rosterColumns(
+  showSeason: boolean,
+  awards: Map<string, Award[]>,
+): ColumnDef<TeamRosterRow>[] {
   return [
     {
       key: "name",
       label: "Player",
       render: (r) => (
         <span className="flex items-center gap-2 whitespace-nowrap">
-          <PlayerLink id={r.playerId} name={r.name} />
+          <PlayerLink
+            id={r.playerId}
+            name={r.name}
+            awards={awards.get(awardKey(r.playerId, r.season))}
+          />
           {/* Money owed to somebody who played the season somewhere else. The
               stat columns on this row are his, but they were earned for
               another team, so the row says whose money it was rather than
@@ -271,6 +280,7 @@ async function RosterTable({
   rosterSeason: string;
 }) {
   const roster = await rosterPromise;
+  const rosterAwards = await getAwardsForRows(roster);
   return (
     <SimpleTable
       subtitle={
@@ -278,7 +288,7 @@ async function RosterTable({
           ? `Everyone this team paid, ${roster.length} player-seasons.`
           : `${roster.length} players paid in ${rosterSeason}.`
       }
-      columns={rosterColumns(rosterSeason === "ALL")}
+      columns={rosterColumns(rosterSeason === "ALL", rosterAwards)}
       rows={roster}
       rowKey={(r) => r.id}
       emptyMessage="No salary data for this team and season."

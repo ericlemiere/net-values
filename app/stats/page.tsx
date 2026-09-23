@@ -1,5 +1,6 @@
 import { DataTable, type ColumnDef } from "@/components/DataTable";
 import { PlayerLink } from "@/components/PlayerLink";
+import { awardKey, type Award } from "@/lib/awards";
 import { TeamLink } from "@/components/TeamLink";
 import { PageHeader } from "@/components/PageHeader";
 import { StatTypeToggle, type StatType } from "@/components/StatTypeToggle";
@@ -11,12 +12,17 @@ import {
   getStatsSeasons,
   getTeams,
   PAGE_SIZE,
+  getAwardsForRows,
 } from "@/lib/db/queries";
 import { parsePosition } from "@/lib/positions";
 
 type Row = Awaited<ReturnType<typeof getPlayerStatsPerGame>>["rows"][number];
 
-function getColumns(showSeason: boolean, statType: StatType): ColumnDef<Row>[] {
+function getColumns(
+  showSeason: boolean,
+  statType: StatType,
+  awards: Map<string, Award[]>,
+): ColumnDef<Row>[] {
   const mpLabel = statType === "totals" ? "MIN" : "MPG";
   // Counting stats are fractional per game but whole in a season total, so
   // "Totals" drops the decimal. Percentages are fractional either way.
@@ -30,7 +36,11 @@ function getColumns(showSeason: boolean, statType: StatType): ColumnDef<Row>[] {
       key: "name",
       label: "Name",
       defaultDir: "asc",
-      render: (r) => <PlayerLink id={r.playerId} name={r.name} />,
+      render: (r) => <PlayerLink
+          id={r.playerId}
+          name={r.name}
+          awards={awards.get(awardKey(r.playerId, r.season))}
+        />,
     },
     ...(showSeason
       ? [
@@ -262,6 +272,9 @@ export default async function StatsPage({
       ? await getPlayerStatsTotals({ season, team, pos, sort, dir, page })
       : await getPlayerStatsPerGame({ season, team, pos, sort, dir, page });
 
+  // Badges for just the rows on this page.
+  const awards = await getAwardsForRows(rows);
+
   return (
     <div className="p-6 max-w-350 mx-auto text-white">
       <PageHeader
@@ -280,7 +293,7 @@ export default async function StatsPage({
       />
       <DataTable
         basePath="/stats"
-        columns={getColumns(season === "ALL", statType)}
+        columns={getColumns(season === "ALL", statType, awards)}
         rows={rows}
         rowKey={(r) => r.id}
         seasons={seasons}

@@ -25,6 +25,14 @@
   /* Hairlines inside the sheet, where the background is light. */
   --rule: rgba(0, 0, 0, 0.12);
 
+  /* Where the fixed header ends and the page begins. The drawer and its scrim
+     hang off the same number so the header bar stays uncovered. */
+  --header-height: 3.5rem;
+
+  /* How long the watermark takes to draw itself. Lives here rather than on
+     .logo-watermark because the home page's entrance waits on it. */
+  --logo-draw-duration: 520ms;
+
   /* Renders native selects, scrollbars and form controls dark. */
   color-scheme: dark;
 }
@@ -201,8 +209,6 @@ body {
   --logo-outline: #fff200;
   /* User units, so it scales with the figure: ~2px at a 900px-tall viewport. */
   --logo-stroke-width: 1;
-  /* Quick first-paint draw for hard refresh and initial page load. */
-  --logo-draw-duration: 520ms;
 
   /*
    * One geometry for both copies. Anchoring on `top` rather than `bottom`
@@ -327,6 +333,237 @@ body {
   animation: page-fade-in 260ms ease-out both;
 }
 
+/*
+ * The small-screen navigation drawer (components/MobileMenu.tsx).
+ *
+ * Panel and scrim both start at the header's bottom edge rather than the top
+ * of the viewport, which leaves the bar — and the button that closes the
+ * drawer — fully lit and clickable while the drawer is open, and saves the
+ * header from needing a stacking fight with its own overlay.
+ */
+.mobile-menu-scrim {
+  position: fixed;
+  top: var(--header-height);
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 35;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(3px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 280ms ease-out;
+  /* `overflow: hidden` on the body stops the wheel but iOS Safari will still
+     drag the page behind an overlay, so the scrim refuses pan gestures of its
+     own. Taps still land, which is what closes the drawer. */
+  touch-action: none;
+}
+
+.mobile-menu-scrim.is-open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.mobile-menu {
+  position: fixed;
+  top: var(--header-height);
+  right: 0;
+  bottom: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  /* Wide enough for 22px labels to sit on one line, capped so the page behind
+     is never entirely hidden and the drawer still reads as a panel. */
+  width: min(86vw, 22rem);
+  padding: 1.5rem 1.5rem calc(1.5rem + env(safe-area-inset-bottom, 0px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: var(--background-box);
+  border-left: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: -28px 0 64px rgba(0, 0, 0, 0.7);
+  transform: translateX(100%);
+  pointer-events: none;
+  /* Same decelerating curve as the nav underline, so the two pieces of motion
+     on the site feel like they come from one hand. */
+  transition: transform 360ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform;
+}
+
+.mobile-menu.is-open {
+  transform: none;
+  pointer-events: auto;
+}
+
+/*
+ * The drawer's contents arrive after the panel does, one at a time. The delay
+ * is only applied in the open state, so closing takes everything out together
+ * instead of unwinding the stagger in reverse.
+ */
+.mobile-menu-item {
+  opacity: 0;
+  transform: translateX(20px);
+  transition:
+    opacity 240ms ease-out,
+    transform 320ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.mobile-menu.is-open .mobile-menu-item {
+  opacity: 1;
+  transform: none;
+  transition-delay: calc(120ms + var(--i, 0) * 45ms);
+}
+
+.mobile-menu-link {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.875rem 0 0.875rem 0.875rem;
+  font-size: 1.375rem;
+  line-height: 1.25;
+  font-weight: 500;
+  letter-spacing: -0.015em;
+  color: rgba(255, 255, 255, 0.8);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  transition:
+    color 160ms ease-out,
+    opacity 240ms ease-out,
+    transform 320ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.mobile-menu-link:last-child {
+  border-bottom: none;
+}
+
+.mobile-menu-link:hover,
+.mobile-menu-link:active {
+  color: var(--accent);
+}
+
+.mobile-menu-link[aria-current="page"] {
+  color: var(--accent);
+}
+
+/*
+ * The active marker. It grows out of nothing rather than fading, which is the
+ * same gesture as the header's underline drawing itself across a label.
+ */
+.mobile-menu-link::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 2px;
+  height: 0;
+  border-radius: 999px;
+  background: var(--accent);
+  transform: translateY(-50%);
+  transition: height 260ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.mobile-menu-link[aria-current="page"]::before {
+  height: 1.5rem;
+}
+
+.mobile-menu-chevron {
+  width: 1rem;
+  height: 1rem;
+  flex-shrink: 0;
+  opacity: 0.35;
+  transition:
+    transform 200ms ease-out,
+    opacity 200ms ease-out;
+}
+
+.mobile-menu-link[aria-current="page"] .mobile-menu-chevron,
+.mobile-menu-link:hover .mobile-menu-chevron {
+  opacity: 1;
+  transform: translateX(3px);
+}
+
+/*
+ * The drawer only exists below the medium breakpoint, and it has to say so
+ * here rather than wear a `md:hidden`: these rules are unlayered and Tailwind's
+ * utilities are not, so `display: flex` above would outrank the utility's
+ * `display: none` no matter how the classes are ordered.
+ */
+@media (min-width: 768px) {
+  .mobile-menu,
+  .mobile-menu-scrim {
+    display: none;
+  }
+}
+
+/*
+ * Player and team links inside a selection chip on the seasons page.
+ *
+ * Everywhere else on the site these links sit on the sheet's white paper,
+ * where yellow is illegible, so PlayerLink and TeamLink only underline on
+ * hover. The chips are the exception: they are dark panels, an All-NBA team is
+ * a wall of names with nothing else to distinguish a link from a label, and
+ * the accent reads clearly there. Scoped to the chip so the shared components
+ * keep their own behaviour everywhere else.
+ */
+.award-chip a:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+/*
+ * Home page entrance.
+ *
+ * The watermark draws itself in `--logo-draw-duration`, and the hero waits for
+ * it: nothing here starts until the line has closed its loop, then the items
+ * come up in sequence. `--home-base` is what enforces the wait, and the home
+ * page drops it to zero on every visit after the first, because the watermark
+ * lives in the persistent layout and only draws once per full page load.
+ */
+@keyframes home-rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.home-intro {
+  --home-base: 0ms;
+  --home-step: 80ms;
+}
+
+/* The class the page carries only on the load that actually draws the logo. */
+.home-intro-wait {
+  --home-base: calc(var(--logo-draw-duration) + 100ms);
+}
+
+.home-in {
+  animation: home-rise 560ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: calc(var(--home-base) + var(--i, 0) * var(--home-step));
+}
+
+/*
+ * iOS Safari zooms the whole page in when a text field smaller than 16px takes
+ * focus, and never zooms back out — which is why tapping the search box used
+ * to leave the site scaled up until you pinched it back. Sizing fields at 16px
+ * on touch devices is the only fix that doesn't also take pinch-zoom away from
+ * people who need it (`maximum-scale=1` would).
+ *
+ * This is deliberately unlayered: Tailwind's utilities live in a cascade layer,
+ * so an unlayered rule wins over `text-sm` on the element regardless of
+ * specificity.
+ */
+@media (pointer: coarse) {
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
+
 /* Rows fading in under the cursor would fight the hover tint. */
 @media (prefers-reduced-motion: reduce) {
   .page-fade {
@@ -337,7 +574,9 @@ body {
   *::before,
   *::after {
     animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
   }
 }

@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { TeamLink } from "@/components/TeamLink";
+import { CareerAwardBadges } from "@/components/AwardBadges";
 import { PlayerHeadshot } from "@/components/PlayerHeadshot";
 import { SimpleTable } from "@/components/SimpleTable";
 import { CompsTable } from "@/components/CompsTable";
@@ -15,6 +16,8 @@ import {
 import { GLOSSARY } from "@/lib/glossary";
 import {
   getCurrentCap,
+  getAwardsForRows,
+  getPlayerAwards,
   getPlayerById,
   getPlayerCareerStatsTotals,
   getPlayerCareerStatsPerGame,
@@ -471,13 +474,15 @@ export default async function PlayerPage({
   const player = await getPlayerById(playerId);
   if (!player) notFound();
 
-  const [perGame, totals, advanced, salaries, currentCap] = await Promise.all([
-    getPlayerCareerStatsPerGame(playerId),
-    getPlayerCareerStatsTotals(playerId),
-    getPlayerCareerAdvancedStats(playerId),
-    getPlayerCareerSalaries(playerId),
-    getCurrentCap(),
-  ]);
+  const [perGame, totals, advanced, salaries, currentCap, careerAwards] =
+    await Promise.all([
+      getPlayerCareerStatsPerGame(playerId),
+      getPlayerCareerStatsTotals(playerId),
+      getPlayerCareerAdvancedStats(playerId),
+      getPlayerCareerSalaries(playerId),
+      getCurrentCap(),
+      getPlayerAwards(playerId),
+    ]);
 
   const salaryId = Number(sp.salary);
   const anchor = pickAnchor(
@@ -505,6 +510,12 @@ export default async function PlayerPage({
             }),
           ),
         );
+
+  // Badges for both comps tables, in one lookup.
+  const compAwards = await getAwardsForRows([
+    ...(seasonComps?.rows ?? []),
+    ...(historicalComps?.rows ?? []),
+  ]);
 
   // Both comps tables hang off the same anchor, so they share a subtitle stem.
   const anchorLabel =
@@ -543,9 +554,16 @@ export default async function PlayerPage({
       <div className="mb-6 flex flex-col justify-between gap-4 md:flex-row md:items-center">
         <div className="flex min-w-0 items-center gap-4">
           <PlayerHeadshot nbaPersonId={player.nbaPersonId} name={player.name} />
-          <h1 className="min-w-0 wrap-break-word text-2xl font-semibold tracking-tight">
-            {player.name}
-          </h1>
+          <div className="min-w-0">
+            <h1 className="min-w-0 wrap-break-word text-2xl font-semibold tracking-tight">
+              {player.name}
+            </h1>
+            {careerAwards.length > 0 && (
+              <div className="mt-2">
+                <CareerAwardBadges awards={careerAwards} />
+              </div>
+            )}
+          </div>
         </div>
         <div className="flex w-full flex-col items-stretch gap-3 md:w-auto md:flex-row">
           {paidSeasons.length > 0 && (
@@ -599,6 +617,7 @@ export default async function PlayerPage({
                 : undefined
             }
             rows={seasonComps?.rows ?? []}
+            awards={compAwards}
             showSeason={false}
             emptyMessage={
               seasonComps
@@ -614,6 +633,7 @@ export default async function PlayerPage({
                 : undefined
             }
             rows={historicalComps?.rows ?? []}
+            awards={compAwards}
             emptyMessage={
               historicalComps
                 ? "No other season matches this share of the cap."

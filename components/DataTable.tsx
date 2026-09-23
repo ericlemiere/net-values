@@ -41,9 +41,17 @@ export function alignClass(align?: ColumnAlign) {
  * (the sheet itself, the column it's sorted by, the row you picked). That's why
  * hover is SHEET_ROW_HOVER's pale tint instead of the full accent — if hover
  * and "selected" were both #fff200 you couldn't tell them apart.
+ *
+ * There is deliberately no `touch-action`. `pan-x` reads as "let the finger pan
+ * this sideways", but what it actually says is that horizontal panning is the
+ * ONLY gesture the browser may take from a touch starting inside the sheet — so
+ * a vertical swipe anywhere on a table did nothing at all, neither scrolling
+ * the rows nor the page under them, and pinch-zoom was gone with it. The
+ * default already axis-locks a pan once it has a direction, which is the
+ * behaviour that was being reached for.
  */
 export const SHEET =
-  "sheet-scrollbar w-full max-w-full overflow-x-auto overscroll-x-contain touch-pan-x rounded-lg border-2 border-accent bg-surface";
+  "sheet-scrollbar w-full max-w-full overflow-x-auto overscroll-x-contain rounded-lg border-2 border-accent bg-surface";
 
 /** Header cells sit on the sheet and are separated from it by an accent rule. */
 export const SHEET_HEAD = "bg-surface border-b-2 border-accent";
@@ -59,8 +67,17 @@ export const SHEET_HEAD = "bg-surface border-b-2 border-accent";
  *
  * The cap leaves room for the fixed site header, the page heading, the filter
  * row and the pager, so all of those stay put while the rows move.
+ *
+ * It starts at the medium breakpoint, though, because on a phone that cap buys
+ * a sticky header at the price of a scroller inside a scroller. Touch doesn't
+ * hand a gesture off between the two — reaching the last row stops the swipe
+ * dead instead of carrying on down the page, and the table is tall enough that
+ * there's barely any page left to grab beside it. Below `md` the page is the
+ * only thing that scrolls vertically and the sheet just pans sideways; the
+ * header scrolls away with the rows, which is the ordinary way a long table
+ * behaves on a phone.
  */
-export const SHEET_SCROLL = `${SHEET} max-h-[calc(100dvh-16rem)]`;
+export const SHEET_SCROLL = `${SHEET} md:max-h-[calc(100dvh-16rem)]`;
 
 /** Keeps the column headers in view while the rows scroll under them. */
 export const SHEET_HEAD_STICKY = `${SHEET_HEAD} sticky top-0 z-10`;

@@ -4,6 +4,7 @@ import {
   desc,
   eq,
   ilike,
+  inArray,
   isNotNull,
   ne,
   sql,
@@ -11,6 +12,7 @@ import {
   type SQL,
 } from "drizzle-orm";
 import { db } from "./index";
+import { awardKey, type AwardCode } from "@/lib/awards";
 import {
   players,
   playerStatsTotals,
@@ -25,6 +27,7 @@ import {
   netValueShares,
   teamIdentities,
   teamAliases,
+  playerAwards,
 } from "./schema";
 
 export const PAGE_SIZE = 100;
@@ -1573,4 +1576,304 @@ export async function searchPlayers(
       asc(players.name),
     )
     .limit(limit);
+}
+
+/* ---------------------------------------------------------------- awards -- */
+
+export interface PlayerAward {
+  award: AwardCode;
+  season: string;
+  teamNumber: number | null;
+}
+
+/**
+ * The badges for a page of table rows, keyed by player and season.
+ *
+ * A separate keyed lookup rather than a join onto each table's own query,
+ * because the badges hang off six different tables — stats, advanced stats,
+ * salaries, net value, a team roster, a comps list — and every one of them
+ * already has a sort, a filter and a pager a join would have to be threaded
+ * through. This leaves all of that alone.
+ *
+ * Scoped to the rows on screen rather than to a season, because these tables
+ * also run in an ALL-seasons mode where one page spans thirty-five of them.
+ * Asking for a hundred players' awards is bounded either way; asking for a
+ * season's is not the same question.
+ *
+ * Losing ballot lines are excluded. A fourth-place MVP finish belongs on the
+ * awards page, but it is not a badge.
+ */
+export async function getAwardsForRows(
+  rows: { playerId: number; season: string }[],
+): Promise<Map<string, PlayerAward[]>> {
+  const byKey = new Map<string, PlayerAward[]>();
+  if (rows.length === 0) return byKey;
+
+  const playerIds = [...new Set(rows.map((r) => r.playerId))];
+  const seasons = [...new Set(rows.map((r) => r.season))];
+  const found = await db
+    .select({
+      playerId: playerAwards.playerId,
+      award: playerAwards.award,
+      season: playerAwards.season,
+      teamNumber: playerAwards.teamNumber,
+    })
+    .from(playerAwards)
+    .where(
+      and(
+        inArray(playerAwards.playerId, playerIds),
+        inArray(playerAwards.season, seasons),
+        eq(playerAwards.won, true),
+      ),
+    );
+
+  for (const r of found) {
+    const key = awardKey(r.playerId, r.season);
+    const list = byKey.get(key) ?? [];
+    list.push({
+      award: r.award as AwardCode,
+      season: r.season,
+      teamNumber: r.teamNumber,
+    });
+    byKey.set(key, list);
+  }
+  return byKey;
+}
+
+/** One player's winning awards across his whole career, newest season first. */
+export async function getPlayerAwards(playerId: number): Promise<PlayerAward[]> {
+  const rows = await db
+    .select({
+      award: playerAwards.award,
+      season: playerAwards.season,
+      teamNumber: playerAwards.teamNumber,
+    })
+    .from(playerAwards)
+    .where(and(eq(playerAwards.playerId, playerId), eq(playerAwards.won, true)))
+    .orderBy(desc(playerAwards.season));
+  return rows.map((r) => ({
+    award: r.award as AwardCode,
+    season: r.season,
+    teamNumber: r.teamNumber,
+  }));
+}
+
+/** Seasons that have any award on record, newest first — the awards page filter. */
+export async function getAwardSeasons() {
+  const rows = await db
+    .selectDistinct({ season: playerAwards.season })
+    .from(playerAwards)
+    .orderBy(desc(playerAwards.season));
+  return rows.map((r) => r.season);
+}
+
+export interface AwardBallotRow {
+  playerId: number;
+  name: string;
+  team: string | null;
+  teamLabel: string | null;
+  teamNumber: number | null;
+  won: boolean;
+  rank: number | null;
+  /** His Net Value that season, and where it placed him in the league. */
+  netValueScore: number | null;
+  seasonRank: number | null;
+}
+
+/**
+ * A whole season's awards, ballots included, grouped by award.
+ *
+ * The team on each row comes from the player's stat line for that season rather
+ * than from the award row, so it reads under whatever name the franchise went
+ * by then — the same rule the rest of the site follows.
+ */
+export async function getSeasonAwards(season: string) {
+  const rows = await db
+    .select({
+      award: playerAwards.award,
+      playerId: playerAwards.playerId,
+      name: players.name,
+      team: advancedStats.team,
+      teamLabel: eraAbbrSql(advancedStats.team, playerAwards.season),
+      teamNumber: playerAwards.teamNumber,
+      won: playerAwards.won,
+      rank: playerAwards.rank,
+      netValueScore: sql<number | null>`${netValues.netValueScore}::float8`,
+      seasonRank: netValues.seasonRank,
+    })
+    .from(playerAwards)
+    .innerJoin(players, eq(players.id, playerAwards.playerId))
+    .leftJoin(
+      advancedStats,
+      and(
+        eq(advancedStats.playerId, playerAwards.playerId),
+        eq(advancedStats.season, playerAwards.season),
+      ),
+    )
+    .leftJoin(
+      netValues,
+      and(
+        eq(netValues.playerId, playerAwards.playerId),
+        eq(netValues.season, playerAwards.season),
+      ),
+    )
+    .where(eq(playerAwards.season, season))
+    .orderBy(
+      asc(playerAwards.teamNumber),
+      asc(playerAwards.rank),
+      desc(playerAwards.share),
+      asc(players.name),
+    );
+
+  const byAward = new Map<AwardCode, AwardBallotRow[]>();
+  for (const r of rows) {
+    const code = r.award as AwardCode;
+    const list = byAward.get(code) ?? [];
+    list.push({
+      playerId: r.playerId,
+      name: r.name,
+      team: r.team,
+      teamLabel: r.teamLabel,
+      teamNumber: r.teamNumber,
+      won: r.won,
+      rank: r.rank,
+      netValueScore: r.netValueScore,
+      seasonRank: r.seasonRank,
+    });
+    byAward.set(code, list);
+  }
+  return byAward;
+}
+
+export interface AwardWinnerRow {
+  playerId: number;
+  name: string;
+  season: string;
+  team: string | null;
+  teamLabel: string | null;
+  netValueScore: number | null;
+  seasonRank: number | null;
+}
+
+/**
+ * Every winner of one award, newest season first.
+ *
+ * Only the awards with a single winner a year get a page of their own, so this
+ * takes `won` at face value and returns a tie as the two rows it is — the two
+ * shared Rookie of the Year votes in this range are a fact about the award,
+ * not a duplicate to clean up.
+ */
+export async function getAwardWinners(
+  award: AwardCode,
+): Promise<AwardWinnerRow[]> {
+  const rows = await db
+    .select({
+      playerId: playerAwards.playerId,
+      name: players.name,
+      season: playerAwards.season,
+      team: advancedStats.team,
+      teamLabel: eraAbbrSql(advancedStats.team, playerAwards.season),
+      netValueScore: sql<number | null>`${netValues.netValueScore}::float8`,
+      seasonRank: netValues.seasonRank,
+    })
+    .from(playerAwards)
+    .innerJoin(players, eq(players.id, playerAwards.playerId))
+    .leftJoin(
+      advancedStats,
+      and(
+        eq(advancedStats.playerId, playerAwards.playerId),
+        eq(advancedStats.season, playerAwards.season),
+      ),
+    )
+    .leftJoin(
+      netValues,
+      and(
+        eq(netValues.playerId, playerAwards.playerId),
+        eq(netValues.season, playerAwards.season),
+      ),
+    )
+    .where(and(eq(playerAwards.award, award), eq(playerAwards.won, true)))
+    .orderBy(desc(playerAwards.season), asc(players.name));
+  return rows;
+}
+
+export interface SeasonChampion {
+  abbr: string;
+  name: string;
+  /** What the franchise was called that season. */
+  eraName: string | null;
+  wins: number | null;
+  losses: number | null;
+}
+
+/** Who won the title that season, or null for a season not yet decided. */
+export async function getSeasonChampion(
+  season: string,
+): Promise<SeasonChampion | null> {
+  const rows = await db
+    .select({
+      abbr: teams.abbr,
+      name: teams.name,
+      eraName: sql<string | null>`(
+        SELECT ti.name FROM ${teamIdentities} ti
+        WHERE ti.team_id = ${teams.id}
+          AND ${teamSeasons.season} >= ti.first_season
+          AND (ti.last_season IS NULL OR ${teamSeasons.season} <= ti.last_season)
+        LIMIT 1)`,
+      wins: teamSeasons.wins,
+      losses: teamSeasons.losses,
+    })
+    .from(teamSeasons)
+    .innerJoin(teams, eq(teams.id, teamSeasons.teamId))
+    .where(and(eq(teamSeasons.season, season), eq(teamSeasons.champion, true)))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+export interface SeasonNetValueRow {
+  playerId: number;
+  name: string;
+  team: string | null;
+  teamLabel: string | null;
+  salary: number | null;
+  netValueScore: number | null;
+  seasonRank: number | null;
+}
+
+const seasonNetValueSelection = {
+  playerId: netValues.playerId,
+  name: players.name,
+  team: netValues.team,
+  teamLabel: eraAbbrSql(netValues.team, netValues.season),
+  salary: netValues.salary,
+  netValueScore: sql<number | null>`${netValues.netValueScore}::float8`,
+  seasonRank: netValues.seasonRank,
+};
+
+/**
+ * The ten best and ten worst Net Values of a season.
+ *
+ * Ordered by the stored `season_rank` rather than by score, so both ends agree
+ * with the rank shown everywhere else on the site — and so a season still on
+ * the books but not yet played, whose rows carry a salary and no score, comes
+ * back empty instead of ten unplayed contracts.
+ */
+export async function getSeasonNetValueLeaders(season: string) {
+  const [top, bottom] = await Promise.all([
+    db
+      .select(seasonNetValueSelection)
+      .from(netValues)
+      .innerJoin(players, eq(players.id, netValues.playerId))
+      .where(and(eq(netValues.season, season), isNotNull(netValues.seasonRank)))
+      .orderBy(asc(netValues.seasonRank))
+      .limit(10),
+    db
+      .select(seasonNetValueSelection)
+      .from(netValues)
+      .innerJoin(players, eq(players.id, netValues.playerId))
+      .where(and(eq(netValues.season, season), isNotNull(netValues.seasonRank)))
+      .orderBy(desc(netValues.seasonRank))
+      .limit(10),
+  ]);
+  return { top, bottom };
 }

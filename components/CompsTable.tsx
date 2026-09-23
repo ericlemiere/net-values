@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { formatScore } from "@/lib/format";
 import { describe } from "@/lib/glossary";
 import { PlayerLink } from "./PlayerLink";
+import { awardKey, type Award } from "@/lib/awards";
 import { TeamLink } from "./TeamLink";
 import {
   SHEET,
@@ -80,6 +81,8 @@ interface CompsTableProps {
   /** Off for the single-season table, where every row repeats the same season. */
   showSeason?: boolean;
   emptyMessage: string;
+  /** Badges for these rows, keyed by `awardKey(playerId, season)`. */
+  awards?: Map<string, Award[]>;
 }
 
 /**
@@ -99,6 +102,7 @@ export function CompsTable({
   rows,
   showSeason = true,
   emptyMessage,
+  awards,
 }: CompsTableProps) {
   const [sort, setSort] = useState<SortKey | null>(null);
   const [dir, setDir] = useState<"asc" | "desc">("asc");
@@ -213,7 +217,11 @@ export function CompsTable({
                 className={`${stripeClass(i)} ${SHEET_ROW_HOVER}`}
               >
                 <td className="whitespace-nowrap px-3 py-1.5">
-                  <PlayerLink id={row.playerId} name={row.name} />
+                  <PlayerLink
+                    id={row.playerId}
+                    name={row.name}
+                    awards={awards?.get(awardKey(row.playerId, row.season))}
+                  />
                 </td>
                 {showSeason && (
                   <td className="whitespace-nowrap px-3 py-1.5 text-center font-mono text-[0.8125rem] tabular-nums">

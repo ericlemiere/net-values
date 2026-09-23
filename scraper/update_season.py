@@ -11,6 +11,9 @@ has to be refreshed before the numbers mean anything:
                     denominator. Without it, a player who has started every game
                     of a 20-game-old season looks 25% available against a full
                     82-game workload.
+  awards            nothing is voted on until the season ends, so this is a
+                    no-op for most of the year and then fills in by itself the
+                    day bref publishes. Cheap either way: one cached page.
   net values        recomputed from scratch, which takes a few seconds
 
 bref pages are cached on disk forever by default, which is right for finished
@@ -45,6 +48,7 @@ def main():
     import update_daily
     import backfill_advanced
     import backfill_teams
+    import backfill_awards
     import compute_net_values
 
     print(f"=== stats from nba.com: {season} ===")
@@ -58,6 +62,14 @@ def main():
     print(f"\n=== team records from bref: {end_year} ===")
     sys.argv = ["backfill_teams", str(end_year)]
     backfill_teams.main()
+
+    print(f"\n=== awards from bref: {end_year} ===")
+    # bref only. The nba.com pass walks every ever-All-Star player one request
+    # at a time, which is a backfill's job rather than a daily one; bref's own
+    # all-star page covers everyone who played in this season's game, and the
+    # handful it misses get picked up next time the full backfill runs.
+    sys.argv = ["backfill_awards", str(end_year), "--skip-nba"]
+    backfill_awards.main()
 
     print("\n=== net values ===")
     sys.argv = ["compute_net_values"]

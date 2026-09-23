@@ -1,6 +1,7 @@
 import { DataTable, type ColumnDef } from "@/components/DataTable";
 import { PageHeader } from "@/components/PageHeader";
 import { PlayerLink } from "@/components/PlayerLink";
+import { awardKey, type Award } from "@/lib/awards";
 import { TeamLink } from "@/components/TeamLink";
 import { formatCurrency, formatPercent, formatScore } from "@/lib/format";
 import {
@@ -10,6 +11,7 @@ import {
   getSalariesSeasons,
   getTeams,
   PAGE_SIZE,
+  getAwardsForRows,
 } from "@/lib/db/queries";
 import { parsePosition } from "@/lib/positions";
 
@@ -19,6 +21,7 @@ function getColumns(
   showSeason: boolean,
   showCapAdjusted: boolean,
   currentCap: Awaited<ReturnType<typeof getCurrentCap>>,
+  awards: Map<string, Award[]>,
 ): ColumnDef<Row>[] {
   // Restating an old salary at today's cap needs both the player's share of
   // his own season's cap and the cap we're restating into.
@@ -38,7 +41,11 @@ function getColumns(
       key: "name",
       label: "Name",
       defaultDir: "asc",
-      render: (r) => <PlayerLink id={r.playerId} name={r.name} />,
+      render: (r) => <PlayerLink
+          id={r.playerId}
+          name={r.name}
+          awards={awards.get(awardKey(r.playerId, r.season))}
+        />,
     },
     ...(showSeason
       ? [
@@ -166,6 +173,9 @@ export default async function SalariesPage({
     getCurrentCap(),
   ]);
 
+  // Badges for just the rows on this page.
+  const awards = await getAwardsForRows(rows);
+
   return (
     <div className="p-6 max-w-350 w-full mx-auto text-white">
       <PageHeader
@@ -189,6 +199,7 @@ export default async function SalariesPage({
           season === "ALL",
           season !== currentCap?.season,
           currentCap,
+          awards,
         )}
         rows={rows}
         rowKey={(r) => r.id}

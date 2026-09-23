@@ -27,8 +27,12 @@ type SearchItem =
 
 export function SiteSearch({
   className = "ml-auto w-56 sm:w-72",
+  inputClassName = "px-3 py-1.5",
 }: {
   className?: string;
+  /** Sizing for the box itself, so the drawer can run a taller field than the
+   *  header bar has room for. */
+  inputClassName?: string;
 }) {
   const router = useRouter();
   const listId = useId();
@@ -145,7 +149,7 @@ export function SiteSearch({
         aria-expanded={showList}
         aria-controls={listId}
         aria-autocomplete="list"
-        className="w-full rounded-md border border-white/70 bg-background/70 px-3 py-1.5 text-sm text-white placeholder-white/70 outline-none transition-colors focus:bg-background/80"
+        className={`w-full rounded-md border border-white/70 bg-background/70 text-sm text-white placeholder-white/70 outline-none transition-colors focus:bg-background/80 ${inputClassName}`}
       />
       {showList && (
         <ul

@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { NavLinks } from "@/components/NavLinks";
 import { SiteSearch } from "@/components/SiteSearch";
 import { LogoWatermark } from "@/components/LogoWatermark";
+import { MobileMenu } from "@/components/MobileMenu";
 
 export function SiteHeader() {
   const pathname = usePathname();
@@ -122,7 +123,7 @@ export function SiteHeader() {
       </div>
 
       {/* Small screens: compact bar with a drawer for links + search. */}
-      <div className="relative z-1 flex h-full w-full items-center gap-4 px-4 sm:px-6 md:hidden">
+      <div className="relative z-50 flex h-full w-full items-center gap-4 px-2 sm:px-6 md:hidden">
         <Link
           href="/"
           className="rounded border-2 border-accent px-2 py-1 font-semibold text-white"
@@ -131,14 +132,14 @@ export function SiteHeader() {
         </Link>
         <button
           type="button"
-          className="ml-auto inline-flex h-9 w-9 items-center justify-center rounded border border-white/30 bg-white/5 text-white transition-colors hover:bg-white/10"
+          className="ml-auto inline-flex h-10 w-10 items-center justify-center rounded-md border border-white/30 bg-white/5 text-white transition-colors hover:border-accent hover:bg-white/10"
           aria-expanded={menuOpen}
           aria-controls="mobile-site-menu"
           aria-label={menuOpen ? "Close menu" : "Open menu"}
           onClick={() => setMenuOpen((open) => !open)}
         >
           <span className="sr-only">Menu</span>
-          <span className="relative h-4 w-5" aria-hidden="true">
+          <span className="relative h-4.5 w-5.5" aria-hidden="true">
             <span
               className={`absolute left-0 right-0 top-0 h-0.5 rounded bg-current transition-all duration-220 ease-out ${
                 menuOpen ? "top-1/2 -translate-y-1/2 rotate-45" : ""
@@ -158,20 +159,8 @@ export function SiteHeader() {
         </button>
       </div>
 
-      <div
-        id="mobile-site-menu"
-        aria-hidden={!menuOpen}
-        className={`absolute inset-x-0 top-full z-40 border-t border-white/15 bg-background-box px-4 py-4 shadow-xl shadow-black/50 transform-gpu transition-all duration-320 ease-out will-change-transform motion-reduce:transition-none md:hidden ${
-          menuOpen ? "translate-x-0" : "pointer-events-none translate-x-[105%]"
-        }`}
-      >
-        <NavLinks
-          className="flex-col gap-3"
-          linkClassName="text-base"
-          onNavigate={() => setMenuOpen(false)}
-        />
-        <SiteSearch className="mt-4 w-full" />
-      </div>
+      <MobileMenu open={menuOpen} onClose={() => setMenuOpen(false)} />
+
     </header>
   );
 }

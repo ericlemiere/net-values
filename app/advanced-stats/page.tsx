@@ -1,6 +1,7 @@
 import { DataTable, type ColumnDef } from "@/components/DataTable";
 import { PageHeader } from "@/components/PageHeader";
 import { PlayerLink } from "@/components/PlayerLink";
+import { awardKey, type Award } from "@/lib/awards";
 import { TeamLink } from "@/components/TeamLink";
 import { formatNumber, formatStat } from "@/lib/format";
 import {
@@ -8,18 +9,26 @@ import {
   getAdvancedStatsSeasons,
   getTeams,
   PAGE_SIZE,
+  getAwardsForRows,
 } from "@/lib/db/queries";
 import { parsePosition } from "@/lib/positions";
 
 type Row = Awaited<ReturnType<typeof getAdvancedStats>>["rows"][number];
 
-function getColumns(showSeason: boolean): ColumnDef<Row>[] {
+function getColumns(
+  showSeason: boolean,
+  awards: Map<string, Award[]>,
+): ColumnDef<Row>[] {
   return [
     {
       key: "name",
       label: "Name",
       defaultDir: "asc",
-      render: (r) => <PlayerLink id={r.playerId} name={r.name} />,
+      render: (r) => <PlayerLink
+          id={r.playerId}
+          name={r.name}
+          awards={awards.get(awardKey(r.playerId, r.season))}
+        />,
     },
     ...(showSeason
       ? [
@@ -153,12 +162,15 @@ export default async function AdvancedStatsPage({
     page,
   });
 
+  // Badges for just the rows on this page.
+  const awards = await getAwardsForRows(rows);
+
   return (
     <div className="p-6 max-w-350 mx-auto text-white">
       <PageHeader title="Advanced Stats" />
       <DataTable
         basePath="/advanced-stats"
-        columns={getColumns(season === "ALL")}
+        columns={getColumns(season === "ALL", awards)}
         rows={rows}
         rowKey={(r) => r.id}
         seasons={seasons}

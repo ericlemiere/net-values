@@ -11,21 +11,32 @@ import {
 } from "@/lib/format";
 import {
   AVAILABILITY_FLOOR,
+  getAwardsForRows,
   getNetValueExamples,
   type NetValueExample,
 } from "@/lib/db/queries";
+import { awardKey, type Award } from "@/lib/awards";
 
 export const metadata = {
   title: "Net Value - The Net Values",
   description: "How the Net Value figure is calculated, with worked examples.",
 };
 
-function exampleColumns(showSeason: boolean): ColumnDef<NetValueExample>[] {
+function exampleColumns(
+  showSeason: boolean,
+  awards: Map<string, Award[]>,
+): ColumnDef<NetValueExample>[] {
   return [
     {
       key: "name",
       label: "Player",
-      render: (r) => <PlayerLink id={r.playerId} name={r.name} />,
+      render: (r) => (
+        <PlayerLink
+          id={r.playerId}
+          name={r.name}
+          awards={awards.get(awardKey(r.playerId, r.season))}
+        />
+      ),
     },
     ...(showSeason
       ? [
@@ -82,6 +93,15 @@ function exampleColumns(showSeason: boolean): ColumnDef<NetValueExample>[] {
 export default async function NetValuePage() {
   const { season, best, worst, overCap, latestTop, latestBottom, pricing } =
     await getNetValueExamples();
+
+  // Every example row on the page, so one lookup covers all four tables.
+  const awards = await getAwardsForRows([
+    ...best,
+    ...worst,
+    ...overCap,
+    ...latestTop,
+    ...latestBottom,
+  ]);
 
   const dollarsPerWin = pricing ? pricing.pool / pricing.produced : null;
   const hero = latestTop[0];
@@ -403,7 +423,7 @@ export default async function NetValuePage() {
           the player became a superstar.
         </p>
         <SimpleTable
-          columns={exampleColumns(true)}
+          columns={exampleColumns(true, awards)}
           rows={best}
           rowKey={(r) => `${r.playerId}-${r.season}`}
         />
@@ -416,7 +436,7 @@ export default async function NetValuePage() {
           player got hurt or the deal outlived his prime.
         </p>
         <SimpleTable
-          columns={exampleColumns(true)}
+          columns={exampleColumns(true, awards)}
           rows={worst}
           rowKey={(r) => `${r.playerId}-${r.season}`}
         />
@@ -500,7 +520,7 @@ export default async function NetValuePage() {
         </h2>
         <div className="mt-4">
           <SimpleTable
-            columns={exampleColumns(false)}
+            columns={exampleColumns(false, awards)}
             rows={latestTop}
             rowKey={(r) => `${r.playerId}-${r.season}`}
           />
@@ -510,7 +530,7 @@ export default async function NetValuePage() {
         </h2>
         <div className="mt-4">
           <SimpleTable
-            columns={exampleColumns(false)}
+            columns={exampleColumns(false, awards)}
             rows={latestBottom}
             rowKey={(r) => `${r.playerId}-${r.season}`}
           />

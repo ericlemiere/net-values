@@ -463,3 +463,56 @@ export const teamIdentities = pgTable(
     index("team_identities_team_idx").on(t.teamId),
   ]
 );
+
+/**
+ * Individual awards, one row per player-season-award.
+ *
+ * Runners-up are kept, not just winners — `won` is what separates them. That
+ * costs almost nothing (a season's MVP ballot is a dozen rows) and is what
+ * lets the awards page show a real voting result instead of a bare name, and
+ * lets a player page say he finished third rather than say nothing at all.
+ *
+ * Two sources feed this, because neither covers everything:
+ *
+ *   bref  — the five voted awards and the All-NBA/All-Defensive teams, from
+ *           one page per season. Carries the vote columns.
+ *   nba   — All-Star selections. basketball-reference's all-star page is the
+ *           GAME BOX SCORE, so a player selected and then scratched (Embiid in
+ *           2023-24) simply isn't on it. nba.com's award list has the
+ *           selection itself, which is the thing being badged.
+ *
+ * `award` is the short code the UI badges with, so the two sources have to
+ * agree on spelling before they land here — see AWARD_CODES in the backfill.
+ */
+export const playerAwards = pgTable(
+  "player_awards",
+  {
+    id: serial("id").primaryKey(),
+    playerId: integer("player_id")
+      .notNull()
+      .references(() => players.id),
+    season: text("season").notNull(),
+    /** mvp | roy | dpoy | smoy | mip | all_star | all_nba | all_defense | all_rookie */
+    award: varchar("award", { length: 12 }).notNull(),
+    /**
+     * Which team he made, for the awards that pick three of them: 1, 2 or 3.
+     * Null on the single-winner awards and on All-Star, which has no tiers.
+     */
+    teamNumber: integer("team_number"),
+    /** False on a losing ballot line. All-Star and the team awards are always true. */
+    won: boolean("won").notNull(),
+    /** Where he finished in the voting. Null where the award isn't voted in ranks. */
+    rank: integer("rank"),
+    /** bref's `award_share`: points won as a fraction of the maximum possible. */
+    share: numeric("share", { precision: 5, scale: 3, mode: "number" }),
+    pointsWon: numeric("points_won", { precision: 8, scale: 1, mode: "number" }),
+    pointsMax: numeric("points_max", { precision: 8, scale: 1, mode: "number" }),
+    votesFirst: integer("votes_first"),
+    source: varchar("source", { length: 20 }).notNull(),
+  },
+  (t) => [
+    uniqueIndex("player_awards_player_season_award_idx").on(t.playerId, t.season, t.award),
+    index("player_awards_season_idx").on(t.season),
+    index("player_awards_player_idx").on(t.playerId),
+  ]
+);

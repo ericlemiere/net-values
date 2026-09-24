@@ -25,6 +25,7 @@ import {
   type SeasonChampion,
   type SeasonNetValueRow,
 } from "@/lib/db/queries";
+import { PAGE_COLUMN } from "@/lib/layout";
 
 export const metadata = {
   title: "Seasons - The Net Values",
@@ -406,7 +407,7 @@ export default async function SeasonsPage({
   const ballots = BALLOT_ORDER.filter((code) => byAward.get(code)?.length);
 
   return (
-    <div className="mx-auto w-full min-w-0 max-w-350 p-6 text-white">
+    <div className={PAGE_COLUMN}>
       <PageHeader
         title="Seasons"
         meta={<SeasonSnapshotFilter seasons={seasons} currentSeason={season} />}

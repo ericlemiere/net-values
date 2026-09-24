@@ -16,6 +16,7 @@ import {
   type NetValueExample,
 } from "@/lib/db/queries";
 import { awardKey, type Award } from "@/lib/awards";
+import { PAGE_COLUMN_PROSE, TABLE_BREAKOUT } from "@/lib/layout";
 
 export const metadata = {
   title: "Net Value - The Net Values",
@@ -127,14 +128,8 @@ export default async function NetValuePage() {
     hero && pricing && pricing.pool ? (100 * hero.salary) / pricing.pool : 0;
   const availabilityShare = hero?.availability ?? 0;
 
-  /*
-   * `w-full min-w-0` on the column is what keeps the page inside a phone: it
-   * is a flex item, so without it the widest table's own width becomes the
-   * column's minimum and the whole page scrolls sideways instead of the table
-   * scrolling inside its frame.
-   */
   return (
-    <div className="mx-auto w-full min-w-0 max-w-4xl px-4 py-6 text-white sm:p-6">
+    <div className={PAGE_COLUMN_PROSE}>
       <h1 className="text-3xl font-semibold tracking-tight">Net Value</h1>
       <p className="mt-3 max-w-prose text-white/70">
         Every player is paid to produce. Net Value is the gap between what a
@@ -443,7 +438,17 @@ export default async function NetValuePage() {
       </section>
 
       {/* ---------- real tables ---------- */}
-      <section className="mt-12">
+      {/*
+        The breakout goes on the section rather than on each table, so all four
+        share one right edge. They are two matched pairs — best against worst,
+        all-time against this season — and sizing each to its own contents would
+        have the pair you are meant to compare come out 114px apart.
+
+        The prose inside is unaffected: every paragraph here carries
+        `max-w-prose`, which caps what it contributes to the section's width
+        well below what the tables ask for.
+      */}
+      <section className={`mt-12 ${TABLE_BREAKOUT}`}>
         <h2 className="text-xl font-semibold tracking-tight">
           Best Net Value seasons on record
         </h2>

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { describe } from "@/lib/glossary";
+import { TABLE_BREAKOUT, TABLE_BREAKOUT_FIT } from "@/lib/layout";
 import {
   SHEET,
   SHEET_HEAD,
@@ -25,6 +26,13 @@ interface SimpleTableProps<Row> {
    * the full page width.
    */
   fit?: boolean;
+  /**
+   * Let the table run past the page column on a large screen, out to the width
+   * the screen actually has. For a table that owns the page's width and has
+   * more columns than the column can hold — never one in a grid cell or beside
+   * a block of prose, which would shoot out of its lane.
+   */
+  breakout?: boolean;
   /** Turns every row into a link to this href. */
   rowHref?: (row: Row) => string;
   /** Marks the row the rest of the page is currently anchored to. */
@@ -39,21 +47,31 @@ export function SimpleTable<Row>({
   rows,
   rowKey,
   fit,
+  breakout,
   rowHref,
   isActive,
   emptyMessage = "No data.",
 }: SimpleTableProps<Row>) {
   return (
-    // `max-w-full` is what makes `w-fit` safe here, and it is not belt and
-    // braces. A flex item sized `fit-content` measures against its own
-    // max-content, not the space it has: the player page's salary log came out
-    // 1584px wide inside a 1352px column, so the sheet never went into
-    // overflow and the whole page scrolled sideways instead — with the last
-    // columns unreachable, since the page's own scrollbar was past them.
-    // Capping the wrapper hands the overflow back to the sheet, which is the
-    // only element here that knows how to scroll.
+    // Every branch here carries a `max-w`, and none of them is belt and braces.
+    // A wrapper sized to its own content measures against its max-content, not
+    // the space it has: the player page's salary log came out 1584px wide
+    // inside a 1352px column, so the sheet never went into overflow and the
+    // whole page scrolled sideways instead — with the last columns unreachable,
+    // since the page's own scrollbar was past them. The cap hands the overflow
+    // back to the sheet, which is the only element here that knows how to
+    // scroll. `breakout` only moves where the cap sits: at the screen's edge
+    // rather than the column's.
     <div
-      className={`mb-8 min-w-0 ${fit ? "w-full lg:w-fit lg:max-w-full" : "w-full"}`}
+      className={`mb-8 w-full min-w-0 ${
+        breakout
+          ? fit
+            ? TABLE_BREAKOUT_FIT
+            : TABLE_BREAKOUT
+          : fit
+            ? "lg:w-fit lg:max-w-full"
+            : ""
+      }`}
     >
       {title && <h2 className="text-lg font-semibold text-white">{title}</h2>}
       {(title || subtitle) && (
@@ -69,7 +87,7 @@ export function SimpleTable<Row>({
                 <th
                   key={col.key}
                   title={describe(col.key, col.description)}
-                  className={`whitespace-nowrap px-3 py-2 font-medium ${alignClass(col.align)}`}
+                  className={`whitespace-nowrap px-2 py-2 font-medium ${alignClass(col.align)}`}
                 >
                   {col.label}
                 </th>

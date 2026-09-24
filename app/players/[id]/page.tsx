@@ -32,6 +32,7 @@ import {
   type PlayerAward,
 } from "@/lib/db/queries";
 import { POSITION_NAMES, type Position } from "@/lib/positions";
+import { PAGE_COLUMN, TABLE_BREAKOUT } from "@/lib/layout";
 
 /** Percentage points either side of the anchor season that still count as a comp. */
 const COMP_TOLERANCE = 0.5;
@@ -632,7 +633,7 @@ export default async function PlayerPage({
       : "";
 
   return (
-    <div className="mx-auto max-w-350 w-full min-w-0 p-6 text-white">
+    <div className={PAGE_COLUMN}>
       <div className="mb-6 flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
         <div className="flex min-w-0 items-center gap-4">
           <PlayerHeadshot nbaPersonId={player.nbaPersonId} name={player.name} />
@@ -694,13 +695,14 @@ export default async function PlayerPage({
           rows={salaries}
           rowKey={(r) => r.id}
           fit
+          breakout
           rowHref={(r) => `/players/${playerId}?salary=${r.id}`}
           isActive={(r) => r.id === anchor?.id}
         />
         <SectionHeading
           subtitle={
             anchorLabel
-              ? `Contracts that cost what this one cost, cut four ways. ${anchorLabel}.`
+              ? `Other players who had contracts that were ${anchorLabel}, viewed by season, team, position, and everyone else.`
               : undefined
           }
         >
@@ -787,7 +789,10 @@ export default async function PlayerPage({
         <SectionHeading subtitle="Season by season, then the rate stats behind them.">
           Stats
         </SectionHeading>
-        <div className="mt-4 w-full min-w-0">
+        {/* One wrapper around all three, rather than `breakout` on each: sized
+            together they keep a common right edge, which is the whole reason
+            they read as one block. */}
+        <div className={`mt-4 w-full min-w-0 ${TABLE_BREAKOUT}`}>
           <SimpleTable
             title="Career Averages"
             columns={getStatsColumns("per_game")}

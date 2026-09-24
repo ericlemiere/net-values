@@ -11,6 +11,7 @@ import {
   getTeamsForSeason,
   type TeamSeasonRow,
 } from "@/lib/db/queries";
+import { PAGE_COLUMN } from "@/lib/layout";
 
 const columns: ColumnDef<TeamSeasonRow>[] = [
   {
@@ -90,7 +91,7 @@ const columns: ColumnDef<TeamSeasonRow>[] = [
   {
     key: "payrollPctOfCap",
     label: "% of League Cap",
-    align: "right",
+    align: "center",
     render: (r) =>
       r.payrollPctOfCap === null ? "—" : `${formatStat(r.payrollPctOfCap)}%`,
   },
@@ -98,7 +99,7 @@ const columns: ColumnDef<TeamSeasonRow>[] = [
   {
     key: "teamNetValue",
     label: "Team NV",
-    align: "right",
+    align: "center",
     render: (r) => formatScore(r.netValue),
   },
   {
@@ -130,7 +131,7 @@ export default async function TeamsPage({
   const totalPayroll = withPayroll.reduce((sum, r) => sum + r.payroll!, 0);
 
   return (
-    <div className="mx-auto w-full min-w-0 max-w-350 p-6 text-white">
+    <div className={PAGE_COLUMN}>
       <PageHeader
         title="Teams"
         meta={

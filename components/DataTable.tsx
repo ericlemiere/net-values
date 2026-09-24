@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { NavLink, TableOverlay } from "./TableNav";
 import { describe } from "@/lib/glossary";
+import { TABLE_BREAKOUT } from "@/lib/layout";
 import { SeasonFilter } from "./SeasonFilter";
 import { TeamFilter, type TeamOption } from "./TeamFilter";
 import { PositionFilter } from "./PositionFilter";
@@ -163,7 +164,7 @@ export function DataTable<Row>({
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
 
   return (
-    <div className="min-w-0 max-w-screen">
+    <div className={`min-w-0 max-w-screen ${TABLE_BREAKOUT}`}>
       <div className="mb-4 flex min-w-0 flex-wrap items-center justify-between gap-4">
         <div className="flex flex-col md:flex-row min-w-0 md:items-center gap-4">
           <SeasonFilter

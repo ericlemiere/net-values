@@ -21,6 +21,7 @@ import {
   getAwardsForRows,
 } from "@/lib/db/queries";
 import { parsePosition } from "@/lib/positions";
+import { PAGE_COLUMN } from "@/lib/layout";
 
 type Row = Awaited<ReturnType<typeof getSalaries>>["rows"][number];
 
@@ -220,7 +221,7 @@ export default async function SalariesPage({
   const awards = await getAwardsForRows(rows);
 
   return (
-    <div className="p-6 max-w-350 w-full mx-auto text-white">
+    <div className={PAGE_COLUMN}>
       <PageHeader
         title="Salaries"
         meta={

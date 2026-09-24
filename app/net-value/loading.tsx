@@ -1,5 +1,5 @@
 import { PageLoading } from "@/components/PageLoading";
 
 export default function Loading() {
-  return <PageLoading title={"Net Value"} />;
+  return <PageLoading title={"Net Value"} width="prose" />;
 }

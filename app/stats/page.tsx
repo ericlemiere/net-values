@@ -15,6 +15,7 @@ import {
 import { parsePosition } from "@/lib/positions";
 import { DEFAULT_SORT, parseStatType } from "@/lib/stat-types";
 import { getAdvancedColumns, getBoxScoreColumns } from "./columns";
+import { PAGE_COLUMN } from "@/lib/layout";
 
 /**
  * Every player table on the site, behind one heading and one toggle.
@@ -112,7 +113,7 @@ export default async function StatsPage({
   }
 
   return (
-    <div className="p-6 max-w-350 mx-auto text-white">
+    <div className={PAGE_COLUMN}>
       <PageHeader
         title="Player Stats"
         meta={

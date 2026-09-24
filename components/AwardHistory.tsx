@@ -8,6 +8,7 @@ import type { ColumnDef } from "@/components/DataTable";
 import { formatScore } from "@/lib/format";
 import { AWARDS, AWARD_PAGES, type AwardCode } from "@/lib/awards";
 import { getAwardWinners, type AwardWinnerRow } from "@/lib/db/queries";
+import { PAGE_COLUMN } from "@/lib/layout";
 
 /**
  * Every winner of one award, on its own page.
@@ -61,7 +62,7 @@ export async function AwardHistory({ award }: { award: AwardCode }) {
   const holders = new Set(rows.map((r) => r.playerId)).size;
 
   return (
-    <div className="mx-auto w-full min-w-0 max-w-350 p-6 text-white">
+    <div className={PAGE_COLUMN}>
       <PageHeader title={full} meta={<AwardPageNav current={award} />} />
       <SimpleTable
         subtitle={`${rows.length} award${rows.length === 1 ? "" : "s"} across ${holders} player${

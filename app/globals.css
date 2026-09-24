@@ -183,6 +183,26 @@ body {
 
 .site-main {
   padding-top: 3.5rem;
+
+  /*
+   * Publishes the width content actually has, so a table too wide for the page
+   * column can measure how much room is left to its right and take it.
+   *
+   * `100vw` cannot answer that question: it counts the vertical scrollbar's own
+   * strip, so a sheet sized off it overhangs by exactly the scrollbar's width
+   * and puts a second, horizontal scrollbar under the entire page. `cqi` is
+   * this element's inline size, which is the width the scrollbar has already
+   * been taken out of.
+   *
+   * Nothing inside is positioned `fixed`, which is the one thing inline-size
+   * containment would change out from under it.
+   *
+   * The shorthand is deliberate: the build's CSS pass drops `container-type`
+   * and `container-name` written as longhands, and the page silently falls back
+   * to sizing off the viewport — which is the bug this exists to avoid. It
+   * keeps the shorthand.
+   */
+  container: page / inline-size;
 }
 
 @media (min-width: 768px) {

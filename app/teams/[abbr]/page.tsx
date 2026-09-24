@@ -26,6 +26,7 @@ import {
   type TeamRosterRow,
   type TeamNetValue,
 } from "@/lib/db/queries";
+import { PAGE_COLUMN } from "@/lib/layout";
 
 type HistoryRow = Awaited<ReturnType<typeof getTeamHistory>>[number] & {
   netValue?: TeamNetValue;
@@ -88,19 +89,19 @@ function historyColumnsFor(
       );
     },
   },
-  { key: "wins", label: "W", align: "right", render: (r) => r.wins ?? "—" },
-  { key: "losses", label: "L", align: "right", render: (r) => r.losses ?? "—" },
+  { key: "wins", label: "W", align: "center", render: (r) => r.wins ?? "—" },
+  { key: "losses", label: "L", align: "center", render: (r) => r.losses ?? "—" },
   {
     key: "winPct",
     label: "Win%",
-    align: "right",
+    align: "center",
     render: (r) =>
       r.winPct === null ? "—" : r.winPct.toFixed(3).replace(/^0/, ""),
   },
   {
     key: "srs",
     label: "SRS",
-    align: "right",
+    align: "center",
     render: (r) =>
       r.srs === null ? "—" : `${r.srs > 0 ? "+" : ""}${formatStat(r.srs)}`,
   },
@@ -125,30 +126,30 @@ function historyColumnsFor(
   },
   {
     key: "teamNetValue",
-    label: "Net Value",
-    align: "right",
+    label: "Team Net Value",
+    align: "center",
     description:
       "The roster's Net Value added up: wins the squad returned above what it cost. Counts only players on a full contract.",
     render: (r) => (r.netValue ? formatScore(r.netValue.total) : "—"),
   },
   {
     key: "teamNetValueRank",
-    label: "NV Rank",
-    align: "right",
+    label: "Team NV Rank",
+    align: "center",
     description: "Where that ranked among the league's teams that season.",
     render: (r) => (r.netValue ? formatRank(r.netValue.rank) : "—"),
   },
-  {
-    key: "deadMoney",
-    label: "Dead Money",
-    align: "right",
-    description:
-      "The part of Net Value owed to players this team paid but did not field, meaning bought-out contracts it was still carrying. Always zero or negative, since the money bought no production.",
-    render: (r) =>
-      !r.netValue || r.netValue.deadMoneyPlayers === 0
-        ? "—"
-        : formatScore(r.netValue.deadMoney),
-  },
+  // {
+  //   key: "deadMoney",
+  //   label: "Dead Money",
+  //   align: "right",
+  //   description:
+  //     "The part of Net Value owed to players this team paid but did not field, meaning bought-out contracts it was still carrying. Always zero or negative, since the money bought no production.",
+  //   render: (r) =>
+  //     !r.netValue || r.netValue.deadMoneyPlayers === 0
+  //       ? "—"
+  //       : formatScore(r.netValue.deadMoney),
+  // },
   {
     key: "madePlayoffs",
     label: "Playoffs",
@@ -388,7 +389,7 @@ export default async function TeamPage({
   const seasonsCovered = history.length;
 
   return (
-    <div className="mx-auto w-full min-w-0 max-w-350 p-6 text-white">
+    <div className={PAGE_COLUMN}>
       <h1 className="min-w-0 wrap-break-word text-2xl font-semibold tracking-tight">
         {team.name}
       </h1>

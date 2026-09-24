@@ -29,18 +29,26 @@ import {
 export const metadata = {
   title: "Seasons - The Net Values",
   description:
-    "A snapshot of every NBA season — the champion, every award, and the best and worst Net Values of the year.",
+    "A snapshot of every NBA season: the champion, every award, and the best and worst Net Values of the year.",
 };
 
 /**
  * The page reads top to bottom as the season itself: who won it, who was worth
- * the most, who was honoured, and only then how close each vote was.
+ * the most, who was honored, and only then how close each vote was.
  */
 
 /** One winner a year, so they fit in the summary panel at the top. */
 const VOTED: AwardCode[] = AWARD_ORDER.filter(
   (c) => !AWARDS[c].tiered && c !== "all_star",
 );
+
+/** Voting reads best with ROY before DPOY. */
+const BALLOT_ORDER: AwardCode[] = [
+  "mvp",
+  "roy",
+  "dpoy",
+  ...VOTED.filter((c) => c !== "mvp" && c !== "roy" && c !== "dpoy"),
+];
 
 /** The squads. Ordered by standing rather than by the scarcity `rank` used for
  *  badges — All-Rookie belongs beside the other teams, and All-Star last. */
@@ -55,9 +63,9 @@ const SQUADS: AwardCode[] = [
  * A band heading.
  *
  * The accent rule above it is what separates the page's parts. A hairline
- * would have done the job, but yellow is the site's one structural colour and
+ * would have done the job, but yellow is the site's one structural color and
  * these are the only divisions on a long page — it earns its place here in a
- * way another grey line would not.
+ * way another gray line would not.
  *
  * The band straight under the recap panel passes `rule={false}`: that panel is
  * already bounded by an accent border of its own, and a second yellow line a
@@ -88,11 +96,9 @@ function Band({
       <div className="mb-4">
         <h2 className="text-lg font-semibold tracking-tight">
           {href ? (
-            <Link href={href} className="transition-colors hover:text-accent">
+            <Link href={href} className="transition-colors hover:text-accent underline underline-offset-2">
               {title}
-              <span aria-hidden="true" className="ml-1 text-white/30">
-                →
-              </span>
+            
             </Link>
           ) : (
             title
@@ -169,14 +175,17 @@ function SummaryPanel({
               {/* A shared award is two names, not one, so the winner line is a
                   list however short it usually is. */}
               {rows.map((r) => (
-                <div key={r.playerId} className="flex flex-col md:flex-row md:items-center gap-2 award-chip mt-0.5 min-w-0">
+                <div
+                  key={r.playerId}
+                  className="flex flex-col md:flex-row md:items-center gap-2 award-chip mt-0.5 min-w-0"
+                >
                   <span className="text-base font-medium">
                     <PlayerLink id={r.playerId} name={r.name} />
                   </span>
                   <span className="font-mono text-xs text-white/40">
                     <TeamLink abbr={r.team} label={r.teamLabel} />
                     {r.netValueScore !== null && (
-                      <span className="ml-2 border px-2 py-1 bg-white/10 text-white/60">
+                      <span className="ml-2 text-white/60">
                         {formatScore(r.netValueScore)} NV
                       </span>
                     )}
@@ -223,7 +232,7 @@ function Ballot({ rows }: { rows: AwardBallotRow[] }) {
             <th className="px-3 py-2 text-left font-medium">Team</th>
             <th
               className="px-3 py-2 text-right font-medium"
-              title="Production minus what his pay expected of him, in VORP-like units."
+              title="Production minus what his pay expected of him. About 2.5 team wins per NVP."
             >
               Net Value
             </th>
@@ -394,7 +403,7 @@ export default async function SeasonsPage({
     getSeasonNetValueLeaders(season),
   ]);
 
-  const ballots = VOTED.filter((code) => byAward.get(code)?.length);
+  const ballots = BALLOT_ORDER.filter((code) => byAward.get(code)?.length);
 
   return (
     <div className="mx-auto w-full min-w-0 max-w-350 p-6 text-white">
@@ -417,14 +426,14 @@ export default async function SeasonsPage({
             >
               <div className="grid min-w-0 gap-8 lg:grid-cols-2">
                 <SimpleTable
-                  title="Top 10"
+                  title={`Top 10 Net Values for ${season}`}
                   columns={netValueColumns()}
                   rows={netValue.top}
                   rowKey={(r) => r.playerId}
                   emptyMessage="No scored seasons."
                 />
                 <SimpleTable
-                  title="Bottom 10"
+                  title={`Bottom 10 Net Values for ${season}`}
                   columns={netValueColumns()}
                   rows={netValue.bottom}
                   rowKey={(r) => r.playerId}
@@ -441,8 +450,7 @@ export default async function SeasonsPage({
           {ballots.length > 0 && (
             <Band
               id="voting"
-              title="Voting"
-              caption="Everyone who drew a vote, in finishing order."
+              title="Award Votes"
             >
               <div className="grid min-w-0 gap-8 lg:grid-cols-2">
                 {ballots.map((code) => (
@@ -451,24 +459,15 @@ export default async function SeasonsPage({
                     id={anchorId(code)}
                     className="min-w-0 scroll-mt-20"
                   >
-                    <h3 className="mb-0.5 font-semibold tracking-tight">
+                    <h3 className="mb-4 font-semibold tracking-tight">
                       <Link
                         href={AWARDS[code].path!}
-                        className="transition-colors hover:text-accent"
+                        className="transition-colors hover:text-accent underline underline-offset-3 underline-decoration-0.25 hover:underline-offset-4"
                       >
                         {fullLabel(code, null)}
-                        <span aria-hidden="true" className="ml-1 text-white/30">
-                          →
-                        </span>
                       </Link>
                     </h3>
-                    <div className="mb-2 text-sm text-white/55">
-                      {byAward
-                        .get(code)!
-                        .filter((r) => r.won)
-                        .map((r) => r.name)
-                        .join(" & ") || "No winner"}
-                    </div>
+
                     <Ballot rows={byAward.get(code)!} />
                   </section>
                 ))}

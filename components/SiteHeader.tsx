@@ -46,7 +46,7 @@ export function SiteHeader() {
           The Net Values
         </Link>
         <NavLinks />
-        <SiteSearch className="ml-auto w-72" />
+        <SiteSearch className="w-72" />
       </div>
 
       {/* Medium screens: search toggles open on the right in the same row. */}

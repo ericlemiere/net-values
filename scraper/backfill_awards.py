@@ -231,7 +231,7 @@ def backfill_allstar_bref(cur, start, end, index, unmatched, methods):
         try:
             html = bref.fetch(url)
         except FileNotFoundError:
-            # 1998-99: the lockout cancelled the game, so there is no page.
+            # 1998-99: the lockout canceled the game, so there is no page.
             print(f"=== All-Star {season}: no game")
             continue
 

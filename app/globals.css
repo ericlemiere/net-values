@@ -31,7 +31,7 @@
 
   /* How long the watermark takes to draw itself. Lives here rather than on
      .logo-watermark because the home page's entrance waits on it. */
-  --logo-draw-duration: 520ms;
+  --logo-draw-duration: 1s;
 
   /* Renders native selects, scrollbars and form controls dark. */
   color-scheme: dark;
@@ -119,7 +119,7 @@ body {
  *
  * It's one element parked at the nav's origin and moved onto the active link
  * by a measured transform, rather than an underline on the link itself, so
- * that switching pages is a single bar travelling between labels instead of
+ * that switching pages is a single bar traveling between labels instead of
  * one underline blinking out and another blinking in. NavLinks measures the
  * link and supplies the transform and width; everything about how it moves
  * lives here.
@@ -209,6 +209,10 @@ body {
   --logo-outline: #fff200;
   /* User units, so it scales with the figure: ~2px at a 900px-tall viewport. */
   --logo-stroke-width: 1;
+  /* Dash length in normalized path units. > 1 keeps the final state fully closed. */
+  --logo-draw-span: 1.35;
+  /* Where the draw loop opens/closes on a normalized (0..1) path. */
+  --logo-draw-phase: 0.24;
 
   /*
    * One geometry for both copies. Anchoring on `top` rather than `bottom`
@@ -260,24 +264,25 @@ body {
   stroke-linejoin: round;
 
   /*
-   * The line draws itself on arrival. The path carries `pathLength="1"`, so
-   * one dash the length of the whole outline, offset by its own length, hides
-   * it completely; winding the offset back to zero walks the visible end from
-   * the crown, down the right side, around the ball and the leg, then up the
-   * left side to where it started.
+  * The line draws itself on arrival. The path carries `pathLength="1"`.
+  *
+  * `--logo-draw-span` is intentionally > 1, so when the animation lands the
+  * dash still covers the whole loop even with a non-zero phase. That lets
+  * `--logo-draw-phase` rotate where the draw starts while keeping the final
+  * outline visually complete.
    *
    * `forwards` matters: without it the line would snap back to hidden. The
    * reduced-motion rule below collapses the duration rather than dropping the
    * animation, which lands on that same finished state immediately.
    */
-  stroke-dasharray: 1;
-  stroke-dashoffset: 1;
+  stroke-dasharray: var(--logo-draw-span);
+  stroke-dashoffset: calc(var(--logo-draw-span) + var(--logo-draw-phase));
   animation: logo-draw var(--logo-draw-duration) ease-out forwards;
 }
 
 @keyframes logo-draw {
   to {
-    stroke-dashoffset: 0;
+    stroke-dashoffset: var(--logo-draw-phase);
   }
 }
 
@@ -501,11 +506,11 @@ body {
  * A sheet is a dense grid of black text, and a link that only reveals itself
  * on hover is a link nobody knows to look for — you have to sweep the cursor
  * across the table to find out which columns go anywhere. So the underline is
- * always drawn, in a grey light enough to stay out of the way of reading.
+ * always drawn, in a gray light enough to stay out of the way of reading.
  *
  * Hover then has somewhere to go: the same underline in full black and two
  * pixels thicker. That reads as the line responding rather than a new line
- * appearing, and it needs no colour change, which matters on paper this white
+ * appearing, and it needs no color change, which matters on paper this white
  * — the accent is unreadable here and is reserved for chosen state anyway.
  *
  * `text-underline-offset` keeps the rule clear of the descenders in a name
@@ -535,7 +540,7 @@ body {
  * Those chips are dark panels, so a black underline is invisible on them and
  * the accent — unreadable on white paper — reads clearly. Same idea as above,
  * a line that is always there and strengthens under the cursor, in the only
- * two colours that work on that background.
+ * two colors that work on that background.
  */
 .award-chip .sheet-link {
   text-decoration-color: rgba(255, 255, 255, 0.3);

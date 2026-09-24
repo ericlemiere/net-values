@@ -70,7 +70,8 @@ function exampleColumns(
       key: "production",
       label: "Produced",
       align: "right",
-      description: "Wins above a replacement-level player (VORP).",
+      description:
+        "His share of the points his team's offense and defense produced above league average, in NVPs. About 2.5 team wins per NVP.",
       render: (r) => formatStat(r.production),
     },
     {
@@ -105,7 +106,7 @@ export default async function NetValuePage() {
 
   const dollarsPerWin = pricing ? pricing.pool / pricing.produced : null;
   const hero = latestTop[0];
-  // What his pay claims before the season-wide re-centring, so the worked
+  // What his pay claims before the season-wide re-centering, so the worked
   // example can show that shift as its own step rather than having a number
   // appear from nowhere.
   const chargedShare = hero
@@ -116,6 +117,12 @@ export default async function NetValuePage() {
       ? (hero.salary / pricing.pool) * pricing.produced * chargedShare
       : 0;
   const drift = hero ? hero.expectedProduction - rawClaim : 0;
+  // The worked example has to add up on the page. These quantities are small
+  // enough that one decimal rounds each term separately and leaves the sums
+  // visibly wrong: 0.73 + 0.13 = 0.86 renders as "0.7 + 0.1 = 0.9".
+  const nvp = (value: number) => value.toFixed(2);
+  const claimBeforeAvailability =
+    hero && pricing ? (hero.salary / pricing.pool) * pricing.produced : 0;
   const salarySharePct =
     hero && pricing && pricing.pool ? (100 * hero.salary) / pricing.pool : 0;
   const availabilityShare = hero?.availability ?? 0;
@@ -136,10 +143,13 @@ export default async function NetValuePage() {
         got more than it paid for.
       </p>
       <p className="mt-3 max-w-prose text-white/70">
-        Production is counted in points of value over replacement, and one point
-        is worth roughly <strong className="text-accent">two extra wins</strong>{" "}
-        for a team. So a Net Value of +5 means a player returned about ten wins
-        more than his contract paid for.
+        Production is counted in{" "}
+        <strong className="text-accent">Net Value Points (NVPs)</strong> and one
+        NVP is worth roughly{" "}
+        <strong className="text-accent">two and a half extra wins</strong> for
+        a team. So a Net Value of +5 means a player returned about thirteen wins
+        more than his contract paid for. An NVP is a unit of value, not a point
+        scored. A rim protector earns them as readily as a scorer does.
       </p>
 
       <div className="my-8 w-fit max-w-full overflow-x-auto rounded-lg border-2 border-accent bg-background-box/80 px-4 py-3 sm:px-5 sm:py-4">
@@ -162,13 +172,19 @@ export default async function NetValuePage() {
             <Step
               n={1}
               title="Start from what a replacement player gives you"
-              working={`a roster of replacement players wins roughly 20 of 82 games`}
+              working={`5 players × −2 per 100 possessions = −10 per 100 ≈ 16 wins`}
             >
-              A replacement player is the sort any team can sign who will
-              produce at the level of a typical player. Production is measured
-              against that floor, not against zero, because even a team fielding
-              players below that level still wins some games. Everything above
-              the floor is what real players add.
+              A replacement player is one a team can always add without giving
+              anything up for him: a veteran on a minimum deal, a two-way
+              contract, a call-up from the G League. There is a steady supply,
+              so a roster spot filled that way costs a team nothing but the
+              minimum. That level is set two points per 100 possessions below a
+              league-average player, which puts a whole roster of them about ten
+              points per 100 below average, worth roughly sixteen wins over a
+              season. Production is measured from that floor rather than from
+              zero, because a team filled with freely available players still
+              wins some games. What counts is what a player adds on top of
+              what any team could have had for nothing.
             </Step>
 
             <Step
@@ -176,24 +192,24 @@ export default async function NetValuePage() {
               title="Add up every player's production for the season"
               working={`${pricing.players} players → ${formatStat(
                 pricing.produced,
-              )} points of value over replacement`}
+              )} NVPs of value over replacement`}
             >
-              {`Each player's figure is VORP, taken from Basketball-Reference rather than calculated here. Adding all ${pricing.players} players VORP gives ${formatStat(pricing.produced)} for ${season}, about ${formatStat(pricing.produced / 30)} per team, or roughly ${Math.round((pricing.produced / 30) * 2.17)} wins per team above the replacement floor.`}
+              {`Each player's figure is his share of the points his team's offense and defense actually generated above league average. A season spent below the replacement floor counts as zero rather than as a negative, because a team gets nothing back from those minutes and is not paid for them either. Adding up the ${pricing.players} salaried players on that basis gives ${formatStat(pricing.produced)} NVPs for ${season}, about ${formatStat(pricing.produced / 30)} per team.`}
             </Step>
 
             <Step
               n={3}
-              title="Divide the league's payroll by it to get the price of a point"
+              title="Divide the league's payroll by it to get the price of an NVP"
               working={`$${Math.round(pricing.pool).toLocaleString()} ÷ ${formatStat(
                 pricing.produced,
-              )} = $${Math.round(dollarsPerWin!).toLocaleString()} per value point`}
+              )} = $${Math.round(dollarsPerWin!).toLocaleString()} per NVP`}
             >
               Every salary paid in {season}, which totals $
-              {Math.round(pricing.pool).toLocaleString()}, bought every point of
+              {Math.round(pricing.pool).toLocaleString()}, bought every NVP of
               production in {season}. Doing this within each season is what
-              makes the figure comparable across eras. A point in 1994 and a
-              point in 2026 cost wildly different amounts, and this accounts for
-              it without any inflation adjustment.
+              makes the figure comparable across eras. An NVP in 1994 and an NVP
+              in 2026 cost wildly different amounts, and this accounts for it
+              without any inflation adjustment.
             </Step>
 
             <Step
@@ -205,9 +221,7 @@ export default async function NetValuePage() {
                 ).toLocaleString()} = ${salarySharePct.toFixed(2)}% of all salary`,
                 `${salarySharePct.toFixed(2)}% × ${formatStat(
                   pricing.produced,
-                )} points = ${formatStat(
-                  (hero.salary / pricing.pool) * pricing.produced,
-                )} points`,
+                )} NVPs = ${nvp(claimBeforeAvailability)} NVPs`,
               ]}
             >
               {`${hero.name} was the ${formatRank(hero.salaryRank)} highest paid player in the league, making $${hero.salary.toLocaleString()} in ${season}. Taking that share of everything the league produced is what his contract is buying.`}
@@ -222,35 +236,38 @@ export default async function NetValuePage() {
                 ).toLocaleString()} min full workload = ${availabilityShare.toFixed(2)} available`,
                 `${AVAILABILITY_FLOOR} + ${1 - AVAILABILITY_FLOOR} × ${availabilityShare.toFixed(
                   2,
-                )} = ${chargedShare.toFixed(2)} charged  →  ${formatStat(rawClaim)} points`,
+                )} = ${chargedShare.toFixed(2)} charged`,
+                `${nvp(claimBeforeAvailability)} NVPs × ${chargedShare.toFixed(
+                  2,
+                )} = ${nvp(rawClaim)} NVPs`,
               ]}
             >
               {`A full season's work is a starter playing 30 minutes a night, every game. That is ${Math.round(hero.fullWorkload / 30)} games in ${season}, so ${Math.round(hero.fullWorkload).toLocaleString()} minutes. Taking it from the schedule means lockout and suspended seasons size themselves. He played ${Math.round(hero.minutes).toLocaleString()}.`}
               <br />
               <br />
-              {`Production already falls when a player misses games, so charging him against a full season's salary on top of that would penalise the injury twice. But only half the contract bends to it. Scaling all the way down to nothing would multiply the salary out of the sum entirely, and a player who never took the floor would be charged for nothing at all — which is how a $45.6M contract and a $464,050 one once came out with the same score. Half of what a contract buys is being available; half is what you do once you are.`}
+              {`Production already falls when a player misses games, so charging him against a full season's salary on top of that would penalize the injury twice. But only half the contract bends to it. Scaling all the way down to nothing would multiply the salary out of the sum entirely, and a player who never took the floor would be charged for nothing at all. Half of what a contract buys is being available; half is what you do once you are.`}
             </Step>
 
             <Step
               n={6}
               title="Nudge every expectation so the league averages zero"
-              working={`${formatStat(rawClaim)} ${
+              working={`${nvp(rawClaim)} ${
                 drift >= 0 ? "+" : "−"
-              } ${formatStat(Math.abs(drift))} = ${formatStat(
+              } ${nvp(Math.abs(drift))} = ${nvp(
                 hero.expectedProduction,
-              )} points bought`}
+              )} NVPs bought`}
             >
-              {`The charged share is never more than 1, so across the league these expectations add up to a little less than what was actually produced, which would leave the average player looking slightly positive. Every expectation in ${season} is shifted by the same ${formatStat(Math.abs(drift))} points to correct it. It is the same nudge for everyone, so it changes nobody's rank, and it is what makes a score of zero mean "paid the going rate".`}
+              {`The charged share is never more than 1, so across the league these expectations add up to a little less than what was actually produced, which would leave the average player looking slightly positive. Every expectation in ${season} is shifted by the same ${nvp(Math.abs(drift))} NVPs to correct it. It is the same nudge for everyone, so it changes nobody's rank, and it is what makes a score of zero mean "paid the going rate".`}
             </Step>
 
             <Step
               n={7}
               title="Subtract what he was bought for from what he produced"
-              working={`${formatStat(hero.production)} produced − ${formatStat(
+              working={`${nvp(hero.production)} produced − ${nvp(
                 hero.expectedProduction,
               )} bought = ${formatScore(hero.netValueScore)}`}
             >
-              {`The ${formatStat(hero.production)} is his VORP for the season, straight off his player page. So he returned ${formatScore(hero.netValueScore)} points, about ${Math.round(hero.netValueScore * 2.17)} wins, more than his contract paid for, ${formatRank(hero.seasonRank)} in the league.`}
+              {`The ${nvp(hero.production)} is what he produced that season, straight off his player page. So he returned ${formatScore(hero.netValueScore)} NVPs, about ${Math.round(hero.netValueScore * 2.51)} wins, more than his contract paid for, ${formatRank(hero.seasonRank)} in the league.`}
             </Step>
           </ol>
         </section>
@@ -263,8 +280,10 @@ export default async function NetValuePage() {
         </h2>
         <dl className="mt-4 grid gap-3 sm:grid-cols-3">
           <Term name="Produced">
-            Value over replacement (VORP), taken from Basketball-Reference. A
-            counting stat: more minutes at the same level means more production.
+            His share of the points his team&rsquo;s offense and defense
+            generated above league average, measured against a replacement-level
+            floor. A counting stat: more minutes at the same level means more
+            production.
           </Term>
           <Term name="Bought">
             The player&rsquo;s share of all salary paid that season, times all
@@ -286,33 +305,42 @@ export default async function NetValuePage() {
           Where the production number comes from
         </h2>
         <p className="mt-2 max-w-prose text-sm text-white/70">
-          It is not calculated here. Production is VORP,{" "}
-          <em>value over replacement player</em>, published by{" "}
-          <a
-            href="https://www.basketball-reference.com/about/bpm2.html"
-            className="text-accent hover:underline"
-            target="_blank"
-            rel="noreferrer"
-          >
-            Basketball-Reference
-          </a>
-          , who derive it from the box score. Every season back to 1989-90 is
-          read from them; Net Value adds the salary side and the pricing.
+          It is built here, from nba.com&rsquo;s own data, and it works the
+          opposite way round from a box-score metric. A box-score metric
+          estimates a player from his own counting stats and hopes a roster adds
+          up to the team. This starts from what the team demonstrably did, taking
+          every team&rsquo;s offensive and defensive points above league average
+          from the possessions and points in its game logs, and divides that
+          between the players. The total is therefore never wrong, and the whole
+          modeling problem becomes the split.
         </p>
         <p className="mt-3 max-w-prose text-sm text-white/70">
-          VORP is not measured in wins, which is why the league total lands on a
-          figure like {pricing ? formatStat(pricing.produced) : "350"} rather
-          than the 1,230 games an NBA season actually contains. To check what a
-          point is worth, every team&rsquo;s VORP was fitted against how many
-          games that team really won, across 937 full 82-game team-seasons:
+          Offense is split by box-score credit, which the box score is good at:
+          shooting efficiency above league average on the player&rsquo;s own
+          volume, weighted down by how much of it team-mates created for him,
+          plus playmaking, turnovers, offensive rebounds and the plain value of
+          taking a shot on. Defense is split by minutes, tilted by a
+          defensive-quality model fitted to thirty-six seasons of All-Defensive
+          voting, and from 2013-14 on, by tracking data on shots defended and
+          how badly the shooters did.
+        </p>
+        <p className="mt-3 max-w-prose text-sm text-white/70">
+          Production is not measured in wins, which is why the league total
+          lands on a figure like{" "}
+          {pricing ? formatStat(pricing.produced) : "300"} rather than the 1,230
+          games an NBA season actually contains. To check what an NVP is worth,
+          every team&rsquo;s production was fitted against how many games that
+          team really won, across 935 full 82-game team-seasons:
         </p>
         <p className="mt-3 overflow-x-auto rounded-md border border-white/15 bg-background-box/90 px-3 py-2 font-mono text-xs whitespace-normal text-accent sm:text-sm sm:whitespace-nowrap">
-          team wins = 20.1 + 2.17 × team VORP&nbsp;&nbsp;&nbsp;(r = 0.95)
+          team wins = 15.8 + 2.51 × team production&nbsp;&nbsp;&nbsp;(r = 0.97)
         </p>
         <p className="mt-3 max-w-prose text-sm text-white/70">
-          So one point of VORP is worth about two and a fifth wins. That fit is
-          also the reason to trust the input at all: a metric that tracks real
-          results this closely is measuring something, whatever its flaws.
+          So one NVP is worth about two and a half wins, and a roster
+          producing nothing at all lands on the sixteen wins step one started
+          from. That fit is also the reason
+          to trust the figure at all: something tracking real results this
+          closely is measuring something, whatever its flaws.
         </p>
       </section>
 
@@ -383,7 +411,7 @@ export default async function NetValuePage() {
         <p className="mt-3 max-w-prose text-sm text-white/60">
           Per dollar, the 12th man wins by almost double. Subtracted, the star
           is worth nearly twenty times more, which is the answer anyone building
-          a roster would recognise.
+          a roster would recognize.
         </p>
       </section>
 
@@ -394,18 +422,19 @@ export default async function NetValuePage() {
         </h2>
         <p className="mt-2 max-w-prose text-sm text-white/70">
           Net Value is measured in production, not money, so it doesn&rsquo;t
-          inflate with the cap. Across the whole database it runs from about −7
-          to +9, and every season averages exactly zero.
+          inflate with the cap. Across the whole database it runs from about −5
+          to +9, and every season averages zero.
         </p>
         <dl className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <Term name="+5 and up">
-            An all-time bargain. Usually a superstar still on a rookie deal.
+            An all-time bargain, and rare: 73 seasons out of 17,000, at an
+            average of 19% of the cap.
           </Term>
           <Term name="+1 to +5">
             A clear win for the team. Good starters on sensible money.
           </Term>
           <Term name="−1 to +1">
-            Paid about right. Most of the league lives here.
+            Paid about right. Five of every six player-seasons land here.
           </Term>
           <Term name="Below −1">
             The contract is underwater: injury, decline, or an overpay.
@@ -419,8 +448,9 @@ export default async function NetValuePage() {
           Best Net Value seasons on record
         </h2>
         <p className="mt-2 mb-4 max-w-prose text-sm text-white/70">
-          Every one of these is a superstar season on a contract signed before
-          the player became a superstar.
+          All-time seasons bought cheaply. Some are rookie deals, the rest are
+          long contracts signed before the cap and the player&rsquo;s price
+          caught up with him. The ten of them averaged 19% of the cap.
         </p>
         <SimpleTable
           columns={exampleColumns(true, awards)}
@@ -432,8 +462,9 @@ export default async function NetValuePage() {
           And the worst
         </h2>
         <p className="mt-2 mb-4 max-w-prose text-sm text-white/70">
-          Large contracts that didn&rsquo;t return the wins, usually because the
-          player got hurt or the deal outlived his prime.
+          Contracts that didn&rsquo;t return what they cost. Six of these ten
+          players were available all season, so this is mostly money running
+          well ahead of production rather than time lost to injury.
         </p>
         <SimpleTable
           columns={exampleColumns(true, awards)}
@@ -487,7 +518,7 @@ export default async function NetValuePage() {
                       <td className="px-3 py-2 text-right sm:px-4">
                         {r.leagueCap
                           ? `${formatStat((100 * r.salary) / r.leagueCap)}%`
-                          : "—"}
+                          : "N/A"}
                       </td>
                       <td className="px-3 py-2 text-right sm:px-4">
                         {formatStat(r.production)}
@@ -509,7 +540,7 @@ export default async function NetValuePage() {
               more than any player ever has in a season, so the bar was
               unreachable before he played a game, and he was the best player
               alive both years, winning the title each time. It is a fact about
-              a contract no team can sign today, not a judgement on the player,
+              a contract no team can sign today, not a judgment on the player,
               so listing it beside genuine overpays would mislead.
             </p>
           </aside>
@@ -552,7 +583,7 @@ export default async function NetValuePage() {
           bodies through injuries would see an average dragged toward its
           fill-ins, while the sum says plainly what the whole roster returned.
           Summed by team and compared with real results, it correlates with
-          actual wins at r = 0.81.
+          actual wins at r = 0.77.
         </p>
       </section>
 
@@ -563,9 +594,18 @@ export default async function NetValuePage() {
         </h2>
         <ul className="mt-3 max-w-prose list-disc space-y-2 pl-5 text-sm text-white/70">
           <li>
-            Production comes from VORP, which is built from the box score. Box
-            scores record very little of what defence actually is, so defensive
-            specialists are undersold.
+            Because production is anchored to what each team actually did, a
+            player can only be credited with a share of his own team&rsquo;s
+            results. Someone excellent on a team that underachieves him will
+            read low, and that is the model working as designed rather than a
+            fault in it.
+          </li>
+          <li>
+            Defense is still the weak half. A team&rsquo;s defensive total is
+            known, but who inside the team earned it is not, and no free data
+            settles it. The split leans on minutes, on the thin defensive
+            columns a box score carries, and on tracking data that only exists
+            from 2013-14.
           </li>
           <li>
             It measures value against pay, not talent. A very good player on the

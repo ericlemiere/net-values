@@ -77,14 +77,14 @@ function getColumns(
       align: "center",
       defaultDir: "asc",
       // A bought-out contract is two rows, one per team paying it. The marker
-      // says which of them was only writing cheques, so the Net Value beside
+      // says which of them was only writing checks, so the Net Value beside
       // it — a charge with no production against it — reads as intended.
       render: (r) => (
         <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
           <TeamLink abbr={r.team} label={r.teamLabel} />
           {r.playedHere === false && (
             <span
-              title="Bought out — this team owed the money, he played elsewhere"
+              title="Bought out: this team owed the money, he played elsewhere"
               className="rounded border border-black/20 bg-black/5 px-1 py-px text-[0.625rem] font-medium uppercase tracking-wide text-black/50"
             >
               Waived
@@ -225,9 +225,9 @@ export default async function SalariesPage({
       </p>
       <p className="text-sm text-white/60 mt-3">
         Every team-season from 1990-91 on now carries a payroll. Phoenix before
-        2011-12 and Washington before 1997-98 were long missing — the original
-        import read each player&rsquo;s team from a roster table that never had
-        them — and were recovered from the same Hoopshype source. Three
+        2011-12 and Washington before 1997-98 were long missing, since the
+        original import read each player&rsquo;s team from a roster table that
+        never had them. Both were recovered from the same Hoopshype source. Three
         training-camp contracts totalling $88,367 are still unmatched, listed in
         the scraper&rsquo;s unmatched_recovered_salaries.csv rather than guessed
         onto a player.

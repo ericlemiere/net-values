@@ -1,9 +1,9 @@
 /**
  * The award vocabulary, shared by the badges, the awards page and the backfill.
  *
- * `rank` is the only thing here that is a judgement call: it decides which
+ * `rank` is the only thing here that is a judgment call: it decides which
  * single badge a table row keeps when there isn't room for all of them, and it
- * runs from the scarcest honour to the most common. One MVP a year outranks
+ * runs from the scarcest honor to the most common. One MVP a year outranks
  * three All-NBA teams, which outrank two dozen All-Star selections.
  */
 export const AWARDS = {
@@ -84,7 +84,7 @@ export function awardKey(playerId: number, season: string) {
  * The badge text for one award: "MVP", "All-NBA 1st", "★".
  *
  * A tier is part of the name rather than a detail, because All-NBA First Team
- * and All-NBA Third Team are different honours and a badge that flattened them
+ * and All-NBA Third Team are different honors and a badge that flattened them
  * would be saying something untrue.
  */
 export function badgeLabel(award: AwardCode, teamNumber: number | null) {

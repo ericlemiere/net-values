@@ -138,7 +138,7 @@ def upsert_stat_row(cur, table, player_id, season, values):
 def current_season() -> str:
     """The nba_api season string for the season now in progress.
 
-    An NBA season spans October through June and is labelled by its start year,
+    An NBA season spans October through June and is labeled by its start year,
     so anything before October belongs to the season that started last year.
     """
     from datetime import date

@@ -48,7 +48,7 @@ export function alignClass(align?: ColumnAlign) {
  * a vertical swipe anywhere on a table did nothing at all, neither scrolling
  * the rows nor the page under them, and pinch-zoom was gone with it. The
  * default already axis-locks a pan once it has a direction, which is the
- * behaviour that was being reached for.
+ * behavior that was being reached for.
  */
 export const SHEET =
   "sheet-scrollbar w-full max-w-full overflow-x-auto overscroll-x-contain rounded-lg border-2 border-accent bg-surface";

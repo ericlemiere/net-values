@@ -6,7 +6,7 @@ import { searchPlayers, searchTeams } from "@/lib/db/queries";
 //
 // Teams and players are returned as separate lists rather than one merged,
 // ranked list: they are ranked by different things (a franchise has no career
-// span to sort by) and the dropdown shows them as labelled groups anyway.
+// span to sort by) and the dropdown shows them as labeled groups anyway.
 export async function GET(request: NextRequest) {
   const q = request.nextUrl.searchParams.get("q") ?? "";
   const [teams, players] = await Promise.all([

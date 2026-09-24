@@ -43,7 +43,7 @@ export async function AwardHistory({ award }: { award: AwardCode }) {
       label: "Net Value",
       align: "right",
       description:
-        "Production minus what his pay expected of him, in VORP-like units.",
+        "Production minus what his pay expected of him. About 2.5 team wins per NVP.",
       render: (r) =>
         r.netValueScore === null ? "—" : formatScore(r.netValueScore),
     },
@@ -95,7 +95,7 @@ function AwardPageNav({ current }: { current: AwardCode }) {
             className={`rounded-md border px-2.5 py-1 transition-colors ${
               active
                 ? "border-accent bg-accent font-medium text-black"
-                : "border-white/20 text-white/70 hover:border-accent hover:text-accent"
+                : "border-white/20 bg-background-box/70 text-white/70 hover:border-accent hover:text-accent"
             }`}
           >
             {AWARDS[code].label}
@@ -104,7 +104,7 @@ function AwardPageNav({ current }: { current: AwardCode }) {
       })}
       <Link
         href="/seasons"
-        className="rounded-md border border-white/20 px-2.5 py-1 text-white/70 transition-colors hover:border-accent hover:text-accent"
+        className="rounded-md border border-white/20 bg-background-box/70 px-2.5 py-1 text-white/70 transition-colors hover:border-accent hover:text-accent"
       >
         Seasons
       </Link>

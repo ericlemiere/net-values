@@ -27,6 +27,11 @@ ALIASES = {
     "CHO": "CHA",  # basketball-reference-style abbreviation for Charlotte
     "PHO": "PHX",  # basketball-reference-style abbreviation for Phoenix
     "UTH": "UTA",  # Spotrac-style abbreviation for Utah (SalariesCapHitsSPO tables)
+    # nba.com's own older spellings, which turn up in leaguegamelog for the
+    # early-90s seasons even though the static team list gives the modern code.
+    "GOS": "GSW",  # Golden State
+    "PHL": "PHI",  # Philadelphia
+    "SAN": "SAS",  # San Antonio
 }
 
 

@@ -33,7 +33,7 @@ const columns: ColumnDef<TeamSeasonRow>[] = [
           className={`hover:underline ${r.champion ? "font-semibold" : ""}`}
           title={
             r.eraName && r.eraName !== r.name
-              ? `${r.eraName} — now the ${r.name}`
+              ? `${r.eraName}, now the ${r.name}`
               : undefined
           }
         >

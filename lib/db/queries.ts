@@ -1135,8 +1135,8 @@ export async function getNetValueExamples() {
         produced: sql<number>`sum(${netValues.production})::float8`,
         players: sql<number>`count(*)::int`,
         // What the league actually won that season, for contrast: the sum of
-        // VORP is wins ABOVE replacement, not games won, and the gap between
-        // the two numbers is the whole point of a replacement baseline.
+        // production is wins ABOVE replacement, not games won, and the gap
+        // between the two numbers is the whole point of a replacement baseline.
         leagueWins: sql<number>`(
           SELECT sum(ts.wins)::int FROM ${teamSeasons} ts WHERE ts.season = ${season}
         )`,
@@ -1355,7 +1355,7 @@ export async function getPlayerCareerSalaries(playerId: number) {
            round(100.0 * COALESCE(sp.played_salary, c.salary)
                  / NULLIF(tp.payroll, 0), 2) AS "pctOfTeamCap",
            -- Against the league cap it is the whole season's pay, because that
-           -- is what the player cost the league, whoever wrote the cheques.
+           -- is what the player cost the league, whoever wrote the checks.
            round(100.0 * c.salary / NULLIF(se.league_cap, 0), 2) AS "pctOfLeagueCap",
            nv.net_value_score::float8 AS "netValueScore",
            nv.net_value::float8 AS "netValue",

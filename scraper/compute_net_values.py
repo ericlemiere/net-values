@@ -16,30 +16,24 @@ Two decisions do all the work:
    same scale with no inflation adjustment, and the column sums to about zero
    league-wide, so zero means "paid the going rate".
 
-PRODUCTION uses bref's VORP. That choice is empirical, not a preference —
-scraper/validate_value.py tests the candidates against actual team wins, and
-box-based above-replacement measures win:
+PRODUCTION comes from `player_production` — see compute_production.py, which
+starts from the points each team's offense and defense actually generated above
+league average and splits them between the players.
 
-    Win Shares          r=0.964 level, 0.931 year-over-year   (but circular:
-                                                               WS is allocated
-                                                               FROM team results)
-    VORP                r=0.954 level, 0.904 year-over-year
-    (BPM-repl) x poss   r=0.949 level, 0.901 year-over-year
-    NET_RATING x poss   r=0.928 level, 0.839 year-over-year
-    PIE x poss          r=0.735 level, 0.713 year-over-year
+It replaced bref's VORP, which is still priced alongside into the `_vorp`
+columns for comparison and is wired to nothing. VORP sees defense through
+steals, blocks and defensive rebounds, and those describe a rim protector
+poorly and a wing not at all: Rudy Gobert anchored the league's best defense in
+2023-24 and priced 464th of 486. The replacement beats it against team wins
+(0.967 against 0.956, and 0.925 against 0.900 on year-over-year change) and on
+All-NBA, MVP and DPOY voting.
 
-Blending nba.com's on-court NET_RATING into the box estimate made it
-monotonically WORSE (0.948 down to 0.940 as its weight rose), because raw
-net rating is mostly a measure of the team a player happens to be on. So it is
-deliberately not used here. The upgrade path is on-off differential, which
-strips out team quality and only exists from 2007-08 — worth testing against
-this same harness before adopting.
-
-Known limit: summing a metric over a team and correlating with wins mostly
-validates the metric's COEFFICIENTS, since any linear box metric summed over a
-roster equals that metric applied to the team's own box totals. It says much
-less about whether credit is split correctly BETWEEN teammates. Nothing free
-and historical can settle that; RAPM-style data would.
+Known limit, and it is a real one: because production is now anchored to each
+team's own rating, summing a roster and correlating with wins is close to
+guaranteed to pass and says nothing about whether credit is split correctly
+BETWEEN team-mates. Every possible split scores the same. Award voting is the
+only independent read on the split that exists, which is why the defensive
+model is fitted to it — see fit_defense_model.py.
 
 PAY IS CHARGED EVEN WHEN THE PLAYER ISN'T THERE. Expectation scales with how
 much of the season a player was available for, but only down to
@@ -52,6 +46,12 @@ Those differ on every bought-out contract, where the old team keeps owing the
 money and the player is somewhere else. The money is still charged in full —
 it was really spent — but net_value_shares splits it back across the teams that
 each paid part of it, so the old team wears its own mistake.
+
+TWO PRODUCTION METRICS ARE PRICED, NOT ONE. Every headline column has a twin
+ending `_vorp`, which is this same arithmetic run on bref's VORP. The pricing
+rule is identical for both, so any difference between a pair is a difference in
+the production metric and nothing else. Nothing on the site reads the `_vorp`
+columns; they are kept so the change stays auditable.
 
 Idempotent: truncates and rewrites both tables, so re-running can't
 double-count.
@@ -96,17 +96,23 @@ DEFAULT_GAMES = 82
 # 234th, which is the distinction the old formula could not draw.
 AVAILABILITY_FLOOR = 0.5
 
+
 COLUMNS = [
     "team", "salary", "production", "minutes", "full_workload", "availability",
     "expected_production",
     "net_value_score", "value_dollars", "net_value",
     "net_value_pct_cap", "season_rank", "salary_rank", "has_stats", "source",
+    # The same five figures under the production model. `minutes`,
+    # `full_workload`, `availability` and the salary columns are shared: they
+    # are properties of the contract and the schedule, not of either metric.
+    "production_vorp", "expected_production_vorp",
+    "net_value_score_vorp", "net_value_vorp", "season_rank_vorp",
 ]
 
 # net_value_shares, in the order split_shares builds them.
 SHARE_COLUMNS = [
     "team", "salary", "production_credit", "charge", "score", "played_here",
-    "source",
+    "source", "score_vorp",
 ]
 
 
@@ -138,7 +144,7 @@ SALARY_FOR_SEASON = """
 # team every time a contract was bought out: Portland owed Deandre Ayton $25.6M
 # after waiving him in 2025-26, the Lakers paid $8.1M, and he played all 72
 # games in Los Angeles — so the worst net value of the season was filed under
-# Portland. That is 168 buyouts across the data, every one of them labelled
+# Portland. That is 168 buyouts across the data, every one of them labeled
 # with a team the player never suited up for.
 #
 # advanced_stats already knows. It is unique on (player, season) and holds the
@@ -166,6 +172,7 @@ def load(cur, season_filter):
                {PAID_TEAM} AS paid_team,
                {SALARY_FOR_SEASON} AS salary,
                MAX(adv.vorp) AS vorp,
+               MAX(pp.production) AS produced,
                MAX(adv.mp) AS minutes,
                BOOL_OR(adv.player_id IS NOT NULL) AS has_stats,
                MAX(se.league_cap) AS league_cap,
@@ -174,6 +181,8 @@ def load(cur, season_filter):
         JOIN seasons se ON se.season = s.season
         LEFT JOIN advanced_stats adv
                ON adv.player_id = s.player_id AND adv.season = s.season
+        LEFT JOIN player_production pp
+               ON pp.player_id = s.player_id AND pp.season = s.season
         WHERE s.salary IS NOT NULL
           AND se.league_cap IS NOT NULL
     """
@@ -266,7 +275,7 @@ def signing_team(player_id, season, teams, teams_by_season):
     return new[0] if len(new) == 1 and carried else None
 
 
-def split_shares(p, salary_rows):
+def split_shares(p, salary_rows, prod_key="production", prefix=""):
     """How one player-season's score divides among the teams that paid him.
 
     The charge follows the money and the production follows the player, so a
@@ -282,14 +291,15 @@ def split_shares(p, salary_rows):
     whose scores sum to the player's own.
     """
     rows = salary_rows.get((p["player_id"], p["season"]), [])
-    expected = p.get("expected")
+    expected = p.get(f"{prefix}expected")
+    production = p.get(prod_key)
     total = sum(salary for _, salary in rows)
 
     if p["legacy_salary"] or expected is None or total <= 0 or not rows:
         return [
             (
-                p["team"], p["salary"], p.get("production"), expected,
-                p.get("score"), True,
+                p["team"], p["salary"], production, expected,
+                p.get(f"{prefix}score"), True,
             )
         ]
 
@@ -297,7 +307,7 @@ def split_shares(p, salary_rows):
     for team, salary in rows:
         played_here = team == p["team"]
         charge = expected * salary / total
-        credit = p["production"] if played_here else 0.0
+        credit = production if played_here else 0.0
         shares.append((team, salary, credit, charge, credit - charge, played_here))
 
     # The team on his stat line with no contract on file. It happens while a
@@ -307,9 +317,60 @@ def split_shares(p, salary_rows):
     # Carrying a zero-salary row keeps the shares summing to his score instead
     # of quietly dropping the production.
     if p["team"] is not None and not any(s[5] for s in shares):
-        shares.append((p["team"], 0, p["production"], 0.0, p["production"], True))
+        shares.append((p["team"], 0, production, 0.0, production, True))
 
     return shares
+
+
+def price_metric(players, pool, prod_key, prefix):
+    """Price one production metric for one season, in place.
+
+    Writes `{prefix}expected`, `{prefix}score`, `{prefix}value`,
+    `{prefix}net_value` and `{prefix}rank` onto each player, and returns the
+    price per unit of production — or None where the season has produced
+    nothing yet, in which case every figure is left null.
+
+    Called once per metric with identical arithmetic, so the only thing that can
+    differ between the two sets of columns is the production that went in.
+
+    Expectation is what his pay buys at the league's going rate, over the part
+    of the season he was available for. Scaling by availability at all is what
+    stops an injured star being charged twice: once because production is a
+    counting stat that stops when he does, and again against a salary that
+    doesn't. It is floored rather than applied raw, though, because scaling all
+    the way to zero charged him nothing at all — see AVAILABILITY_FLOOR. A
+    player who was there every night still lands on 1.0.
+    """
+    total = sum(p[prod_key] for p in players)
+    if total <= 0:
+        for p in players:
+            for suffix in ("expected", "score", "value", "net_value", "rank"):
+                p[f"{prefix}{suffix}"] = None
+        return None
+
+    price = pool / total
+    for p in players:
+        charged = AVAILABILITY_FLOOR + (1.0 - AVAILABILITY_FLOOR) * p["availability"]
+        claim = (p["salary"] / pool) * charged
+        p[f"{prefix}expected"] = claim * total
+        p[f"{prefix}score"] = p[prod_key] - p[f"{prefix}expected"]
+
+    # Because the charged share is at most 1, expectations fall a little short
+    # of what the league actually produced, which would leave the average score
+    # slightly positive and stop zero meaning "paid the going rate". Shifting
+    # every score by the season mean fixes that. A constant shift, so it
+    # re-centers the scale without touching the order.
+    drift = sum(p[f"{prefix}score"] for p in players) / len(players)
+    for p in players:
+        p[f"{prefix}score"] -= drift
+        p[f"{prefix}expected"] += drift
+        p[f"{prefix}value"] = price * p[prod_key]
+        p[f"{prefix}net_value"] = p[f"{prefix}score"] * price
+
+    ordered = sorted(players, key=lambda q: -q[f"{prefix}score"])
+    for rank, p in enumerate(ordered, start=1):
+        p[f"{prefix}rank"] = rank
+    return price
 
 
 def compute(rows, games_by_season, salary_rows, teams_by_season):
@@ -319,9 +380,8 @@ def compute(rows, games_by_season, salary_rows, teams_by_season):
     him that season.
     """
     by_season = {}
-    for (player_id, season, played_team, paid_team, salary, vorp, minutes,
-         has_stats, cap, legacy) in rows:
-        prod = max(float(vorp), FLOOR) if vorp is not None else 0.0
+    for (player_id, season, played_team, paid_team, salary, vorp, produced,
+         minutes, has_stats, cap, legacy) in rows:
         paid_teams = [t for t, _ in salary_rows.get((player_id, season), [])]
         # Where he played, else where he signed, else where the money was.
         team = played_team or signing_team(
@@ -330,7 +390,11 @@ def compute(rows, games_by_season, salary_rows, teams_by_season):
         by_season.setdefault(season, []).append(
             {
                 "player_id": player_id, "season": season, "team": team,
-                "salary": int(salary), "production": prod,
+                "salary": int(salary),
+                "production": (
+                    max(float(produced), FLOOR) if produced is not None else 0.0
+                ),
+                "production_vorp": max(float(vorp), FLOOR) if vorp is not None else 0.0,
                 "minutes": float(minutes) if minutes is not None else 0.0,
                 "has_stats": bool(has_stats), "cap": int(cap),
                 "legacy_salary": bool(legacy),
@@ -341,21 +405,38 @@ def compute(rows, games_by_season, salary_rows, teams_by_season):
     shares = []
 
     def emit_shares(p):
-        for team, salary, credit, charge, score, played_here in split_shares(p, salary_rows):
+        """One row per team that paid him, carrying both metrics' scores.
+
+        The two passes walk the same contracts in the same order, so they line
+        up team for team and can be zipped.
+        """
+        main_shares = split_shares(p, salary_rows)
+        vorp_shares = split_shares(
+            p, salary_rows, prod_key="production_vorp", prefix="vorp_"
+        )
+        for (team, salary, credit, charge, score, played_here), legacy in zip(
+            main_shares, vorp_shares
+        ):
             if team is None:
                 continue
+            vorp_score = legacy[4]
             shares.append(
                 (
                     p["player_id"], p["season"], team, salary,
                     None if credit is None else round(credit, 3),
                     None if charge is None else round(charge, 3),
                     None if score is None else round(score, 2),
-                    played_here, "vorp",
+                    played_here, "production",
+                    None if vorp_score is None else round(vorp_score, 2),
                 )
             )
+
+    def figure(p, key, digits):
+        value = p.get(key)
+        return None if value is None else round(value, digits)
+
     for season, players in sorted(by_season.items()):
         pool = sum(p["salary"] for p in players)
-        total_prod = sum(p["production"] for p in players)
 
         # Pay rank is league-wide within the season: 1 is the highest-paid
         # player in the NBA that year, regardless of team. It depends on
@@ -363,28 +444,6 @@ def compute(rows, games_by_season, salary_rows, teams_by_season):
         # including one nobody has played yet.
         for rank, p in enumerate(sorted(players, key=lambda p: -p["salary"]), start=1):
             p["salary_rank"] = rank
-
-        if total_prod <= 0:
-            # Salaries are signed long before the games are played. There is no
-            # production to price yet, so the value columns stay empty, but the
-            # contracts and their ranks are real and worth showing.
-            for p in players:
-                out.append(
-                    (
-                        p["player_id"], season, p["team"], p["salary"],
-                        # production, full_workload, availability, expected,
-                        # score, value, net_value, pct_of_cap, season_rank all
-                        # wait on games being played.
-                        None, p["minutes"], None, None, None, None, None,
-                        None, None, None, p["salary_rank"], p["has_stats"],
-                        "vorp",
-                    )
-                )
-                emit_shares(p)
-            print(f"  {season}: {len(players):4} players, salaries only (no games played yet)")
-            continue
-
-        price = pool / total_prod
 
         # A full season's work: a starter playing STARTER_MINUTES a night, every
         # game. Taken from the season's actual game count, so lockout and
@@ -396,57 +455,54 @@ def compute(rows, games_by_season, salary_rows, teams_by_season):
         # "the 25th busiest player in the league" is not a thing anyone can
         # picture. Rankings are almost identical either way.
         full_workload = games_by_season.get(season, DEFAULT_GAMES) * STARTER_MINUTES
-
-        # Expectation is what his pay buys at the league's going rate, over the
-        # part of the season he was available for. Scaling by availability at
-        # all is what stops an injured star being charged twice: once because
-        # production is a counting stat that stops when he does, and again
-        # against a salary that doesn't.
-        #
-        # It is floored rather than applied raw, though, because scaling all
-        # the way to zero charged him nothing at all — see AVAILABILITY_FLOOR.
-        # A player who was there every night still lands on 1.0.
         for p in players:
             p["availability"] = min(p["minutes"] / full_workload, 1.0)
-            charged = AVAILABILITY_FLOOR + (1.0 - AVAILABILITY_FLOOR) * p["availability"]
-            p["claim"] = (p["salary"] / pool) * charged
 
+        price = price_metric(players, pool, "production", "")
+        price_metric(players, pool, "production_vorp", "vorp_")
+
+        if price is None:
+            # Salaries are signed long before the games are played. There is no
+            # production to price yet, so the value columns stay empty, but the
+            # contracts and their ranks are real and worth showing.
+            print(
+                f"  {season}: {len(players):4} players, salaries only "
+                f"(no games played yet)"
+            )
+
+        # Ordered by the metric in service, so `season_rank` and the row order
+        # agree. The second metric carries its own rank in its own column.
+        players.sort(key=lambda p: (p["score"] is None, -(p["score"] or 0.0)))
         for p in players:
-            p["expected"] = p["claim"] * total_prod
-            p["score"] = p["production"] - p["expected"]
-
-        # Because the charged share is at most 1, expectations fall a little
-        # short of what the league actually produced, which would leave the
-        # average score slightly positive and stop zero meaning "paid the going
-        # rate". Shifting
-        # every score by the season mean fixes that. A constant shift, so it
-        # re-centres the scale without touching the order.
-        drift = sum(p["score"] for p in players) / len(players)
-        for p in players:
-            p["score"] -= drift
-            p["expected"] += drift
-            p["value"] = price * p["production"]
-            p["net_value"] = p["score"] * price
-
-        players.sort(key=lambda p: -p["score"])
-        for rank, p in enumerate(players, start=1):
+            net_value = p.get("net_value")
             out.append(
                 (
-                    p["player_id"], season,
-                    p["team"], p["salary"], round(p["production"], 3),
-                    round(p["minutes"], 1), round(full_workload, 1),
-                    round(p["availability"], 3), round(p["expected"], 3),
-                    round(p["score"], 2),
-                    round(p["value"], 2), round(p["net_value"], 2),
-                    round(100.0 * p["net_value"] / p["cap"], 3),
-                    rank, p["salary_rank"], p["has_stats"], "vorp",
+                    p["player_id"], season, p["team"], p["salary"],
+                    figure(p, "production", 3) if price is not None else None,
+                    round(p["minutes"], 1),
+                    round(full_workload, 1) if price is not None else None,
+                    round(p["availability"], 3) if price is not None else None,
+                    figure(p, "expected", 3),
+                    figure(p, "score", 2),
+                    figure(p, "value", 2),
+                    figure(p, "net_value", 2),
+                    None if net_value is None else round(100.0 * net_value / p["cap"], 3),
+                    p.get("rank"), p["salary_rank"], p["has_stats"], "production",
+                    figure(p, "production_vorp", 3)
+                    if p.get("vorp_expected") is not None else None,
+                    figure(p, "vorp_expected", 3),
+                    figure(p, "vorp_score", 2),
+                    figure(p, "vorp_net_value", 2),
+                    p.get("vorp_rank"),
                 )
             )
             emit_shares(p)
-        print(
-            f"  {season}: {len(players):4} players, "
-            f"${price:,.0f} per win, full workload {full_workload:,.0f} min"
-        )
+
+        if price is not None:
+            print(
+                f"  {season}: {len(players):4} players, "
+                f"${price:,.0f} per win, full workload {full_workload:,.0f} min"
+            )
     return out, shares
 
 

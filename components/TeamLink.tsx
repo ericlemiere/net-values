@@ -27,7 +27,7 @@ export function TeamLink({
     <Link
       href={`/teams/${abbr}`}
       className="sheet-link"
-      title={shown === abbr ? undefined : `${shown} — now ${abbr}`}
+      title={shown === abbr ? undefined : `${shown}, now ${abbr}`}
     >
       {shown}
     </Link>

@@ -14,13 +14,13 @@ import {
  * borrow the sheet's own ink instead and separate the tiers by weight.
  */
 /*
- * A badge's colours at rest and under the cursor.
+ * A badge's colors at rest and under the cursor.
  *
  * The hover is an inversion rather than the accent fill the rest of the site
  * uses for this, because a badge can only ever be hovered while its own row is
  * hovered too — and a hovered row is already tinted --surface-hover, which is
  * pale yellow. An accent chip on it was all but invisible. Flipping each
- * badge's own two colours instead reads clearly on white paper and on the
+ * badge's own two colors instead reads clearly on white paper and on the
  * tinted row alike, and stays legible for the filled MVP chip, which has no
  * lighter state to move to.
  *
@@ -101,7 +101,7 @@ export function AwardBadges({ awards }: { awards: Award[] }) {
 }
 
 /**
- * The career version, for a player's own page: one badge per honour with a
+ * The career version, for a player's own page: one badge per honor with a
  * count, rather than one per season, so a fifteen-time All-Star reads as
  * "★ ×15" instead of fifteen identical chips.
  */
@@ -125,7 +125,7 @@ export function CareerAwardBadges({ awards }: { awards: Award[] }) {
         <Link
           key={`${award.award}-${award.teamNumber ?? ""}`}
           href={awardHref(award.award, award.season)}
-          title={`${fullLabel(award.award, award.teamNumber)} — ${seasons
+          title={`${fullLabel(award.award, award.teamNumber)}: ${seasons
             .slice()
             .reverse()
             .join(", ")}`}

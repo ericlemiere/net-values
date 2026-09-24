@@ -128,7 +128,7 @@ function historyColumnsFor(
     label: "Net Value",
     align: "right",
     description:
-      "The roster's Net Value added up — wins the squad returned above what it cost. Counts only players on a full contract.",
+      "The roster's Net Value added up: wins the squad returned above what it cost. Counts only players on a full contract.",
     render: (r) => (r.netValue ? formatScore(r.netValue.total) : "—"),
   },
   {
@@ -143,7 +143,7 @@ function historyColumnsFor(
     label: "Dead Money",
     align: "right",
     description:
-      "The part of Net Value owed to players this team paid but did not field — bought-out contracts it was still carrying. Always zero or negative, since the money bought no production.",
+      "The part of Net Value owed to players this team paid but did not field, meaning bought-out contracts it was still carrying. Always zero or negative, since the money bought no production.",
     render: (r) =>
       !r.netValue || r.netValue.deadMoneyPlayers === 0
         ? "—"
@@ -180,7 +180,7 @@ function rosterColumns(
               looking like a player who showed up and did nothing. */}
           {r.playedHere === false && (
             <span
-              title="Bought out — this team owed the money, he played elsewhere"
+              title="Bought out: this team owed the money, he played elsewhere"
               className="rounded border border-black/20 bg-black/5 px-1 py-px text-[0.625rem] font-medium uppercase tracking-wide text-black/50"
             >
               Waived
@@ -308,7 +308,7 @@ function RosterFallback() {
 }
 
 /**
- * A labelled figure in the header strip.
+ * A labeled figure in the header strip.
  *
  * Laid out the way the player page lays its header boxes out: on a phone each
  * box is a full-width row with the label on the left and the number hard

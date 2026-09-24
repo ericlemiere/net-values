@@ -54,109 +54,117 @@ function historyColumnsFor(
   currentName: string,
 ): ColumnDef<HistoryRow>[] {
   return [
-  {
-    key: "season",
-    label: "Season",
-    // The heading names the franchise as it stands today, so seasons played
-    // under an older identity say so here. Only when it differs — marking all
-    // 36 of Portland's rows would be noise, and marking Seattle's 18 is the
-    // whole point.
-    render: (r) => {
-      const era = eraMark(r, currentAbbr, currentName);
-      return (
-        <span className="flex items-center gap-2 whitespace-nowrap">
-          {r.champion && (
-            <span title="Won the championship" aria-label="Won the championship">
-              🏆
-            </span>
-          )}
-          <span
-            className={`font-mono text-[0.8125rem] tabular-nums ${
-              r.champion ? "font-semibold" : ""
-            }`}
-          >
-            {r.season}
-          </span>
-          {era && (
+    {
+      key: "season",
+      label: "Season",
+      // The heading names the franchise as it stands today, so seasons played
+      // under an older identity say so here. Only when it differs — marking all
+      // 36 of Portland's rows would be noise, and marking Seattle's 18 is the
+      // whole point.
+      render: (r) => {
+        const era = eraMark(r, currentAbbr, currentName);
+        return (
+          <span className="flex items-center gap-2 whitespace-nowrap">
+            {r.champion && (
+              <span
+                title="Won the championship"
+                aria-label="Won the championship"
+              >
+                🏆
+              </span>
+            )}
             <span
-              className="rounded border border-black/15 bg-black/5 px-1 py-px text-[0.625rem] font-medium tracking-wide text-black/50"
-              title={r.eraName ?? undefined}
+              className={`font-mono text-[0.8125rem] tabular-nums ${
+                r.champion ? "font-semibold" : ""
+              }`}
             >
-              {era}
+              {r.season}
             </span>
-          )}
-        </span>
-      );
+            {era && (
+              <span
+                className="ml-1 text-xs font-medium tracking-wide text-black/50"
+                title={r.eraName ?? undefined}
+              >
+                {era}
+              </span>
+            )}
+          </span>
+        );
+      },
     },
-  },
-  { key: "wins", label: "W", align: "center", render: (r) => r.wins ?? "—" },
-  { key: "losses", label: "L", align: "center", render: (r) => r.losses ?? "—" },
-  {
-    key: "winPct",
-    label: "Win%",
-    align: "center",
-    render: (r) =>
-      r.winPct === null ? "—" : r.winPct.toFixed(3).replace(/^0/, ""),
-  },
-  {
-    key: "srs",
-    label: "SRS",
-    align: "center",
-    render: (r) =>
-      r.srs === null ? "—" : `${r.srs > 0 ? "+" : ""}${formatStat(r.srs)}`,
-  },
-  {
-    key: "payroll",
-    label: "Payroll",
-    align: "right",
-    render: (r) => formatCurrency(r.payroll),
-  },
-  {
-    key: "leagueCap",
-    label: "League Cap",
-    align: "right",
-    render: (r) => formatCurrency(r.leagueCap),
-  },
-  {
-    key: "payrollPctOfCap",
-    label: "% of Cap",
-    align: "right",
-    render: (r) =>
-      r.payrollPctOfCap === null ? "—" : `${formatStat(r.payrollPctOfCap)}%`,
-  },
-  {
-    key: "teamNetValue",
-    label: "Team Net Value",
-    align: "center",
-    description:
-      "The roster's Net Value added up: wins the squad returned above what it cost. Counts only players on a full contract.",
-    render: (r) => (r.netValue ? formatScore(r.netValue.total) : "—"),
-  },
-  {
-    key: "teamNetValueRank",
-    label: "Team NV Rank",
-    align: "center",
-    description: "Where that ranked among the league's teams that season.",
-    render: (r) => (r.netValue ? formatRank(r.netValue.rank) : "—"),
-  },
-  // {
-  //   key: "deadMoney",
-  //   label: "Dead Money",
-  //   align: "right",
-  //   description:
-  //     "The part of Net Value owed to players this team paid but did not field, meaning bought-out contracts it was still carrying. Always zero or negative, since the money bought no production.",
-  //   render: (r) =>
-  //     !r.netValue || r.netValue.deadMoneyPlayers === 0
-  //       ? "—"
-  //       : formatScore(r.netValue.deadMoney),
-  // },
-  {
-    key: "madePlayoffs",
-    label: "Playoffs",
-    align: "center",
-    render: (r) =>
-      r.madePlayoffs === null ? "—" : r.madePlayoffs ? "Yes" : "—",
-  },
+    { key: "wins", label: "W", align: "center", render: (r) => r.wins ?? "—" },
+    {
+      key: "losses",
+      label: "L",
+      align: "center",
+      render: (r) => r.losses ?? "—",
+    },
+    {
+      key: "winPct",
+      label: "Win%",
+      align: "center",
+      render: (r) =>
+        r.winPct === null ? "—" : r.winPct.toFixed(3).replace(/^0/, ""),
+    },
+    {
+      key: "srs",
+      label: "SRS",
+      align: "center",
+      render: (r) =>
+        r.srs === null ? "—" : `${r.srs > 0 ? "+" : ""}${formatStat(r.srs)}`,
+    },
+    {
+      key: "payroll",
+      label: "Payroll",
+      align: "right",
+      render: (r) => formatCurrency(r.payroll),
+    },
+    {
+      key: "leagueCap",
+      label: "League Cap",
+      align: "right",
+      render: (r) => formatCurrency(r.leagueCap),
+    },
+    {
+      key: "payrollPctOfCap",
+      label: "% of Cap",
+      align: "right",
+      render: (r) =>
+        r.payrollPctOfCap === null ? "—" : `${formatStat(r.payrollPctOfCap)}%`,
+    },
+    {
+      key: "teamNetValue",
+      label: "Team Net Value",
+      align: "center",
+      description:
+        "The roster's Net Value added up: wins the squad returned above what it cost. Counts only players on a full contract.",
+      render: (r) => (r.netValue ? formatScore(r.netValue.total) : "—"),
+    },
+    {
+      key: "teamNetValueRank",
+      label: "Team NV Rank",
+      align: "center",
+      description: "Where that ranked among the league's teams that season.",
+      render: (r) => (r.netValue ? formatRank(r.netValue.rank) : "—"),
+    },
+    // {
+    //   key: "deadMoney",
+    //   label: "Dead Money",
+    //   align: "right",
+    //   description:
+    //     "The part of Net Value owed to players this team paid but did not field, meaning bought-out contracts it was still carrying. Always zero or negative, since the money bought no production.",
+    //   render: (r) =>
+    //     !r.netValue || r.netValue.deadMoneyPlayers === 0
+    //       ? "—"
+    //       : formatScore(r.netValue.deadMoney),
+    // },
+    {
+      key: "madePlayoffs",
+      label: "Playoffs",
+      align: "center",
+      render: (r) =>
+        r.madePlayoffs === null ? "—" : r.madePlayoffs ? "Yes" : "—",
+    },
   ];
 }
 

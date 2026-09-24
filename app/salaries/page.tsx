@@ -4,7 +4,13 @@ import { PlayerLink } from "@/components/PlayerLink";
 import { awardKey, type Award } from "@/lib/awards";
 import { TeamLink } from "@/components/TeamLink";
 import { SeasonLink } from "@/components/SeasonLink";
-import { formatCurrency, formatPercent, formatScore } from "@/lib/format";
+import {
+  formatCurrency,
+  formatPercent,
+  formatScore,
+  formatSignedCurrency,
+  payGapClass,
+} from "@/lib/format";
 import {
   getCurrentCap,
   getLeagueCap,
@@ -133,6 +139,42 @@ function getColumns(
           },
         ]
       : []),
+    {
+      key: "deservedSalary",
+      label: "Deserved Pay",
+      align: "center",
+      render: (r) => formatCurrency(r.deservedSalary),
+    },
+    {
+      key: "payDifference",
+      label: "Difference",
+      align: "center",
+      description:
+        "Deserved pay minus actual pay, for the whole season. Blank on a contract that was only part of one — a season split between two teams is one player-season on the production side, and there is no honest way to charge a share of the gap to one team's books. The player's own page shows the season whole.",
+      render: (r) => {
+        // Ben Simmons' 2024-25 is $39.3M owed by Brooklyn, who waived him, and
+        // $755,826 from the Clippers, who signed him. The gap is measured
+        // against the $40M season, so printing it beside the Clippers' figure
+        // would read as their having overpaid by thirty million dollars.
+        if (r.salary !== r.seasonSalary) {
+          return (
+            <span
+              title="Part of a season split between two teams. The gap is a whole-season figure; see this player's page."
+              className="text-black/40"
+            >
+              &mdash;
+            </span>
+          );
+        }
+        // Colored against the season's own cap, so the bar for "a lot of money"
+        // moves with the league rather than staying fixed in 2026 dollars.
+        return (
+          <span className={payGapClass(r.payDifference, r.leagueCap)}>
+            {formatSignedCurrency(r.payDifference)}
+          </span>
+        );
+      },
+    },
     {
       key: "netValueScore",
       label: "Net Value",

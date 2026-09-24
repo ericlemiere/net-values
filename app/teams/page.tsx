@@ -4,7 +4,7 @@ import { SimpleTable } from "@/components/SimpleTable";
 import { TeamSeasonFilter } from "@/components/TeamSeasonFilter";
 import { TableOverlay } from "@/components/TableNav";
 import { COUNT_CHIP, type ColumnDef } from "@/components/DataTable";
-import { formatCurrency, formatStat } from "@/lib/format";
+import { formatCurrency, formatScore, formatStat } from "@/lib/format";
 import {
   getLeagueCap,
   getTeamSeasons,
@@ -51,30 +51,36 @@ const columns: ColumnDef<TeamSeasonRow>[] = [
   {
     key: "wins",
     label: "W",
-    align: "right",
+    align: "center",
     render: (r) => r.wins ?? "—",
   },
   {
     key: "losses",
     label: "L",
-    align: "right",
+    align: "center",
     render: (r) => r.losses ?? "—",
   },
   {
     key: "winPct",
     label: "Win%",
-    align: "right",
+    align: "center",
     // .683 rather than 68.3% — the convention every standings page uses.
     render: (r) =>
       r.winPct === null ? "—" : r.winPct.toFixed(3).replace(/^0/, ""),
   },
-  {
-    key: "srs",
-    label: "SRS",
-    align: "right",
-    render: (r) =>
-      r.srs === null ? "—" : `${r.srs > 0 ? "+" : ""}${formatStat(r.srs)}`,
-  },
+  // {
+  //   key: "srs",
+  //   label: "SRS",
+  //   align: "right",
+  //   render: (r) =>
+  //     r.srs === null ? "—" : `${r.srs > 0 ? "+" : ""}${formatStat(r.srs)}`,
+  // },
+  // {
+  //   key: "rosterSize",
+  //   label: "Contracts",
+  //   align: "center",
+  //   render: (r) => r.rosterSize ?? "—",
+  // },
   {
     key: "payroll",
     label: "Payroll",
@@ -83,16 +89,17 @@ const columns: ColumnDef<TeamSeasonRow>[] = [
   },
   {
     key: "payrollPctOfCap",
-    label: "% of Cap",
+    label: "% of League Cap",
     align: "right",
     render: (r) =>
       r.payrollPctOfCap === null ? "—" : `${formatStat(r.payrollPctOfCap)}%`,
   },
+
   {
-    key: "rosterSize",
-    label: "Players Paid",
+    key: "teamNetValue",
+    label: "Team NV",
     align: "right",
-    render: (r) => r.rosterSize ?? "—",
+    render: (r) => formatScore(r.netValue),
   },
   {
     key: "madePlayoffs",

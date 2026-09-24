@@ -1,9 +1,10 @@
 import { notFound } from "next/navigation";
 import { TeamLink } from "@/components/TeamLink";
-import { CareerAwardBadges } from "@/components/AwardBadges";
+import { AwardBadges, CareerAwardBadges } from "@/components/AwardBadges";
 import { SeasonLink } from "@/components/SeasonLink";
 import { PlayerHeadshot } from "@/components/PlayerHeadshot";
 import { SimpleTable } from "@/components/SimpleTable";
+import { SectionHeading } from "@/components/SectionHeading";
 import { CompsTable } from "@/components/CompsTable";
 import type { ColumnDef } from "@/components/DataTable";
 import {
@@ -13,6 +14,8 @@ import {
   formatPercent,
   formatRank,
   formatScore,
+  formatSignedCurrency,
+  payGapClass,
 } from "@/lib/format";
 import { GLOSSARY } from "@/lib/glossary";
 import {
@@ -20,12 +23,15 @@ import {
   getAwardsForRows,
   getPlayerAwards,
   getPlayerById,
+  getPlayerPositionForSeason,
   getPlayerCareerStatsTotals,
   getPlayerCareerStatsPerGame,
   getPlayerCareerAdvancedStats,
   getPlayerCareerSalaries,
   getSalaryComps,
+  type PlayerAward,
 } from "@/lib/db/queries";
+import { POSITION_NAMES, type Position } from "@/lib/positions";
 
 /** Percentage points either side of the anchor season that still count as a comp. */
 const COMP_TOLERANCE = 0.5;
@@ -42,7 +48,11 @@ function getStatsColumns(mode: "per_game" | "totals"): ColumnDef<StatsRow>[] {
   const per = mode === "totals" ? " Season total." : " Per game.";
   const note = (key: string) => (GLOSSARY[key] ?? "") + per;
   return [
-    { key: "season", label: "Season", render: (r) => <SeasonLink season={r.season} /> },
+    {
+      key: "season",
+      label: "Season",
+      render: (r) => <SeasonLink season={r.season} />,
+    },
     {
       key: "team",
       label: "Team",
@@ -231,12 +241,16 @@ function getStatsColumns(mode: "per_game" | "totals"): ColumnDef<StatsRow>[] {
 }
 
 const advancedColumns: ColumnDef<AdvRow>[] = [
-  { key: "season", label: "Season", render: (r) => <SeasonLink season={r.season} /> },
   {
-      key: "team",
-      label: "Team",
-      render: (r) => <TeamLink abbr={r.team} label={r.teamLabel} />,
-    },
+    key: "season",
+    label: "Season",
+    render: (r) => <SeasonLink season={r.season} />,
+  },
+  {
+    key: "team",
+    label: "Team",
+    render: (r) => <TeamLink abbr={r.team} label={r.teamLabel} />,
+  },
   { key: "pos", label: "Pos", render: (r) => r.pos ?? "—" },
   {
     key: "age",
@@ -333,6 +347,7 @@ function ContractTeams({ row }: { row: SalRow }) {
 
 function getSalariesColumns(
   currentCap: Awaited<ReturnType<typeof getCurrentCap>>,
+  awardsBySeason: Map<string, PlayerAward[]>,
 ): ColumnDef<SalRow>[] {
   return [
     {
@@ -341,7 +356,16 @@ function getSalariesColumns(
       // Opted out of the row-wide link, which anchors the comps below: an
       // anchor inside an anchor is invalid and the browser unnests it.
       noRowLink: true,
-      render: (r) => <SeasonLink season={r.season} />,
+      // Badges ride the season rather than a name, because every row here is
+      // the same player: what changes down the column is which year he won
+      // something. It also puts the honors beside the contract that paid for
+      // them, which is the comparison this table exists to make.
+      render: (r) => (
+        <span className="whitespace-nowrap">
+          <SeasonLink season={r.season} />
+          <AwardBadges awards={awardsBySeason.get(r.season) ?? []} />
+        </span>
+      ),
     },
     {
       key: "team",
@@ -408,6 +432,30 @@ function getSalariesColumns(
       label: "Pay Rank",
       align: "right",
       render: (r) => formatRank(r.salaryRank),
+    },
+    {
+      key: "deservedSalary",
+      label: "Deserved Pay",
+      align: "right",
+      render: (r) => formatCurrency(r.deservedSalary),
+    },
+    {
+      key: "payDifference",
+      label: "Difference",
+      align: "right",
+      // Against the season's own cap, so the bar for "a lot of money" moves
+      // with the league instead of staying fixed in today's dollars.
+      render: (r) => {
+        const gap =
+          r.deservedSalary === null || r.seasonSalary === null
+            ? null
+            : r.deservedSalary - r.seasonSalary;
+        return (
+          <span className={payGapClass(gap, r.leagueCap)}>
+            {formatSignedCurrency(gap)}
+          </span>
+        );
+      },
     },
     {
       key: "netValueScore",
@@ -502,16 +550,25 @@ export default async function PlayerPage({
   const anchorPct = anchor
     ? Math.round((10000 * anchor.salary!) / anchor.leagueCap!) / 100
     : null;
-  const [seasonComps, historicalComps] =
+  // The position he was listed at that season, which splits the historical
+  // comps. Null for a player who never took the floor, and the position table
+  // then has nothing to show — see getSalaryComps.
+  const anchorPos = anchor
+    ? await getPlayerPositionForSeason(playerId, anchor.season)
+    : null;
+
+  const [seasonComps, teamComps, positionComps, otherComps] =
     anchor === null || anchorPct === null
-      ? [null, null]
+      ? [null, null, null, null]
       : await Promise.all(
-          (["season", "historical"] as const).map((scope) =>
+          (["season", "team", "position", "other"] as const).map((scope) =>
             getSalaryComps({
               playerId,
               targetPct: anchorPct,
               season: anchor.season,
               scope,
+              team: anchor.team,
+              pos: anchorPos,
               tolerance: COMP_TOLERANCE,
               limit: COMP_LIMIT,
               anchorNetValue: anchor.netValueScore,
@@ -519,13 +576,30 @@ export default async function PlayerPage({
           ),
         );
 
-  // Badges for both comps tables, in one lookup.
+  // Badges for all four comps tables, in one lookup.
   const compAwards = await getAwardsForRows([
     ...(seasonComps?.rows ?? []),
-    ...(historicalComps?.rows ?? []),
+    ...(teamComps?.rows ?? []),
+    ...(positionComps?.rows ?? []),
+    ...(otherComps?.rows ?? []),
   ]);
 
-  // Both comps tables hang off the same anchor, so they share a subtitle stem.
+  // His own honors, filed by season for the badges in the salary log.
+  const awardsBySeason = new Map<string, PlayerAward[]>();
+  for (const a of careerAwards) {
+    const list = awardsBySeason.get(a.season) ?? [];
+    list.push(a);
+    awardsBySeason.set(a.season, list);
+  }
+
+  // Headings for the two comps tables that are cut by something other than the
+  // season. Both fall back in the title itself when there is nothing to name.
+  const teamName = anchor?.teamLabel ?? anchor?.team ?? null;
+  const positionName = anchorPos
+    ? (POSITION_NAMES[anchorPos as Position] ?? anchorPos)
+    : null;
+
+  // All four comps tables hang off the same anchor, so they share a subtitle stem.
   const anchorLabel =
     anchorPct === null
       ? null
@@ -559,7 +633,7 @@ export default async function PlayerPage({
 
   return (
     <div className="mx-auto max-w-350 w-full min-w-0 p-6 text-white">
-      <div className="mb-6 flex flex-col justify-between gap-4 md:flex-row md:items-center">
+      <div className="mb-6 flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
         <div className="flex min-w-0 items-center gap-4">
           <PlayerHeadshot nbaPersonId={player.nbaPersonId} name={player.name} />
           <div className="min-w-0">
@@ -602,31 +676,61 @@ export default async function PlayerPage({
           )}
         </div>
       </div>
-      <div className="flex min-w-0 flex-col items-start gap-8">
-        <SimpleTable
-          title="Salaries"
+      {/* Three sections, each opened by a rule: what he was paid, who else was
+          paid like that, and what he did for it. `items-start` rather than the
+          default stretch, so the salary log keeps its fitted width instead of
+          being pulled out to the page. */}
+      <div className="flex min-w-0 flex-col items-start gap-4">
+        <SectionHeading
           subtitle={
             salaries.length > 0 &&
             "Select a season to compare it against the league."
           }
-          columns={getSalariesColumns(currentCap)}
+        >
+          Salaries
+        </SectionHeading>
+        <SimpleTable
+          columns={getSalariesColumns(currentCap, awardsBySeason)}
           rows={salaries}
           rowKey={(r) => r.id}
           fit
           rowHref={(r) => `/players/${playerId}?salary=${r.id}`}
           isActive={(r) => r.id === anchor?.id}
         />
-        <div className="flex w-full min-w-0 flex-col md:flex-row items-start gap-8">
+        <SectionHeading
+          subtitle={
+            anchorLabel
+              ? `Contracts that cost what this one cost, cut four ways. ${anchorLabel}.`
+              : undefined
+          }
+        >
+          Comparisons
+        </SectionHeading>
+        {/* Four panels, each a narrower cut of the same cap window: two up on
+            a laptop, one above the other on a phone. A grid rather than a
+            wrapping flex row so the two in a row keep the same width whatever
+            their rows are. The top row is the two cuts that are usually a
+            handful of names, so they get shorter panels and the page does not
+            open on two thirds of a screen of white. */}
+        <div className="mt-4 grid w-full min-w-0 grid-cols-1 items-start gap-x-8 lg:grid-cols-2">
           <CompsTable
-            title={`${anchor!.season} Season Cap Comps`}
+            // A player with no salary we have a league cap for has no anchor
+            // at all, and the four panels below say so rather than throwing on
+            // the way to a heading.
+            title={
+              anchor ? `${anchor.season} Season Cap Comps` : "Season Cap Comps"
+            }
+            // The cap window they all share is stated once, in the section
+            // heading above, so each panel only has to say how it is cut.
             subtitle={
-              anchorLabel
-                ? `${anchorLabel}${truncation(seasonComps)}`
+              anchor
+                ? `The rest of the league${truncation(seasonComps)}`
                 : undefined
             }
             rows={seasonComps?.rows ?? []}
             awards={compAwards}
             showSeason={false}
+            short
             emptyMessage={
               seasonComps
                 ? "Nobody else took up this share of the cap that season."
@@ -634,42 +738,78 @@ export default async function PlayerPage({
             }
           />
           <CompsTable
-            title="Historical Cap Comps"
+            title={`${teamName ?? "Team"} Historical Cap Comps`}
             subtitle={
-              anchorLabel
-                ? `Every other season \u00b7 ${anchorLabel}${truncation(historicalComps)}`
+              anchor
+                ? `Every other season, same franchise${truncation(teamComps)}`
                 : undefined
             }
-            rows={historicalComps?.rows ?? []}
+            rows={teamComps?.rows ?? []}
+            awards={compAwards}
+            short
+            emptyMessage={
+              anchor?.team
+                ? "This franchise has never paid anyone else this share of the cap."
+                : "No team on record for this season."
+            }
+          />
+          <CompsTable
+            title={`${positionName ?? "Positional"} Historical Cap Comps`}
+            subtitle={
+              anchor
+                ? `Every other season, same position${truncation(positionComps)}`
+                : undefined
+            }
+            rows={positionComps?.rows ?? []}
             awards={compAwards}
             emptyMessage={
-              historicalComps
-                ? "No other season matches this share of the cap."
+              anchorPos
+                ? "Nobody else at this position has been paid this share of the cap."
+                : "No position on record for this season."
+            }
+          />
+          <CompsTable
+            title="Everyone Else, Historically"
+            subtitle={
+              anchor
+                ? `Every other season, team and position aside${truncation(otherComps)}`
+                : undefined
+            }
+            rows={otherComps?.rows ?? []}
+            awards={compAwards}
+            emptyMessage={
+              otherComps
+                ? "The two tables above already hold every comp there is."
                 : "No salary with a known league cap to compare."
             }
           />
         </div>
+        <SectionHeading subtitle="Season by season, then the rate stats behind them.">
+          Stats
+        </SectionHeading>
+        <div className="mt-4 w-full min-w-0">
+          <SimpleTable
+            title="Career Averages"
+            columns={getStatsColumns("per_game")}
+            rows={perGame}
+            rowKey={(r) => r.id}
+          />
+          {totals.length > 0 && (
+            <SimpleTable
+              title="Career Totals"
+              columns={getStatsColumns("totals")}
+              rows={totals}
+              rowKey={(r) => r.id}
+            />
+          )}
+          <SimpleTable
+            title="Advanced Stats"
+            columns={advancedColumns}
+            rows={advanced}
+            rowKey={(r) => r.id}
+          />
+        </div>
       </div>
-      <SimpleTable
-        title="Career Averages"
-        columns={getStatsColumns("per_game")}
-        rows={perGame}
-        rowKey={(r) => r.id}
-      />
-      {totals.length > 0 && (
-        <SimpleTable
-          title="Career Totals"
-          columns={getStatsColumns("totals")}
-          rows={totals}
-          rowKey={(r) => r.id}
-        />
-      )}
-      <SimpleTable
-        title="Advanced Stats"
-        columns={advancedColumns}
-        rows={advanced}
-        rowKey={(r) => r.id}
-      />
     </div>
   );
 }

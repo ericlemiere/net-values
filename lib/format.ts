@@ -63,3 +63,35 @@ export function formatPie(value: number | null): string {
   if (value === null || value === undefined) return "—";
   return (value * 100).toFixed(1);
 }
+
+/**
+ * How far a salary has to miss to be worth marking: 5% of that season's cap.
+ *
+ * A share of the cap rather than a dollar figure, so the same bar applies in
+ * 1995 and 2026. It lands about 15% of scored player-seasons in the red and
+ * 17% in the green, leaving the two-thirds in the middle — contracts that are
+ * within a rotation player's salary of right — in plain text.
+ */
+export const PAY_GAP_SHARE_OF_CAP = 0.05;
+
+/**
+ * The text color for a gap between deserved and actual pay.
+ *
+ * Green is money left on the table (he was worth more than he cost), red is
+ * money overspent. Dark enough to read as ink on the light sheet the tables
+ * are printed on; the accent is reserved for state you picked, so it can't be
+ * borrowed here.
+ *
+ * Uncolored without a league cap to size the gap against, since "big" has no
+ * meaning then.
+ */
+export function payGapClass(
+  difference: number | null,
+  leagueCap: number | null,
+): string {
+  if (difference === null || !leagueCap) return "";
+  const threshold = leagueCap * PAY_GAP_SHARE_OF_CAP;
+  if (difference >= threshold) return "text-green-700";
+  if (difference <= -threshold) return "text-red-700";
+  return "";
+}

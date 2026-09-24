@@ -6,11 +6,11 @@ import {
   ilike,
   inArray,
   isNotNull,
-  ne,
   sql,
   type AnyColumn,
   type SQL,
 } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { db } from "./index";
 import { awardKey, type AwardCode } from "@/lib/awards";
 import {
@@ -470,6 +470,88 @@ const pctOfLeagueCapSql = sql<
 >`round(100.0 * ${salaries.salary} / nullif(${seasons.leagueCap}, 0), 2)`;
 
 /**
+ * What the league itself paid for this much production.
+ *
+ * Every season is a ladder of salaries — the highest paid player, the second,
+ * the third — and a parallel ladder of production. Rank a player on the second
+ * ladder and read the salary off the rung of the same number, and you have
+ * what the NBA actually paid, that year, for the amount of basketball he
+ * produced. The fourth most productive player is worth whatever the fourth
+ * highest-paid player earned.
+ *
+ * Ranked by PRODUCTION, not by Net Value. Net Value already has salary inside
+ * it — it is production minus what the pay bought — so ranking by it and
+ * reading a salary back out is circular: a rookie on the minimum who plays
+ * well lands near the top of the Net Value board and would come out
+ * "deserving" a league-leading contract on the strength of being cheap.
+ * Production alone asks the question the column is actually posing.
+ *
+ * A season nobody has played yet has no production and so no rung, which the
+ * `production IS NOT NULL` filter drops rather than ranking every contract
+ * equal-first.
+ */
+const productionRanked = db
+  .select({
+    playerId: netValues.playerId,
+    season: netValues.season,
+    rank: sql<number>`rank() over (
+      partition by ${netValues.season} order by ${netValues.production} desc)`.as(
+      "production_rank",
+    ),
+  })
+  .from(netValues)
+  .where(isNotNull(netValues.production))
+  .as("production_ranked");
+
+/** The pay ladder the rank above is read against. */
+const payLadder = alias(netValues, "pay_ladder");
+
+/**
+ * Deserved pay per player-season, ready to join onto anything.
+ *
+ * A join rather than a correlated subquery on each row, which is what this
+ * started as. The subquery was correct and reads better, but it re-ranks the
+ * season once per row: sorting /salaries by this across every season took 4.7
+ * seconds, and still 1.7 with indexes to help it. Ranking every season once,
+ * up front, and hash-joining the result is ~57ms for the same page.
+ */
+const deservedPay = db
+  .select({
+    playerId: productionRanked.playerId,
+    season: productionRanked.season,
+    salary: payLadder.salary,
+  })
+  .from(productionRanked)
+  .innerJoin(
+    payLadder,
+    and(
+      eq(payLadder.season, productionRanked.season),
+      // Written out rather than as eq(..., productionRanked.rank). A subquery
+      // field that came from a window function, not a column, renders
+      // unqualified through the query builder — "production_rank" with no
+      // table on it — which Postgres rejects in a join condition.
+      sql`${payLadder.salaryRank} = "production_ranked"."production_rank"`,
+    ),
+  )
+  .as("deserved_pay");
+
+/**
+ * Deserved pay minus what he was actually paid: money left on the table.
+ *
+ * Both sides are whole-season figures. A bought-out season is two contracts
+ * but one player-season, and the ladder above ranks player-seasons, so
+ * charging the gap against one team's slice of the pay would say a team that
+ * only wrote half the checks got half the bargain. Rows that are only part of
+ * a season come back null rather than repeating the season's gap on each: the
+ * figure has no per-contract meaning, and null is also what sorts them out of
+ * the way when the table is ordered by this column.
+ */
+const payDifferenceSql = sql<number | null>`(
+  CASE WHEN ${salaries.salary} = ${netValues.salary}
+    THEN ${deservedPay.salary} - ${netValues.salary}
+  END)`;
+
+/**
  * The most recent league cap on file, used to restate historical salaries in
  * today's money.
  *
@@ -536,6 +618,14 @@ const salarySelection = {
    */
   netValueScore: sql<number | null>`coalesce(${netValueShares.score}, ${netValues.netValueScore})::float8`,
   netValue: sql<number | null>`${netValues.netValue}::float8`,
+  /**
+   * The player's pay for the whole season, which is what the two columns
+   * below are measured against. Not the same as `salary` above on a season
+   * that was split between two teams.
+   */
+  seasonSalary: netValues.salary,
+  deservedSalary: deservedPay.salary,
+  payDifference: payDifferenceSql,
   netValueRank: netValues.seasonRank,
   salaryRank: netValues.salaryRank,
   production: sql<number | null>`${netValues.production}::float8`,
@@ -561,6 +651,8 @@ const salariesSortColumns = {
   netValue: netValues.netValue,
   netValueRank: netValues.seasonRank,
   salaryRank: netValues.salaryRank,
+  deservedSalary: deservedPay.salary,
+  payDifference: payDifferenceSql,
 } as const;
 
 export type SalariesSortKey = keyof typeof salariesSortColumns;
@@ -626,6 +718,14 @@ export async function getSalaries(params: ListParams) {
         eq(netValueShares.team, salaries.team),
       ),
     )
+    // LEFT, since a season with no games played yet has no rung on the ladder.
+    .leftJoin(
+      deservedPay,
+      and(
+        eq(deservedPay.playerId, salaries.playerId),
+        eq(deservedPay.season, salaries.season),
+      ),
+    )
     .orderBy(orderByNullsLast(sortCol, params.dir), asc(players.name))
     .limit(PAGE_SIZE)
     .offset((page - 1) * PAGE_SIZE);
@@ -659,6 +759,11 @@ export interface TeamSeasonRow {
   /** Payroll as a share of that season's league cap, 0-100. */
   payrollPctOfCap: number | null;
   rosterSize: number | null;
+  /**
+   * The roster's Net Value added up — the same figure the team page shows,
+   * in NVP. Null for a season nobody has played yet.
+   */
+  netValue: number | null;
   /** The name and code in use that season; null if they never changed. */
   eraName: string | null;
   eraAbbr: string | null;
@@ -693,6 +798,42 @@ export async function getTeamsForSeason(
     .where(isNotNull(salaries.salary))
     .groupBy(salaries.team, salaries.season)
     .as("roster");
+
+  /*
+   * The same sum the team page's Net Value column shows, for one season and
+   * every team at once.
+   *
+   * Read from net_value_shares rather than net_values so a bought-out contract
+   * is charged to the team that owes the money instead of the team the player
+   * ended up on — see getTeamNetValues, which does this per team across every
+   * season. The full-contract floor is measured against the player's WHOLE
+   * salary for the same reason it is there: a buyout leaves the new team
+   * paying a fraction of what was a full contract when it was signed.
+   */
+  const teamNetValue = db
+    .select({
+      team: netValueShares.team,
+      total: sql<number>`sum(${netValueShares.score})`.as("nv_total"),
+    })
+    .from(netValueShares)
+    .innerJoin(
+      netValues,
+      and(
+        eq(netValues.playerId, netValueShares.playerId),
+        eq(netValues.season, netValueShares.season),
+      ),
+    )
+    .innerJoin(seasons, eq(seasons.season, netValueShares.season))
+    .where(
+      and(
+        eq(netValueShares.season, season),
+        isNotNull(netValueShares.score),
+        // ::float8 is required, not defensive — see getTeamNetValues.
+        sql`${netValues.salary} >= ${FULL_CONTRACT_SHARE_OF_CAP}::float8 * ${seasons.leagueCap}`,
+      ),
+    )
+    .groupBy(netValueShares.team)
+    .as("team_nv");
 
   return db
     .select({
@@ -731,6 +872,7 @@ export async function getTeamsForSeason(
           then round(10000.0 * ${teamPayrolls.payroll} / ${seasons.leagueCap}) / 100
         end)::float8`,
       rosterSize: sql<number | null>`${rosterSize.n}::int`,
+      netValue: sql<number | null>`${teamNetValue.total}::float8`,
     })
     .from(teamSeasons)
     .innerJoin(teams, eq(teams.id, teamSeasons.teamId))
@@ -749,6 +891,8 @@ export async function getTeamsForSeason(
         eq(rosterSize.season, teamSeasons.season),
       ),
     )
+    // Already scoped to this season inside the subquery, so team alone joins it.
+    .leftJoin(teamNetValue, eq(teamNetValue.team, teams.abbr))
     .where(eq(teamSeasons.season, season))
     .orderBy(desc(teamSeasons.wins), asc(teams.name));
 }
@@ -1361,6 +1505,11 @@ export async function getPlayerCareerSalaries(playerId: number) {
            nv.net_value::float8 AS "netValue",
            nv.season_rank AS "netValueRank",
            nv.salary_rank AS "salaryRank",
+           -- Whole-season pay, which is what "deserved" is measured against.
+           -- c.salary is the same figure; nv.salary is used so the two sides
+           -- of the difference come off the same row the ladder ranks.
+           nv.salary AS "seasonSalary",
+           deserved_pay.salary AS "deservedSalary",
            nv.production::float8 AS production,
            nv.expected_production::float8 AS "expectedProduction",
            nv.availability::float8 AS availability
@@ -1369,6 +1518,11 @@ export async function getPlayerCareerSalaries(playerId: number) {
     LEFT JOIN unpriced up ON up.season = c.season
     LEFT JOIN ${netValues} nv
            ON nv.player_id = ${playerId} AND nv.season = c.season
+    -- What the league paid for this much production that year. Renders with
+    -- its own "deserved_pay" alias, so it takes none here.
+    LEFT JOIN ${deservedPay}
+           ON deserved_pay.player_id = ${playerId}
+          AND deserved_pay.season = c.season
     LEFT JOIN ${teams} t ON t.abbr = COALESCE(nv.team, c.fallback_team)
     LEFT JOIN ${teamPayrolls} tp ON tp.team_id = t.id AND tp.season = c.season
     LEFT JOIN ${seasons} se ON se.season = c.season
@@ -1390,6 +1544,8 @@ export async function getPlayerCareerSalaries(playerId: number) {
     netValue: number | null;
     netValueRank: number | null;
     salaryRank: number | null;
+    seasonSalary: number | null;
+    deservedSalary: number | null;
     production: number | null;
     expectedProduction: number | null;
     availability: number | null;
@@ -1409,24 +1565,55 @@ export interface SalaryComp {
 }
 
 /**
+ * Which slice of the league a comps table is drawn from.
+ *
+ * "season" is the anchor's own year — who else was paid like this at the same
+ * time. The other three all mean "some other year", cut so that a player shows
+ * up in at most one of them:
+ *
+ * - "team" is the franchise he played for that season, through its whole
+ *   history: what this team has bought before at this price.
+ * - "position" is everyone listed at his position, including his own
+ *   teammates — the same contract at the same job.
+ * - "other" is the remainder, the rest of the league at another position.
+ *
+ * "team" and "position" overlap on purpose, so a center comping against his
+ * own franchise still appears among centers. "other" excludes both, which is
+ * what makes it the remainder rather than a fourth overlapping list.
+ */
+export type CompScope = "season" | "team" | "position" | "other";
+
+/** The position a comps row is filed under: the primary code, "SG-PG" -> "SG". */
+const compPosSql = sql`split_part(${nearestPosSql(
+  sql`c.player_id`,
+  sql`c.season`,
+)}, '-', 1)`;
+
+/**
  * Other players' seasons whose share of that season's league cap lands within
  * `tolerance` percentage points of `targetPct` — i.e. contracts that cost the
  * same slice of the cap.
- *
- * `scope` splits that into the two tables the player page shows: "season" keeps
- * only the anchor's own season (who else was paid like this at the same time),
- * "historical" keeps every other season (who has been paid like this before).
  *
  * The player himself is excluded, and rows are ordered by how close they are to
  * the target so the tightest comps survive the limit. Windows near the bottom
  * of the scale (minimum contracts) can hold hundreds of rows, hence the cap and
  * the returned totalCount so the UI can say how many were left out.
+ *
+ * Written out rather than built with the query builder because of the shape of
+ * the plan. The cap window is cheap and selective; the position lookup is a
+ * correlated subquery per row. Left to itself the planner ran the position
+ * lookup against most of the salaries table and took half a second. Pinning
+ * the cap window into a MATERIALIZED CTE first, so the position filter only
+ * ever sees the few hundred contracts that already cost the right amount,
+ * brings the same query in at about 25ms.
  */
 export async function getSalaryComps({
   playerId,
   targetPct,
   season,
   scope,
+  team = null,
+  pos = null,
   tolerance = 0.5,
   limit = 50,
   anchorNetValue = null,
@@ -1434,56 +1621,101 @@ export async function getSalaryComps({
   playerId: number;
   targetPct: number;
   season: string;
-  scope: "season" | "historical";
+  scope: CompScope;
+  /** The anchor season's team. Required by "team", and excluded by "other". */
+  team?: string | null;
+  /** The anchor's position. Required by "position", and excluded by "other". */
+  pos?: string | null;
   tolerance?: number;
   limit?: number;
   /** The anchor season's Net Value, which the returned rows are sorted around. */
   anchorNetValue?: number | null;
 }): Promise<{ rows: SalaryComp[]; totalCount: number }> {
-  const distance = sql`abs(${pctOfLeagueCapSql} - ${targetPct})`;
-  // A null salary or league cap makes the pct — and so the distance — null,
-  // which this comparison drops along with the out-of-range rows.
-  const where = and(
-    ne(salaries.playerId, playerId),
-    scope === "season"
-      ? eq(salaries.season, season)
-      : ne(salaries.season, season),
-    sql`${distance} <= ${tolerance}`,
-  );
+  // "team" and "position" can't select anything without something to match on,
+  // and a null match would silently widen into "every other season".
+  if ((scope === "team" && !team) || (scope === "position" && !pos)) {
+    return { rows: [], totalCount: 0 };
+  }
 
-  const [rows, countResult] = await Promise.all([
-    db
-      .select({
-        id: salaries.id,
-        playerId: salaries.playerId,
-        name: players.name,
-        season: salaries.season,
-        team: salaries.team,
-        teamLabel: eraAbbrSql(salaries.team, salaries.season),
-        // Cast to float8: the driver hands plain numeric back as a string,
-        // which the table's client-side sort would compare lexically.
-        pctOfLeagueCap: sql<number | null>`(${pctOfLeagueCapSql})::float8`,
-        netValueScore: sql<number | null>`${netValues.netValueScore}::float8`,
-      })
-      .from(salaries)
-      .innerJoin(players, eq(players.id, salaries.playerId))
-      .innerJoin(seasons, eq(seasons.season, salaries.season))
-      .leftJoin(
-        netValues,
-        and(
-          eq(netValues.playerId, salaries.playerId),
-          eq(netValues.season, salaries.season),
-        ),
-      )
-      .where(where)
-      .orderBy(sql`${distance} asc`, desc(salaries.season), asc(players.name))
-      .limit(limit),
-    db
-      .select({ count: sql<number>`count(*)` })
-      .from(salaries)
-      .innerJoin(seasons, eq(seasons.season, salaries.season))
-      .where(where),
-  ]);
+  const seasonFilter =
+    scope === "season" ? sql`s.season = ${season}` : sql`s.season <> ${season}`;
+
+  // The remainder scope subtracts whatever the two tables above it showed —
+  // and only those. With no team or no position to match on, that table was
+  // empty, so there is nothing for this one to leave out.
+  const filters: SQL[] = [];
+  if (scope === "team") filters.push(sql`c.team = ${team}`);
+  if (scope === "position") filters.push(sql`${compPosSql} = ${pos}`);
+  if (scope === "other") {
+    if (team) filters.push(sql`c.team IS DISTINCT FROM ${team}`);
+    if (pos) filters.push(sql`${compPosSql} IS DISTINCT FROM ${pos}`);
+  }
+  const matchFilter =
+    filters.length === 0
+      ? sql`TRUE`
+      : sql.join(filters, sql` AND `);
+
+  // Rounded to two decimals before the comparison, so the window is measured
+  // against the same figure the column prints.
+  const pct = sql`round(100.0 * s.salary / nullif(${seasons.leagueCap}, 0), 2)`;
+
+  const result = await db.execute(sql`
+    WITH cand AS MATERIALIZED (
+      SELECT s.id, s.player_id, s.season, s.team,
+             ${pct} AS pct,
+             abs(${pct} - ${targetPct}) AS dist
+      FROM ${salaries} s
+      JOIN ${seasons} ON ${seasons.season} = s.season
+      WHERE s.player_id <> ${playerId}
+        AND ${seasonFilter}
+        AND abs(${pct} - ${targetPct}) <= ${tolerance}
+    ),
+    matched AS (
+      SELECT c.* FROM cand c WHERE ${matchFilter}
+    ),
+    counted AS (SELECT count(*) AS n FROM matched)
+    SELECT m.id,
+           m.player_id AS "playerId",
+           p.name,
+           m.season,
+           m.team,
+           (SELECT ti.abbr FROM ${teamIdentities} ti
+              JOIN ${teams} era_team ON era_team.id = ti.team_id
+             WHERE era_team.abbr = m.team
+               AND m.season >= ti.first_season
+               AND (ti.last_season IS NULL OR m.season <= ti.last_season)
+             LIMIT 1) AS "teamLabel",
+           -- float8, or the driver hands plain numeric back as a string and
+           -- the table's client-side sort compares it lexically.
+           m.pct::float8 AS "pctOfLeagueCap",
+           nv.net_value_score::float8 AS "netValueScore",
+           counted.n::int AS "totalCount"
+    FROM matched m
+    CROSS JOIN counted
+    JOIN ${players} p ON p.id = m.player_id
+    LEFT JOIN ${netValues} nv
+           ON nv.player_id = m.player_id AND nv.season = m.season
+    ORDER BY m.dist ASC, m.season DESC, p.name ASC
+    LIMIT ${limit}
+  `);
+
+  // The count rides along on every row (one CROSS JOIN, rather than a second
+  // round trip for a single number) and is stripped back off here, so it never
+  // reaches the client component that renders these.
+  const counted = result.rows as unknown as (SalaryComp & {
+    totalCount: number;
+  })[];
+  const totalCount = counted[0]?.totalCount ?? 0;
+  const rows: SalaryComp[] = counted.map((r) => ({
+    id: r.id,
+    playerId: r.playerId,
+    name: r.name,
+    season: r.season,
+    team: r.team,
+    teamLabel: r.teamLabel,
+    pctOfLeagueCap: r.pctOfLeagueCap,
+    netValueScore: r.netValueScore,
+  }));
 
   // Which contracts count as comps is decided by cost — everyone inside the
   // cap tolerance — and the query above takes the closest `limit` of them.
@@ -1502,7 +1734,27 @@ export async function getSalaryComps({
           );
         });
 
-  return { rows: ordered, totalCount: Number(countResult[0].count) };
+  return { rows: ordered, totalCount };
+}
+
+/**
+ * The position a player was listed at around a season, as one of the five
+ * primary codes. Null for a player with no stat line anywhere.
+ *
+ * Same "nearest season" rule the /salaries Pos column uses, so a contract for
+ * a season not yet played is filed under the position he last played.
+ */
+export async function getPlayerPositionForSeason(
+  playerId: number,
+  season: string,
+): Promise<string | null> {
+  const rows = await db.execute(sql`
+    SELECT split_part(${nearestPosSql(
+      sql`${playerId}`,
+      sql`${season}`,
+    )}, '-', 1) AS pos`);
+  const pos = (rows.rows[0] as { pos: string | null } | undefined)?.pos;
+  return pos ? pos : null;
 }
 
 // ---- Header search ----

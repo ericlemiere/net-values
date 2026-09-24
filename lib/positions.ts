@@ -15,6 +15,15 @@ export const POSITIONS = ["PG", "SG", "SF", "PF", "C"] as const;
 
 export type Position = (typeof POSITIONS)[number];
 
+/** The position spelled out, for a heading: "Center Historical Cap Comps". */
+export const POSITION_NAMES: Record<Position, string> = {
+  PG: "Point Guard",
+  SG: "Shooting Guard",
+  SF: "Small Forward",
+  PF: "Power Forward",
+  C: "Center",
+};
+
 export const POSITION_LABELS: Record<Position, string> = {
   PG: "PG - Point Guard",
   SG: "SG - Shooting Guard",

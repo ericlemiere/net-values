@@ -44,7 +44,17 @@ export function SimpleTable<Row>({
   emptyMessage = "No data.",
 }: SimpleTableProps<Row>) {
   return (
-    <div className={`mb-8 min-w-0 ${fit ? "w-full lg:w-fit" : "w-full"}`}>
+    // `max-w-full` is what makes `w-fit` safe here, and it is not belt and
+    // braces. A flex item sized `fit-content` measures against its own
+    // max-content, not the space it has: the player page's salary log came out
+    // 1584px wide inside a 1352px column, so the sheet never went into
+    // overflow and the whole page scrolled sideways instead — with the last
+    // columns unreachable, since the page's own scrollbar was past them.
+    // Capping the wrapper hands the overflow back to the sheet, which is the
+    // only element here that knows how to scroll.
+    <div
+      className={`mb-8 min-w-0 ${fit ? "w-full lg:w-fit lg:max-w-full" : "w-full"}`}
+    >
       {title && <h2 className="text-lg font-semibold text-white">{title}</h2>}
       {(title || subtitle) && (
         <div className="mb-2 min-h-5 text-sm text-white/60">

@@ -84,12 +84,22 @@ interface CompsTableProps {
   emptyMessage: string;
   /** Badges for these rows, keyed by `awardKey(playerId, season)`. */
   awards?: Map<string, Award[]>;
+  /**
+   * A panel that sizes to its rows, up to a low ceiling, instead of reserving
+   * the full height.
+   *
+   * For the two cuts that are normally a handful of names — one season of the
+   * league, one franchise's whole history. A fixed panel under a one-row table
+   * is two hundred pixels of white, and two of them side by side are most of
+   * a screen. They still scroll on the rare anchor that fills them.
+   */
+  short?: boolean;
 }
 
 /**
- * A comps panel: fixed width and height, scrolling internally, so the two of
- * them stack into a tidy column beside the salaries table however many rows
- * they hold.
+ * A comps panel: full width of whatever cell it is given, fixed height,
+ * scrolling internally on both axes, so a row of them lines up however many
+ * comps each one found.
  *
  * Sorting is client-side on purpose. The rows are already the closest N to the
  * anchor percentage — re-sorting reorders that selection rather than re-running
@@ -104,6 +114,7 @@ export function CompsTable({
   showSeason = true,
   emptyMessage,
   awards,
+  short = false,
 }: CompsTableProps) {
   const [sort, setSort] = useState<SortKey | null>(null);
   const [dir, setDir] = useState<"asc" | "desc">("asc");
@@ -154,17 +165,25 @@ export function CompsTable({
   }
 
   return (
-    // Sized to its content: the season-scoped table has one column fewer than
-    // the historical one, so forcing them to equal widths would pad the
-    // narrower one with empty space.
-    <div className="mb-8 w-full min-w-0 lg:w-fit lg:max-w-full">
-      <h2 className="text-lg font-semibold text-white">{title}</h2>
+    // Takes the full width it is given rather than shrinking to its content.
+    // These panels sit in a grid two across, and content-width sizing made
+    // four tables of four different widths with ragged gaps between them —
+    // the columns differ by a hair (one table has no Season) and by whatever
+    // award badges the rows happen to carry, which is not a reason for the
+    // furniture to move. Any table too wide for its cell scrolls inside the
+    // sheet, the same as every other table on the site.
+    <div className="mb-8 w-full min-w-0">
+      {/* Titles wrap rather than stretch the cell: "Point Guard Historical Cap
+          Comps" is long, and on a phone it has to fold somewhere. */}
+      <h2 className="text-lg font-semibold wrap-break-word text-white">
+        {title}
+      </h2>
       <div className="mb-2 min-h-5 text-sm text-white/60">{subtitle}</div>
       {/* Once the rows scroll, the gutter keeps the vertical scrollbar from
           squeezing the content into a horizontal scroll of its own. */}
       <div
         ref={scrollRef}
-        className={`h-80 ${SHEET}`}
+        className={`${short ? "max-h-56" : "h-80"} ${SHEET}`}
         style={{ scrollbarGutter: overflows ? "stable" : "auto" }}
       >
         <table className="w-max min-w-full text-sm text-black">

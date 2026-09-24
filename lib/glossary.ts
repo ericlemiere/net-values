@@ -99,6 +99,10 @@ export const GLOSSARY: Record<string, string> = {
     "Rank by salary among every player in the league that season. #1 is the highest paid in the NBA.",
   capAdjustedSalary:
     "What this contract would pay if it were signed now. % of league cap multiplied by the current league cap.",
+  deservedSalary:
+    "What the league paid for this much basketball that season: rank every player by production, then read off the salary sitting at the same rank on the pay ladder. The fourth most productive player is worth whatever the fourth highest-paid player earned.",
+  payDifference:
+    "Deserved pay minus actual pay. Green is money left on the table, red is money overspent; anything inside 5% of that season's cap is close enough to read as plain. A season split between two teams is compared whole.",
 
   // --- teams ---
   abbr: "Three-letter team abbreviation",
@@ -110,6 +114,8 @@ export const GLOSSARY: Record<string, string> = {
   payrollPctOfCap:
     "Team payroll as a share of that season's league cap. Above 100% is normal: cap holds, exceptions and luxury tax all push teams over",
   rosterSize: "How many players drew a salary from this team that season",
+  teamNetValue:
+    "The roster's Net Value added up, in NVP. A sum rather than an average: Net Value is additive in wins, so this says how many wins the roster returned above what it cost. Only players on a full contract count.",
 };
 
 /** The definition for a column, if we have one. */

@@ -327,18 +327,36 @@ const advancedColumns: ColumnDef<AdvRow>[] = [
  * otherwise unreadable — the figure belongs to two teams at once and only one
  * of them ever saw him play.
  */
+/**
+ * Season and team-abbr cells in mono, matching the size `cellClass` gives the
+ * numeric columns. Those columns get it from their `align`; these two are
+ * left-aligned, so they have to ask for it.
+ */
+const MONO_CELL = "font-mono text-[0.8125rem]";
+
 function ContractTeams({ row }: { row: SalRow }) {
   const contracts = row.contracts ?? [];
   const owed = contracts.filter((c) => !c.playedHere && c.salary);
   if (owed.length === 0)
-    return <TeamLink abbr={row.team} label={row.teamLabel} />;
+    return (
+      <span className={MONO_CELL}>
+        <TeamLink abbr={row.team} label={row.teamLabel} />
+      </span>
+    );
 
   return (
     <span className="flex flex-col gap-0.5 whitespace-nowrap">
-      <TeamLink abbr={row.team} label={row.teamLabel} />
+      <span className={MONO_CELL}>
+        <TeamLink abbr={row.team} label={row.teamLabel} />
+      </span>
       {owed.map((c) => (
         <span key={c.team} className="text-xs text-black/50">
-          <TeamLink abbr={c.team} label={c.teamLabel} />{" "}
+          {/* Mono without a size: the sub-line is already text-xs, and
+              MONO_CELL's size would make the abbr outgrow the words next
+              to it. */}
+          <span className="font-mono">
+            <TeamLink abbr={c.team} label={c.teamLabel} />
+          </span>{" "}
           {formatCurrency(c.salary)} owed
         </span>
       ))}
@@ -363,7 +381,9 @@ function getSalariesColumns(
       // them, which is the comparison this table exists to make.
       render: (r) => (
         <span className="whitespace-nowrap">
-          <SeasonLink season={r.season} />
+          <span className={`${MONO_CELL} tabular-nums`}>
+            <SeasonLink season={r.season} />
+          </span>
           <AwardBadges awards={awardsBySeason.get(r.season) ?? []} />
         </span>
       ),
@@ -371,6 +391,7 @@ function getSalariesColumns(
     {
       key: "team",
       label: "Team",
+      align: "center",
       noRowLink: true,
       render: (r) => <ContractTeams row={r} />,
     },

@@ -141,8 +141,8 @@ export default async function NetValuePage() {
         Production is counted in{" "}
         <strong className="text-accent">Net Value Points (NVPs)</strong> and one
         NVP is worth roughly{" "}
-        <strong className="text-accent">two and a half extra wins</strong> for
-        a team. So a Net Value of +5 means a player returned about thirteen wins
+        <strong className="text-accent">two and a half extra wins</strong> for a
+        team. So a Net Value of +5 means a player returned about thirteen wins
         more than his contract paid for. An NVP is a unit of value, not a point
         scored. A rim protector earns them as readily as a scorer does.
       </p>
@@ -178,8 +178,8 @@ export default async function NetValuePage() {
               points per 100 below average, worth roughly sixteen wins over a
               season. Production is measured from that floor rather than from
               zero, because a team filled with freely available players still
-              wins some games. What counts is what a player adds on top of
-              what any team could have had for nothing.
+              wins some games. What counts is what a player adds on top of what
+              any team could have had for nothing.
             </Step>
 
             <Step
@@ -237,7 +237,7 @@ export default async function NetValuePage() {
                 )} = ${nvp(rawClaim)} NVPs`,
               ]}
             >
-              {`A full season's work is a starter playing 30 minutes a night, every game. That is ${Math.round(hero.fullWorkload / 30)} games in ${season}, so ${Math.round(hero.fullWorkload).toLocaleString()} minutes. Taking it from the schedule means lockout and suspended seasons size themselves. He played ${Math.round(hero.minutes).toLocaleString()}.`}
+              {`A full season's work is a starter playing 30 minutes a night, every game. That is ${Math.round(hero.fullWorkload / 30)} games in ${season}, so ${Math.round(hero.fullWorkload).toLocaleString()} minutes. Taking it from the schedule means lockout and suspended seasons size themselves. He played ${Math.round(hero.minutes).toLocaleString()} minutes in ${season}.`}
               <br />
               <br />
               {`Production already falls when a player misses games, so charging him against a full season's salary on top of that would penalize the injury twice. But only half the contract bends to it. Scaling all the way down to nothing would multiply the salary out of the sum entirely, and a player who never took the floor would be charged for nothing at all. Half of what a contract buys is being available; half is what you do once you are.`}
@@ -262,7 +262,7 @@ export default async function NetValuePage() {
                 hero.expectedProduction,
               )} bought = ${formatScore(hero.netValueScore)}`}
             >
-              {`The ${nvp(hero.production)} is what he produced that season, straight off his player page. So he returned ${formatScore(hero.netValueScore)} NVPs, about ${Math.round(hero.netValueScore * 2.51)} wins, more than his contract paid for, ${formatRank(hero.seasonRank)} in the league.`}
+              {`He produced ${nvp(hero.production)} NVPs that season, the same figure his player page shows. His contract bought ${nvp(hero.expectedProduction)} of them, leaving ${nvp(hero.netValueScore)} NVPs nobody paid for — about ${Math.round(hero.netValueScore * 2.51)} wins' worth, and ${formatRank(hero.seasonRank)} in the league.`}
             </Step>
           </ol>
         </section>
@@ -303,11 +303,11 @@ export default async function NetValuePage() {
           It is built here, from nba.com&rsquo;s own data, and it works the
           opposite way round from a box-score metric. A box-score metric
           estimates a player from his own counting stats and hopes a roster adds
-          up to the team. This starts from what the team demonstrably did, taking
-          every team&rsquo;s offensive and defensive points above league average
-          from the possessions and points in its game logs, and divides that
-          between the players. The total is therefore never wrong, and the whole
-          modeling problem becomes the split.
+          up to the team. This starts from what the team demonstrably did,
+          taking every team&rsquo;s offensive and defensive points above league
+          average from the possessions and points in its game logs, and divides
+          that between the players. The total is therefore never wrong, and the
+          whole modeling problem becomes the split.
         </p>
         <p className="mt-3 max-w-prose text-sm text-white/70">
           Offense is split by box-score credit, which the box score is good at:
@@ -331,11 +331,10 @@ export default async function NetValuePage() {
           team wins = 15.8 + 2.51 × team production&nbsp;&nbsp;&nbsp;(r = 0.97)
         </p>
         <p className="mt-3 max-w-prose text-sm text-white/70">
-          So one NVP is worth about two and a half wins, and a roster
-          producing nothing at all lands on the sixteen wins step one started
-          from. That fit is also the reason
-          to trust the figure at all: something tracking real results this
-          closely is measuring something, whatever its flaws.
+          So one NVP is worth about two and a half wins, and a roster producing
+          nothing at all lands on the sixteen wins step one started from. That
+          fit is also the reason to trust the figure at all: something tracking
+          real results this closely is measuring something, whatever its flaws.
         </p>
       </section>
 

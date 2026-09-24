@@ -54,6 +54,7 @@ export function SiteSearch({
   const [open, setOpen] = useState(false);
   const [highlighted, setHighlighted] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLUListElement>(null);
 
   const items: SearchItem[] = [
     ...teams.map((team) => ({ kind: "team" as const, team })),
@@ -107,6 +108,17 @@ export function SiteSearch({
 
   const showList = open && query.trim().length >= 2;
   const pending = query.trim() !== resultsFor;
+
+  // The list is uncapped, so a common surname runs to dozens of rows and the
+  // arrow keys will walk the highlight straight out of the scroll box. Follow
+  // it. `resultsFor` is a dependency so a fresh set of results scrolls back to
+  // the top even though the highlight was already sitting at 0.
+  useEffect(() => {
+    if (!showList) return;
+    listRef.current
+      ?.querySelector('[aria-selected="true"]')
+      ?.scrollIntoView({ block: "nearest" });
+  }, [highlighted, showList, resultsFor]);
 
   function go(item: SearchItem) {
     setOpen(false);
@@ -163,9 +175,10 @@ export function SiteSearch({
       />
       {showList && (
         <ul
+          ref={listRef}
           id={listId}
           role="listbox"
-          className="absolute right-0 z-50 mt-1 max-h-80 w-full overflow-y-auto rounded-md border-2 border-accent bg-black shadow-xl shadow-black/60"
+          className="absolute right-0 z-50 mt-1 max-h-[min(26rem,60vh)] w-full overflow-y-auto rounded-md border-2 border-accent bg-black shadow-xl shadow-black/60"
         >
           {items.map((item, i) => {
             const active = i === highlighted;

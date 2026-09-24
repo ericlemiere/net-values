@@ -1819,7 +1819,6 @@ export interface TeamSearchResult {
  */
 export async function searchTeams(
   query: string,
-  limit = 5,
 ): Promise<TeamSearchResult[]> {
   const q = query.trim();
   if (q.length < 2) return [];
@@ -1857,14 +1856,12 @@ export async function searchTeams(
     -- A prefix hit first: typing "por" should reach Portland before it reaches
     -- whoever merely contains those letters.
     ORDER BY starts DESC, name ASC
-    LIMIT ${limit}
   `);
   return rows.rows as unknown as TeamSearchResult[];
 }
 
 export async function searchPlayers(
   query: string,
-  limit = 10,
 ): Promise<PlayerSearchResult[]> {
   const q = query.trim();
   if (q.length < 2) return [];
@@ -1888,8 +1885,7 @@ export async function searchPlayers(
       sql`(${foldedName} ilike ${`${literal}%`}) desc`,
       sql`${lastSeason} desc nulls last`,
       asc(players.name),
-    )
-    .limit(limit);
+    );
 }
 
 /* ---------------------------------------------------------------- awards -- */

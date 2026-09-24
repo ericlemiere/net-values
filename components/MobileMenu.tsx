@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useEffect } from "react";
 import { usePathname } from "next/navigation";
 import { NAV_LINKS } from "@/components/NavLinks";
-import { SiteSearch } from "@/components/SiteSearch";
 
 /**
  * The small-screen navigation drawer.
@@ -12,9 +11,9 @@ import { SiteSearch } from "@/components/SiteSearch";
  * It renders inside the header so it inherits the header's stacking context
  * and lands above the page without competing with it for z-index, but both
  * panel and scrim are `position: fixed` and start below the header bar, which
- * keeps the bar — and the close button in it — untouched while the drawer is
- * open. Everything about how it moves lives in globals.css under
- * `.mobile-menu`; this file only decides when it is open and what's in it.
+ * keeps the bar — and the buttons in it — untouched while the drawer is open.
+ * Everything about how it moves lives in globals.css under `.mobile-menu`;
+ * this file only decides when it is open and what's in it.
  */
 export function MobileMenu({
   open,
@@ -55,14 +54,7 @@ export function MobileMenu({
         aria-hidden={!open}
         className={`mobile-menu${open ? " is-open" : ""}`}
       >
-        <div className="mobile-menu-item" style={{ "--i": 0 } as React.CSSProperties}>
-          <SiteSearch
-            className="w-full"
-            inputClassName="px-4 py-3 rounded-lg"
-          />
-        </div>
-
-        <nav className="mt-6 flex flex-col" aria-label="Site">
+        <nav className="flex flex-col" aria-label="Site">
           {NAV_LINKS.map((link, i) => (
             <Link
               key={link.href}
@@ -70,7 +62,7 @@ export function MobileMenu({
               onClick={onClose}
               aria-current={pathname === link.href ? "page" : undefined}
               className="mobile-menu-link mobile-menu-item"
-              style={{ "--i": i + 1 } as React.CSSProperties}
+              style={{ "--i": i } as React.CSSProperties}
             >
               <span>{link.label}</span>
               <svg
@@ -91,7 +83,7 @@ export function MobileMenu({
 
         <p
           className="mobile-menu-item mt-auto pt-8 text-sm leading-relaxed text-white/40"
-          style={{ "--i": NAV_LINKS.length + 1 } as React.CSSProperties}
+          style={{ "--i": NAV_LINKS.length } as React.CSSProperties}
         >
           Evaluating an NBA player&rsquo;s value against what they&rsquo;re paid.
         </p>

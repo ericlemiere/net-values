@@ -28,11 +28,19 @@ type SearchItem =
 export function SiteSearch({
   className = "ml-auto w-56 sm:w-72",
   inputClassName = "px-3 py-1.5",
+  inputRef,
+  onNavigate,
 }: {
   className?: string;
-  /** Sizing for the box itself, so the drawer can run a taller field than the
-   *  header bar has room for. */
+  /** Sizing for the box itself, so the modal can run a taller field than a
+   *  header bar would have room for. */
   inputClassName?: string;
+  /** Lets the modal focus the field inside the click that opened it, which is
+   *  the only way iOS Safari will raise the keyboard. */
+  inputRef?: React.Ref<HTMLInputElement>;
+  /** Fired when a result is chosen, so the modal can dismiss itself even when
+   *  the destination is the page we are already on. */
+  onNavigate?: () => void;
 }) {
   const router = useRouter();
   const listId = useId();
@@ -105,6 +113,7 @@ export function SiteSearch({
     setQuery("");
     setTeams([]);
     setPlayers([]);
+    onNavigate?.();
     router.push(
       item.kind === "team"
         ? `/teams/${item.team.abbr}`
@@ -138,6 +147,7 @@ export function SiteSearch({
   return (
     <div ref={containerRef} className={`relative ${className}`.trim()}>
       <input
+        ref={inputRef}
         type="search"
         value={query}
         onChange={onChange}

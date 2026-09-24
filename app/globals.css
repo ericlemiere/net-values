@@ -450,15 +450,11 @@ body {
   font-weight: 500;
   letter-spacing: -0.015em;
   color: rgba(255, 255, 255, 0.8);
-  border-bottom: 0.5px solid var(--accent);
+  border-bottom: 1px solid color-mix(in srgb, var(--accent) 50%, transparent);
   transition:
     color 160ms ease-out,
     opacity 240ms ease-out,
     transform 320ms cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-.mobile-menu-link:last-child {
-  border-bottom: none;
 }
 
 .mobile-menu-link:hover,
@@ -517,6 +513,119 @@ body {
   .mobile-menu,
   .mobile-menu-scrim {
     display: none;
+  }
+}
+
+/*
+ * The search modal (components/SearchModal.tsx).
+ *
+ * Search is one button in the header at every width, and this is what that
+ * button opens. It is top-anchored rather than centered: the results list drops
+ * out of the field, and on a phone with the keyboard up the middle of the
+ * viewport is under the keyboard.
+ *
+ * The entrance is a keyframe animation, not a transition, because the panel has
+ * to be in the DOM and focusable inside the click that opened it — there is no
+ * frame in between for a transition to start from. The exit replays the same
+ * keyframes backwards.
+ */
+.search-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  /* Clear of the header bar on a phone, so the brand and the button that
+     opened this stay visible above it. */
+  padding: calc(var(--header-height) + 0.75rem) 1rem 1rem;
+}
+
+@media (min-width: 768px) {
+  .search-modal {
+    padding-top: min(18vh, 8rem);
+  }
+}
+
+.search-modal-scrim {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.72);
+  backdrop-filter: blur(4px);
+  /* Same reason as the drawer's scrim: iOS will still drag the page behind an
+     overlay unless the overlay refuses pan gestures. Taps still dismiss. */
+  touch-action: none;
+  animation: search-scrim-in 200ms ease-out both;
+}
+
+.search-modal-panel {
+  position: relative;
+  width: min(100%, 34rem);
+  padding: 1rem;
+  border-radius: 0.75rem;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: var(--background-box);
+  box-shadow: 0 30px 70px rgba(0, 0, 0, 0.65);
+  animation: search-panel-in 260ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/*
+ * The exit gets its own keyframes rather than replaying the entrance in
+ * `reverse`. An animation only restarts when its NAME changes, so reusing the
+ * entrance's name here would have left the browser retiming an animation that
+ * finished the moment the modal opened: already past its active duration, it
+ * jumped straight to the reversed end state and the panel vanished instead of
+ * fading. Separate names give the browser a new animation to run.
+ *
+ * It leaves the way it arrived, upward and slightly smaller, and faster than
+ * it came — an entrance is worth watching, a dismissal is something you have
+ * already decided on.
+ */
+.search-modal.is-closing .search-modal-scrim {
+  animation: search-scrim-out 160ms ease-in both;
+}
+
+.search-modal.is-closing .search-modal-panel {
+  animation: search-panel-out 160ms ease-in both;
+}
+
+@keyframes search-scrim-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes search-panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(-12px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes search-scrim-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes search-panel-out {
+  from {
+    opacity: 1;
+    transform: none;
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.98);
   }
 }
 

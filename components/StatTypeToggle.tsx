@@ -1,8 +1,13 @@
 "use client";
 
 import { useTableNav } from "./TableNav";
+import { DEFAULT_SORT, isAdvanced, type StatType } from "@/lib/stat-types";
 
-export type StatType = "per_game" | "totals";
+const OPTIONS: { type: StatType; label: string }[] = [
+  { type: "per_game", label: "Averages" },
+  { type: "totals", label: "Totals" },
+  { type: "advanced", label: "Advanced" },
+];
 
 export function StatTypeToggle({
   basePath,
@@ -24,13 +29,23 @@ export function StatTypeToggle({
   const { navigate } = useTableNav();
 
   function go(next: StatType) {
+    /*
+     * Sorting by PTS and then switching to Advanced would carry `sort=pts` to
+     * a table that has no PTS column, and the query would quietly fall back to
+     * its default — leaving the header caret on nothing and the rows in an
+     * order the page never asked for. Crossing between the box score and the
+     * advanced table therefore resets the sort; moving between Averages and
+     * Totals, which share every column, keeps it.
+     */
+    const keepSort = isAdvanced(next) === isAdvanced(statType);
+    const fallback = DEFAULT_SORT[next];
     const sp = new URLSearchParams({
       type: next,
       season,
       team,
       pos,
-      sort,
-      dir,
+      sort: keepSort ? sort : fallback.sort,
+      dir: keepSort ? dir : fallback.dir,
       page: "1",
     });
     navigate(`${basePath}?${sp.toString()}`);
@@ -46,22 +61,17 @@ export function StatTypeToggle({
       aria-label="Stat type"
       className="w-fit flex items-center gap-1 rounded-lg border-2 border-accent bg-background p-1"
     >
-      <button
-        type="button"
-        onClick={() => go("per_game")}
-        aria-pressed={statType === "per_game"}
-        className={`${baseBtn} ${statType === "per_game" ? active : inactive}`}
-      >
-        Averages
-      </button>
-      <button
-        type="button"
-        onClick={() => go("totals")}
-        aria-pressed={statType === "totals"}
-        className={`${baseBtn} ${statType === "totals" ? active : inactive}`}
-      >
-        Totals
-      </button>
+      {OPTIONS.map((option) => (
+        <button
+          key={option.type}
+          type="button"
+          onClick={() => go(option.type)}
+          aria-pressed={statType === option.type}
+          className={`${baseBtn} ${statType === option.type ? active : inactive} cursor-pointer`}
+        >
+          {option.label}
+        </button>
+      ))}
     </div>
   );
 }

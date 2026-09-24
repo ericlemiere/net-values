@@ -50,9 +50,9 @@ export const GLOSSARY: Record<string, string> = {
   // --- basketball-reference advanced ---
   per: "Player Efficiency Rating. A box-score rating set to a league average of 15. Rewards volume and is largely blind to defence",
   tsPct:
-    "True shooting percentage: scoring efficiency counting twos, threes and free throws together",
+    "True shooting percentage: scoring efficiency counting twos, threes and free throws together. From nba.com's possession data from 1996-97 on, basketball-reference before that — the two agree to within a rounding error",
   usgPct:
-    "Usage rate: share of his team's possessions a player finished while on the floor",
+    "Usage rate: share of his team's possessions a player finished while on the floor. From nba.com's counted possessions from 1996-97 on, basketball-reference's pace estimate before that, which runs about half a point higher league-wide",
   ows: "Offensive win shares — wins credited to a player's offence",
   dws: "Defensive win shares — wins credited to a player's defence",
   ws: "Win shares: an estimate of how many of his team's wins a player produced",
@@ -60,6 +60,22 @@ export const GLOSSARY: Record<string, string> = {
   dbpm: "Defensive box plus/minus. Estimated from the box score, which records little of what defence actually is",
   bpm: "Box plus/minus: estimated points added per 100 possessions vs. a league-average player",
   vorp: "Value over replacement player: box plus/minus scaled by playing time, measured against a bench-level baseline",
+
+  // --- nba.com advanced ---
+  // Counted from play-by-play rather than estimated from the box score, which
+  // is why these start in 1996-97 and read "—" for every season before it.
+  poss: "Possessions he was on the floor for, counted from play-by-play",
+  offRating: "Offensive rating: points his team scored per 100 possessions with him on the floor",
+  defRating: "Defensive rating: points his team allowed per 100 possessions with him on the floor",
+  netRating: "Net rating: his team's points scored minus points allowed per 100 possessions with him on the floor",
+  astPct: "Assist percentage: share of his teammates' field goals he assisted while on the floor",
+  astTo: "Assists per turnover",
+  orebPct: "Offensive rebound percentage: share of available offensive rebounds he took down",
+  drebPct: "Defensive rebound percentage: share of available defensive rebounds he took down",
+  rebPct: "Rebound percentage: share of all available rebounds he took down while on the floor",
+  tovPct: "Turnover percentage: turnovers per 100 possessions he used",
+  pace: "Pace: possessions his team played per 48 minutes with him on the floor",
+  pie: "Player Impact Estimate: his share of everything measurable that happened in his games. Roughly 10% is an average starter",
 
   netValueScore:
     "Wins produced above what his pay bought, given how much of the season he was available. 0 means he was paid the going rate; it runs about -7 to +9.",

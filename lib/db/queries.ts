@@ -18,6 +18,7 @@ import {
   playerStatsTotals,
   playerStatsPerGame,
   advancedStats,
+  nbaAdvanced,
   salaries,
   seasons,
   teams,
@@ -322,6 +323,20 @@ export async function getPlayerStatsPerGame(params: ListParams) {
   return getPlayerStatsFrom(playerStatsPerGame, params);
 }
 
+/**
+ * TS% and USG% exist in both sources, so the table shows nba.com's wherever it
+ * has them and falls back to basketball-reference for the pre-1996-97 seasons
+ * nba.com never covered. Sorting has to agree with what's rendered, so it
+ * sorts the same coalesced expression rather than either column alone.
+ *
+ * The two agree on TS% to within a rounding error. They do NOT agree on USG%:
+ * bref estimates team possessions from pace where nba.com counts them, and
+ * bref runs about half a point higher league-wide, so the column steps very
+ * slightly at the 1996-97 boundary. The glossary says so.
+ */
+const coalescedTsPct = sql`coalesce(${nbaAdvanced.tsPct}, ${advancedStats.tsPct})`;
+const coalescedUsgPct = sql`coalesce(${nbaAdvanced.usgPct}, ${advancedStats.usgPct})`;
+
 const advancedSortColumns = {
   name: players.name,
   season: advancedStats.season,
@@ -330,9 +345,10 @@ const advancedSortColumns = {
   age: advancedStats.age,
   gp: advancedStats.gp,
   mp: advancedStats.mp,
+  // basketball-reference's box-score formulas.
   per: advancedStats.per,
-  tsPct: advancedStats.tsPct,
-  usgPct: advancedStats.usgPct,
+  tsPct: coalescedTsPct,
+  usgPct: coalescedUsgPct,
   ows: advancedStats.ows,
   dws: advancedStats.dws,
   ws: advancedStats.ws,
@@ -340,6 +356,20 @@ const advancedSortColumns = {
   dbpm: advancedStats.dbpm,
   bpm: advancedStats.bpm,
   vorp: advancedStats.vorp,
+  // nba.com's possession-based numbers. 1996-97 on only.
+  poss: nbaAdvanced.poss,
+  offRating: nbaAdvanced.offRating,
+  defRating: nbaAdvanced.defRating,
+  netRating: nbaAdvanced.netRating,
+  astPct: nbaAdvanced.astPct,
+  astTo: nbaAdvanced.astTo,
+  orebPct: nbaAdvanced.orebPct,
+  drebPct: nbaAdvanced.drebPct,
+  rebPct: nbaAdvanced.rebPct,
+  tovPct: nbaAdvanced.tovPct,
+  efgPct: nbaAdvanced.efgPct,
+  pace: nbaAdvanced.pace,
+  pie: nbaAdvanced.pie,
 } as const;
 
 export type AdvancedSortKey = keyof typeof advancedSortColumns;
@@ -377,9 +407,41 @@ export async function getAdvancedStats(params: ListParams) {
       dbpm: advancedStats.dbpm,
       bpm: advancedStats.bpm,
       vorp: advancedStats.vorp,
+      // Both sources' TS%/USG% travel to the caller rather than a coalesce
+      // expression: drizzle decodes a numeric COLUMN to a number, but the same
+      // value inside a raw sql`` template comes back from pg as a string. The
+      // fallback is one `??` at the render site, where the types still hold.
+      nbaTsPct: nbaAdvanced.tsPct,
+      nbaUsgPct: nbaAdvanced.usgPct,
+      poss: nbaAdvanced.poss,
+      offRating: nbaAdvanced.offRating,
+      defRating: nbaAdvanced.defRating,
+      netRating: nbaAdvanced.netRating,
+      astPct: nbaAdvanced.astPct,
+      astTo: nbaAdvanced.astTo,
+      orebPct: nbaAdvanced.orebPct,
+      drebPct: nbaAdvanced.drebPct,
+      rebPct: nbaAdvanced.rebPct,
+      tovPct: nbaAdvanced.tovPct,
+      efgPct: nbaAdvanced.efgPct,
+      pace: nbaAdvanced.pace,
+      pie: nbaAdvanced.pie,
     })
     .from(advancedStats)
     .innerJoin(players, eq(players.id, advancedStats.playerId))
+    /*
+     * LEFT, not inner: advanced_stats starts in 1989-90 and nba.com's
+     * play-by-play only in 1996-97, so an inner join would silently drop
+     * 2,771 seasons off the front of the table. The unmatched rows render as
+     * em dashes in the nba.com columns, which is the honest answer.
+     */
+    .leftJoin(
+      nbaAdvanced,
+      and(
+        eq(nbaAdvanced.playerId, advancedStats.playerId),
+        eq(nbaAdvanced.season, advancedStats.season),
+      ),
+    )
     .orderBy(orderByNullsLast(sortCol, params.dir), asc(players.name))
     .limit(PAGE_SIZE)
     .offset((page - 1) * PAGE_SIZE);

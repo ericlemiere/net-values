@@ -1,13 +1,10 @@
-import { DataTable, type ColumnDef } from "@/components/DataTable";
-import { PlayerLink } from "@/components/PlayerLink";
-import { awardKey, type Award } from "@/lib/awards";
-import { TeamLink } from "@/components/TeamLink";
-import { SeasonLink } from "@/components/SeasonLink";
+import type { ReactNode } from "react";
+import { DataTable } from "@/components/DataTable";
 import { PageHeader } from "@/components/PageHeader";
-import { StatTypeToggle, type StatType } from "@/components/StatTypeToggle";
-import { formatNumber, formatStat } from "@/lib/format";
-import { GLOSSARY } from "@/lib/glossary";
+import { StatTypeToggle } from "@/components/StatTypeToggle";
 import {
+  getAdvancedStats,
+  getAdvancedStatsSeasons,
   getPlayerStatsPerGame,
   getPlayerStatsTotals,
   getStatsSeasons,
@@ -16,235 +13,19 @@ import {
   getAwardsForRows,
 } from "@/lib/db/queries";
 import { parsePosition } from "@/lib/positions";
+import { DEFAULT_SORT, parseStatType } from "@/lib/stat-types";
+import { getAdvancedColumns, getBoxScoreColumns } from "./columns";
 
-type Row = Awaited<ReturnType<typeof getPlayerStatsPerGame>>["rows"][number];
-
-function getColumns(
-  showSeason: boolean,
-  statType: StatType,
-  awards: Map<string, Award[]>,
-): ColumnDef<Row>[] {
-  const mpLabel = statType === "totals" ? "MIN" : "MPG";
-  // Counting stats are fractional per game but whole in a season total, so
-  // "Totals" drops the decimal. Percentages are fractional either way.
-  const stat = statType === "totals" ? formatNumber : formatStat;
-  // The same column means different things in the two views, so the tooltip
-  // has to say which one you're looking at.
-  const per = statType === "totals" ? " Season total." : " Per game.";
-  const note = (key: string) => (GLOSSARY[key] ?? "") + per;
-  return [
-    {
-      key: "name",
-      label: "Name",
-      defaultDir: "asc",
-      render: (r) => <PlayerLink
-          id={r.playerId}
-          name={r.name}
-          awards={awards.get(awardKey(r.playerId, r.season))}
-        />,
-    },
-    ...(showSeason
-      ? [
-          {
-            key: "season",
-            label: "Season",
-            defaultDir: "asc" as const,
-            render: (r: Row) => <SeasonLink season={r.season} />,
-          },
-        ]
-      : []),
-    {
-      key: "team",
-      label: "Team",
-      defaultDir: "asc",
-      render: (r) => <TeamLink abbr={r.team} label={r.teamLabel} />,
-    },
-    {
-      key: "pos",
-      label: "Pos",
-      defaultDir: "asc",
-      render: (r) => r.pos ?? "—",
-    },
-    {
-      key: "age",
-      label: "Age",
-      align: "right",
-      render: (r) => formatNumber(r.age),
-    },
-    {
-      key: "gp",
-      label: "GP",
-      align: "right",
-      render: (r) => formatNumber(r.gp),
-    },
-    {
-      key: "gs",
-      label: "GS",
-      align: "right",
-      render: (r) => formatNumber(r.gs),
-    },
-    // Minutes are the one counting stat that's fractional in a season total:
-    // nba_api reports them to hundredths (3126.87) while the pre-96 bref rows are
-    // whole (3533), so the column rendered ragged — two decimals some years, none
-    // in others. It takes formatStat in both modes rather than following `stat`.
-    {
-      key: "mp",
-      label: mpLabel,
-      align: "right",
-      render: (r) => formatStat(r.mp),
-    },
-    {
-      key: "fgm",
-      description: note("fgm"),
-      label: "FGM",
-      align: "right",
-      render: (r) => stat(r.fgm),
-    },
-    {
-      key: "fga",
-      description: note("fga"),
-      label: "FGA",
-      align: "right",
-      render: (r) => stat(r.fga),
-    },
-    {
-      key: "fgPct",
-      label: "FG%",
-      align: "right",
-      render: (r) => formatStat(r.fgPct),
-    },
-    {
-      key: "fg3m",
-      description: note("fg3m"),
-      label: "3PM",
-      align: "right",
-      render: (r) => stat(r.fg3m),
-    },
-    {
-      key: "fg3a",
-      description: note("fg3a"),
-      label: "3PA",
-      align: "right",
-      render: (r) => stat(r.fg3a),
-    },
-    {
-      key: "fg3Pct",
-      label: "3P%",
-      align: "right",
-      render: (r) => formatStat(r.fg3Pct),
-    },
-    {
-      key: "fg2m",
-      description: note("fg2m"),
-      label: "2PM",
-      align: "right",
-      render: (r) => stat(r.fg2m),
-    },
-    {
-      key: "fg2a",
-      description: note("fg2a"),
-      label: "2PA",
-      align: "right",
-      render: (r) => stat(r.fg2a),
-    },
-    {
-      key: "fg2Pct",
-      label: "2P%",
-      align: "right",
-      render: (r) => formatStat(r.fg2Pct),
-    },
-    {
-      key: "efgPct",
-      label: "eFG%",
-      align: "right",
-      render: (r) => formatStat(r.efgPct),
-    },
-    {
-      key: "ftm",
-      description: note("ftm"),
-      label: "FTM",
-      align: "right",
-      render: (r) => stat(r.ftm),
-    },
-    {
-      key: "fta",
-      description: note("fta"),
-      label: "FTA",
-      align: "right",
-      render: (r) => stat(r.fta),
-    },
-    {
-      key: "ftPct",
-      label: "FT%",
-      align: "right",
-      render: (r) => formatStat(r.ftPct),
-    },
-    {
-      key: "orb",
-      description: note("orb"),
-      label: "OREB",
-      align: "right",
-      render: (r) => stat(r.orb),
-    },
-    {
-      key: "drb",
-      description: note("drb"),
-      label: "DREB",
-      align: "right",
-      render: (r) => stat(r.drb),
-    },
-    {
-      key: "reb",
-      description: note("reb"),
-      label: "REB",
-      align: "right",
-      render: (r) => stat(r.reb),
-    },
-    {
-      key: "ast",
-      description: note("ast"),
-      label: "AST",
-      align: "right",
-      render: (r) => stat(r.ast),
-    },
-    {
-      key: "stl",
-      description: note("stl"),
-      label: "STL",
-      align: "right",
-      render: (r) => stat(r.stl),
-    },
-    {
-      key: "blk",
-      description: note("blk"),
-      label: "BLK",
-      align: "right",
-      render: (r) => stat(r.blk),
-    },
-    {
-      key: "tov",
-      description: note("tov"),
-      label: "TOV",
-      align: "right",
-      render: (r) => stat(r.tov),
-    },
-    {
-      key: "pf",
-      description: note("pf"),
-      label: "PF",
-      align: "right",
-      render: (r) => stat(r.pf),
-    },
-    {
-      key: "pts",
-      description: note("pts"),
-      label: "PTS",
-      align: "right",
-      render: (r) => stat(r.pts),
-    },
-  ];
-}
-
+/**
+ * Every player table on the site, behind one heading and one toggle.
+ *
+ * Averages, Totals and Advanced were three routes and are now three views of
+ * /stats, because they answer the same question about the same players and
+ * splitting them across the nav made you leave the page — and your season,
+ * team and position filters with it — to compare a scoring average against the
+ * efficiency behind it. The toggle carries all three filters across, so the
+ * view changes and the question you were asking doesn't.
+ */
 export default async function StatsPage({
   searchParams,
 }: {
@@ -259,22 +40,76 @@ export default async function StatsPage({
   }>;
 }) {
   const sp = await searchParams;
-  const [seasons, teams] = await Promise.all([getStatsSeasons(), getTeams()]);
+  const statType = parseStatType(sp.type);
+  const advanced = statType === "advanced";
+
+  // The two tables cover the same 37 seasons today, but they're filled by
+  // different backfills and needn't stay in step, so each view offers the
+  // seasons its own table actually holds.
+  const [seasons, teams] = await Promise.all([
+    advanced ? getAdvancedStatsSeasons() : getStatsSeasons(),
+    getTeams(),
+  ]);
+
   const season = sp.season ?? seasons[0] ?? "ALL";
   const team = sp.team ?? "ALL";
   const pos = parsePosition(sp.pos);
-  const sort = sp.sort ?? "pts";
-  const dir = sp.dir === "asc" ? "asc" : "desc";
+  const sort = sp.sort ?? DEFAULT_SORT[statType].sort;
+  const dir: "asc" | "desc" = sp.dir === "asc" ? "asc" : "desc";
   const page = Number(sp.page ?? "1");
-  const statType: StatType = sp.type === "totals" ? "totals" : "per_game";
 
-  const { rows, totalCount } =
-    statType === "totals"
-      ? await getPlayerStatsTotals({ season, team, pos, sort, dir, page })
-      : await getPlayerStatsPerGame({ season, team, pos, sort, dir, page });
+  const params = { season, team, pos, sort, dir, page } as const;
+  // Everything the table needs that doesn't depend on which query ran.
+  const chrome = {
+    basePath: "/stats",
+    seasons,
+    currentSeason: season,
+    teams,
+    currentTeam: team,
+    currentPos: pos,
+    sort,
+    dir,
+    page,
+    pageSize: PAGE_SIZE,
+    extraParams: { type: statType },
+  };
 
-  // Badges for just the rows on this page.
-  const awards = await getAwardsForRows(rows);
+  /*
+   * The branch builds the finished table rather than just the rows: the box
+   * score and the advanced table have different row shapes, and handing
+   * DataTable a union of the two would leave its `columns` and `rowKey`
+   * generics with nothing concrete to bind to.
+   */
+  let table: ReactNode;
+  if (advanced) {
+    const { rows, totalCount } = await getAdvancedStats(params);
+    const awards = await getAwardsForRows(rows);
+    table = (
+      <DataTable
+        {...chrome}
+        columns={getAdvancedColumns(season === "ALL", awards)}
+        rows={rows}
+        rowKey={(r) => r.id}
+        totalCount={totalCount}
+      />
+    );
+  } else {
+    const { rows, totalCount } =
+      statType === "totals"
+        ? await getPlayerStatsTotals(params)
+        : await getPlayerStatsPerGame(params);
+    // Badges for just the rows on this page.
+    const awards = await getAwardsForRows(rows);
+    table = (
+      <DataTable
+        {...chrome}
+        columns={getBoxScoreColumns(season === "ALL", statType, awards)}
+        rows={rows}
+        rowKey={(r) => r.id}
+        totalCount={totalCount}
+      />
+    );
+  }
 
   return (
     <div className="p-6 max-w-350 mx-auto text-white">
@@ -292,23 +127,7 @@ export default async function StatsPage({
           />
         }
       />
-      <DataTable
-        basePath="/stats"
-        columns={getColumns(season === "ALL", statType, awards)}
-        rows={rows}
-        rowKey={(r) => r.id}
-        seasons={seasons}
-        currentSeason={season}
-        teams={teams}
-        currentTeam={team}
-        currentPos={pos}
-        sort={sort}
-        dir={dir}
-        page={page}
-        totalCount={totalCount}
-        pageSize={PAGE_SIZE}
-        extraParams={{ type: statType }}
-      />
+      {table}
     </div>
   );
 }

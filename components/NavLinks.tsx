@@ -9,8 +9,9 @@ import { usePathname } from "next/navigation";
 export const NAV_LINKS = [
   { href: "/salaries", label: "Salaries" },
   { href: "/teams", label: "Teams" },
+  // Advanced stats live behind the toggle on /stats rather than taking a nav
+  // slot of their own; /advanced-stats redirects there.
   { href: "/stats", label: "Stats" },
-  { href: "/advanced-stats", label: "Advanced Stats" },
   { href: "/seasons", label: "Seasons" },
   { href: "/mvp", label: "Awards" },
   { href: "/net-value", label: "Net Value" },

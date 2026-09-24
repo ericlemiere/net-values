@@ -63,7 +63,7 @@ export default function Home() {
         A way to evaluate an NBA player&apos;s Net Value based on their
         production on the court and salary.
       </p>
-      <nav className="flex flex-col md:flex md:flex-row gap-3 md:gap-4">
+      <nav className="flex flex-col gap-3 md:hidden">
         {NAV_LINKS.map((link, i) => (
           <Link
             key={link.href}
@@ -78,7 +78,7 @@ export default function Home() {
       <img
         src="/tnv-transparent.png"
         alt="The Net Values Logo"
-        className="home-in block absolute bottom-0 left-4 md:hidden mb-4 w-[40vw]"
+        className="home-in block absolute bottom-0 left-4 md:hidden mb-4 w-40"
         style={{ "--i": NAV_LINKS.length + 3 } as React.CSSProperties}
       />
     </div>

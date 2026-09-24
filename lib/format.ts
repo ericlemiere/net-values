@@ -49,3 +49,17 @@ export function formatScore(value: number | null): string {
   if (value === null || value === undefined) return "—";
   return `${value > 0 ? "+" : value < 0 ? "\u2212" : ""}${Math.abs(value).toFixed(2)}`;
 }
+
+/**
+ * PIE, shown the way nba.com shows it.
+ *
+ * nba_api hands PIE over as a fraction — an average season is 0.083 — and the
+ * column stores it that way, so rendering it like any other stat would round
+ * every player on the page to "0.1". Multiplying by 100 puts it back on the
+ * 0-100 scale the rest of the rate stats already use, where an average starter
+ * reads about 10.
+ */
+export function formatPie(value: number | null): string {
+  if (value === null || value === undefined) return "—";
+  return (value * 100).toFixed(1);
+}

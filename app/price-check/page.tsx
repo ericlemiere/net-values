@@ -2,7 +2,7 @@ import Link from "next/link";
 import { PageHeader } from "@/components/PageHeader";
 import { PlayerHeadshot } from "@/components/PlayerHeadshot";
 import {
-  AddPlayerButton,
+  AddPlayerSlot,
   PriceCard,
   PriceLinkToggle,
   PriceSeasonFilter,
@@ -207,21 +207,20 @@ export default async function PriceCheckPage({
             {b ? (
               <PlayerCard slot={b} index={2} state={state} teams={teams} view={view} />
             ) : (
-              <div className="flex min-h-64 flex-col items-center justify-center gap-3 rounded-lg border-2 border-dashed border-white/20 p-6 text-center">
-                <p className="text-sm text-white/50">
-                  Compare him with someone else.
-                </p>
-                <AddPlayerButton state={state} slot={2} />
-              </div>
+              <AddPlayerSlot
+                state={state}
+                slot={2}
+                prompt="Compare him with someone else."
+              />
             )}
         </div>
       ) : (
-        <div className="flex min-h-64 w-full max-w-2xl flex-col items-center justify-center gap-3 rounded-lg border-2 border-dashed border-white/20 p-6 text-center">
-          <p className="text-sm text-white/50">
-            Pick a player to see what he cost per game, point, rebound and more.
-          </p>
-          <AddPlayerButton state={state} slot={1} />
-        </div>
+        <AddPlayerSlot
+          state={state}
+          slot={1}
+          prompt="Pick a player to see what he cost per game, point, rebound and more."
+          className="w-full max-w-2xl"
+        />
       )}
     </div>
   );

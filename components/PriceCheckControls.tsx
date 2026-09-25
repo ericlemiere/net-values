@@ -1,16 +1,10 @@
 "use client";
 
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  type ReactNode,
-} from "react";
-import { createPortal, flushSync } from "react-dom";
+import { useCallback, useRef, useState, type ReactNode } from "react";
+import { flushSync } from "react-dom";
 import { useTableNav } from "./TableNav";
 import { FilterDropdown } from "./FilterDropdown";
-import { SearchModal } from "./SearchModal";
+import { SiteSearch } from "./SiteSearch";
 import { Spinner } from "./Spinner";
 import {
   PRICE_STAT_KEYS,
@@ -29,9 +23,6 @@ import {
  */
 
 type Slot = 1 | 2;
-
-/** Same length as `.search-modal.is-closing` — see SiteHeader. */
-const SEARCH_EXIT_MS = 160;
 
 function usePriceNav() {
   const { navigate } = useTableNav();
@@ -74,7 +65,7 @@ export function PriceCard({
         // Covers the card so a second change can't queue behind the first.
         <div className="absolute inset-0 grid place-items-center">
           <span className="flex items-center gap-3 rounded-lg border-2 border-accent bg-black/90 px-4 py-2 text-sm text-white">
-            <Spinner />
+            <Spinner size="1.5em" />
             Loading
           </span>
         </div>
@@ -84,88 +75,127 @@ export function PriceCard({
 }
 
 /**
- * Opens the site search as a player picker. The modal is portaled to <body>
- * because the page column sits in its own stacking context below the header,
- * which would otherwise draw over the scrim.
+ * An empty player slot. "Add player" turns the slot itself into the player
+ * search, so the picker opens where the new card will appear rather than over
+ * the whole page.
  */
-export function AddPlayerButton({
+export function AddPlayerSlot({
   state,
   slot,
+  prompt,
   className = "",
 }: {
   state: PriceCheckState;
   slot: Slot;
+  prompt: string;
   className?: string;
 }) {
   const go = usePriceNav();
-  const [search, setSearch] = useState<"closed" | "open" | "closing">("closed");
+  const [mode, setMode] = useState<"idle" | "search" | "adding">("idle");
   const inputRef = useRef<HTMLInputElement>(null);
-  const exitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(
-    () => () => {
-      if (exitTimer.current) clearTimeout(exitTimer.current);
-    },
-    [],
-  );
 
   function open() {
-    if (exitTimer.current) clearTimeout(exitTimer.current);
     // flushSync so the field exists to focus inside the tap — iOS only raises
     // the keyboard for a focus() that happens during the gesture.
-    flushSync(() => setSearch("open"));
+    flushSync(() => setMode("search"));
     inputRef.current?.focus();
   }
 
-  const close = useCallback(() => {
-    setSearch((s) => (s === "open" ? "closing" : s));
-    if (exitTimer.current) clearTimeout(exitTimer.current);
-    exitTimer.current = setTimeout(() => setSearch("closed"), SEARCH_EXIT_MS);
-  }, []);
-
   const pick = useCallback(
-    (player: { id: number }) =>
+    (player: { id: number }) => {
+      setMode("adding");
       // A new player starts on his own default season, not the last one's.
       go(
         slot === 1
           ? { ...state, p1: player.id, s1: null }
           : { ...state, p2: player.id, s2: null },
-      ),
+      );
+    },
     [go, slot, state],
   );
 
+  // Escape clears the results list first (SiteSearch handles that), and only
+  // closes the search once there's no list left to clear.
+  function onKeyDown(e: React.KeyboardEvent) {
+    if (
+      e.key === "Escape" &&
+      inputRef.current?.getAttribute("aria-expanded") !== "true"
+    ) {
+      setMode("idle");
+    }
+  }
+
   return (
-    <>
-      <button
-        type="button"
-        onClick={open}
-        aria-haspopup="dialog"
-        className={`inline-flex cursor-pointer items-center justify-center gap-2 rounded-md border-2 border-accent bg-accent px-4 py-2 text-sm font-semibold text-accent-foreground transition-colors hover:bg-transparent hover:text-accent ${className}`.trim()}
-      >
-        <svg
-          viewBox="0 0 24 24"
-          aria-hidden="true"
-          className="h-4 w-4"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2.5"
-          strokeLinecap="round"
-        >
-          <path d="M12 5v14M5 12h14" />
-        </svg>
-        Add player
-      </button>
-      {search !== "closed" &&
-        createPortal(
-          <SearchModal
-            closing={search === "closing"}
-            onClose={close}
+    <div
+      className={`flex min-h-64 flex-col gap-3 rounded-lg border-2 border-dashed border-white/20 p-6 ${
+        mode === "search"
+          ? "justify-start"
+          : "items-center justify-center text-center"
+      } ${className}`.trim()}
+    >
+      {mode === "idle" && (
+        <>
+          <p className="text-sm text-white/50">{prompt}</p>
+          <button
+            type="button"
+            onClick={open}
+            className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-md border-2 border-accent bg-accent px-4 py-2 text-sm font-semibold text-accent-foreground transition-colors hover:bg-transparent hover:text-accent"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+              className="h-4 w-4"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+            >
+              <path d="M12 5v14M5 12h14" />
+            </svg>
+            Add player
+          </button>
+        </>
+      )}
+      {mode === "search" && (
+        <div role="search" aria-label="Add a player" onKeyDown={onKeyDown}>
+          <div className="mb-2 flex items-center justify-between gap-4">
+            <span className="text-xs font-medium uppercase tracking-wide text-white/40">
+              Add player
+            </span>
+            <button
+              type="button"
+              onClick={() => setMode("idle")}
+              aria-label="Cancel"
+              className="-mr-1 -mt-1 inline-flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded text-white/50 transition-colors hover:text-accent"
+            >
+              <svg
+                viewBox="0 0 24 24"
+                aria-hidden="true"
+                className="h-4.5 w-4.5"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+              >
+                <path d="M6 6l12 12M18 6L6 18" />
+              </svg>
+            </button>
+          </div>
+          <SiteSearch
+            className="w-full"
+            inputClassName="px-4 py-3 rounded-lg"
             inputRef={inputRef}
             onSelectPlayer={pick}
-          />,
-          document.body,
-        )}
-    </>
+          />
+        </div>
+      )}
+      {mode === "adding" && (
+        <span className="flex items-center gap-3 text-sm text-white/70">
+          <Spinner size="1.5em" />
+          Loading
+        </span>
+      )}
+    </div>
   );
 }
 

@@ -19,7 +19,7 @@ export function SearchTrigger({
       onClick={onOpen}
       aria-label="Search players or teams"
       aria-haspopup="dialog"
-      className={`inline-flex shrink-0 cursor-pointer items-center justify-center rounded-md border border-white/30 bg-white/5 text-white transition-colors hover:border-accent hover:bg-white/10 ${className}`.trim()}
+      className={`inline-flex shrink-0 cursor-pointer items-center justify-center rounded-md border border-white/30 bg-background text-white transition-colors hover:border-accent hover:bg-white/10 ${className}`.trim()}
     >
       <svg
         viewBox="0 0 24 24"

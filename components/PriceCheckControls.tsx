@@ -127,7 +127,7 @@ export function AddPlayerSlot({
 
   return (
     <div
-      className={`flex min-h-64 flex-col gap-3 rounded-lg border-2 border-dashed border-white/20 p-6 ${
+      className={`flex min-h-64 flex-col gap-3 rounded-lg border-2 border-dashed border-white/20 bg-background-box/90 p-6 ${
         mode === "search"
           ? "justify-start"
           : "items-center justify-center text-center"

@@ -31,7 +31,7 @@ const HOME_LINKS = NAV_LINKS.flatMap((link) =>
 // On short phones (the max-height variant) the grid tightens up so the logo
 // under it still fits on screen.
 const cardClass =
-  "whitespace-nowrap rounded-md border border-accent bg-background-box/90 px-2 md:px-4 py-1.5 [@media(max-height:740px)]:py-1 md:py-2 transition-colors hover:border-accent hover:bg-accent hover:text-black";
+  "flex justify-center items-center text-center text-md md:text-lg font-bold rounded-md border border-accent bg-background-box/90 px-1 py-1.75 md:py-4 transition-colors hover:border-accent hover:bg-accent hover:text-black";
 
 export function HomeIntro() {
   const rootRef = useRef<HTMLDivElement>(null);
@@ -55,35 +55,35 @@ export function HomeIntro() {
   return (
     <div
       ref={rootRef}
-      className="home-intro home-intro-wait flex flex-1 flex-col md:items-center md:justify-center p-6 md:text-center"
+      className="home-intro home-intro-wait flex flex-1 flex-col p-6 md:mt-12"
     >
-      {/* The source is 1254px square; next/image serves it at display size,
-          which is the difference between ~650KB and a few dozen on the home
-          page's largest paint. */}
-      <Image
-        src="/tnv-transparent.png"
+      {/* A pre-sized copy (640px, 2x the largest display) served as-is:
+          Vercel's image optimizer answers 402 once the plan's quota runs out,
+          which left the logo blank, so it doesn't go through /_next/image. */}
+      {/* <Image
+        src="/tnv-transparent-640.png"
         alt="The Net Values Logo"
-        width={1254}
-        height={1254}
-        sizes="320px"
+        width={640}
+        height={640}
+        unoptimized
         fetchPriority="high"
         className="home-in hidden md:block mb-4 h-auto w-[50vw] max-w-80"
         style={{ "--i": 0 } as React.CSSProperties}
-      />
+      /> */}
       <h1
-        className="home-in mb-3 text-4xl font-semibold tracking-tight"
+        className="home-in mb-3 text-4xl md:text-6xl font-semibold tracking-tight"
         style={{ "--i": 1 } as React.CSSProperties}
       >
         The Net Values
       </h1>
       <p
-        className="home-in text-white/80 mb-4 md:mb-8 max-w-md"
+        className="home-in text-white/80 mb-4 md:mb-8 max-w-xl"
         style={{ "--i": 2 } as React.CSSProperties}
       >
         A way to evaluate an NBA player&apos;s Net Value based on their
         production on the court and salary.
       </p>
-      <nav className="grid grid-cols-2 gap-3 [@media(max-height:740px)]:gap-2 md:hidden">
+      <nav className="grid grid-cols-2 gap-3 md:gap-4 max-w-xl md:mt-8">
         {HOME_LINKS.map((link, i) => (
           <Link
             key={link.href}
@@ -102,15 +102,19 @@ export function HomeIntro() {
           a tall screen) and shrinks to a 5rem floor on a short one, and the
           logo is sized off the slot, so it fits the screen instead of making
           the page scroll to reach it. */}
-      <div className="relative mt-auto -mb-2 -ml-2 min-h-24 max-h-44 flex-1 md:hidden">
+      <div className="relative mt-auto -mb-2 -ml-2 min-h-24 max-h-44 flex-1">
         <Image
-          src="/tnv-transparent.png"
+          src="/tnv-transparent-640.png"
           alt="The Net Values Logo"
-          width={1254}
-          height={1254}
-          sizes="160px"
+          width={640}
+          height={640}
+          unoptimized
           className="home-in absolute bottom-0 left-0 h-[calc(100%-1rem)] w-auto"
-          style={{ "--i": Math.ceil(HOME_LINKS.length / 2) + 3 } as React.CSSProperties}
+          style={
+            {
+              "--i": Math.ceil(HOME_LINKS.length / 2) + 3,
+            } as React.CSSProperties
+          }
         />
       </div>
     </div>

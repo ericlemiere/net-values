@@ -56,6 +56,19 @@ body {
   max-width: 100%;
 }
 
+/*
+ * Same-page anchor links glide rather than jump, so the reader sees which way
+ * the page moved. Page-to-page navigation still lands instantly: the
+ * `data-scroll-behavior="smooth"` on <html> in layout.tsx tells Next to switch
+ * this off while it scrolls a new page to the top. Reduced motion keeps the
+ * jump.
+ */
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
 body {
   background: var(--background);
   color: var(--foreground);

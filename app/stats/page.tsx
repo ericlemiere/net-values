@@ -16,6 +16,14 @@ import { parsePosition } from "@/lib/positions";
 import { DEFAULT_SORT, parseStatType } from "@/lib/stat-types";
 import { getAdvancedColumns, getBoxScoreColumns } from "./columns";
 import { PAGE_COLUMN } from "@/lib/layout";
+import { pageMetadata } from "@/lib/site";
+
+export const metadata = pageMetadata({
+  title: "NBA Player Stats",
+  description:
+    "NBA player stats for every season since 1990-91: per-game averages, season totals and advanced metrics like TS% and usage, filterable by season, team and position.",
+  path: "/stats",
+});
 
 /**
  * Every player table on the site, behind one heading and one toggle.

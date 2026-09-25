@@ -1,6 +1,8 @@
-import { Suspense } from "react";
+import { Suspense, type ReactNode } from "react";
 import { notFound } from "next/navigation";
 import { SimpleTable } from "@/components/SimpleTable";
+import { InfoButton } from "@/components/InfoButton";
+import { TeamNetValueText } from "@/components/TeamNetValueText";
 import { PlayerLink } from "@/components/PlayerLink";
 import { SeasonLink } from "@/components/SeasonLink";
 import { awardKey, type Award } from "@/lib/awards";
@@ -27,6 +29,7 @@ import {
   type TeamNetValue,
 } from "@/lib/db/queries";
 import { PAGE_COLUMN } from "@/lib/layout";
+import { SITE_URL, jsonLd, pageMetadata } from "@/lib/site";
 
 type HistoryRow = Awaited<ReturnType<typeof getTeamHistory>>[number] & {
   netValue?: TeamNetValue;
@@ -328,16 +331,22 @@ function Stat({
   label,
   value,
   caption,
+  info,
 }: {
   label: string;
   value: string;
   caption?: string;
+  /** A help button shown beside the label, e.g. an `InfoButton`. */
+  info?: ReactNode;
 }) {
   return (
     <div className="w-full rounded-lg border-2 border-accent bg-background-box px-3 py-2 md:w-auto md:px-4">
       <div className="flex items-center justify-between gap-3 md:block">
         <div className="text-sm text-white/60">
-          {label}
+          <span className="inline-flex items-center gap-1.5">
+            {label}
+            {info}
+          </span>
           <div className="text-xs text-white/40 md:hidden">{caption}</div>
         </div>
         <div className="shrink-0 text-right font-mono text-lg font-semibold tabular-nums text-accent md:text-left md:text-xl">
@@ -350,6 +359,21 @@ function Stat({
       </div>
     </div>
   );
+}
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ abbr: string }>;
+}) {
+  const team = await getTeamByAbbr((await params).abbr);
+  if (!team) return { title: "Team not found" };
+  return pageMetadata({
+    title: `${team.name} Payroll, Roster & Net Value`,
+    description: `${team.name} season by season: payroll, record, roster salaries and the Net Value of every player, showing how much the team got for its money.`,
+    // Lookups are case-insensitive, so /teams/lal and /teams/LAL are one page.
+    path: `/teams/${team.abbr}`,
+  });
 }
 
 export default async function TeamPage({
@@ -398,6 +422,20 @@ export default async function TeamPage({
 
   return (
     <div className={PAGE_COLUMN}>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={jsonLd({
+          "@context": "https://schema.org",
+          "@type": "SportsTeam",
+          name: team.name,
+          sport: "Basketball",
+          url: `${SITE_URL}/teams/${team.abbr}`,
+          memberOf: {
+            "@type": "SportsOrganization",
+            name: "National Basketball Association",
+          },
+        })}
+      />
       <h1 className="min-w-0 wrap-break-word text-2xl font-semibold tracking-tight">
         {team.name}
       </h1>
@@ -432,6 +470,11 @@ export default async function TeamPage({
         {latestNetValue && (
           <Stat
             label="Team Net Value"
+            info={
+              <InfoButton title="Team Net Value">
+                <TeamNetValueText />
+              </InfoButton>
+            }
             value={formatScore(latestNetValue.total)}
             caption={`#${latestNetValue.rank} of ${latestNetValue.teams} for ${latestNetValue.season}`}
           />

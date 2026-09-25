@@ -33,6 +33,7 @@ import {
 } from "@/lib/db/queries";
 import { POSITION_NAMES, type Position } from "@/lib/positions";
 import { PAGE_COLUMN, TABLE_BREAKOUT } from "@/lib/layout";
+import { SITE_URL, jsonLd, pageMetadata } from "@/lib/site";
 
 /** Percentage points either side of the anchor season that still count as a comp. */
 const COMP_TOLERANCE = 0.5;
@@ -538,6 +539,34 @@ function pickAnchor(rows: SalRow[], salaryId: number | null) {
   return played[played.length - 1] ?? usable[usable.length - 1] ?? null;
 }
 
+function headshotUrl(nbaPersonId: number | null) {
+  return nbaPersonId
+    ? `https://cdn.nba.com/headshots/nba/latest/1040x760/${nbaPersonId}.png`
+    : null;
+}
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const playerId = Number((await params).id);
+  const player = Number.isInteger(playerId)
+    ? await getPlayerById(playerId)
+    : undefined;
+  if (!player) return { title: "Player not found" };
+  const headshot = headshotUrl(player.nbaPersonId);
+  return pageMetadata({
+    title: `${player.name} Salary, Stats & Net Value`,
+    description: `${player.name}'s NBA contract history, career stats and Net Value by season: what he produced on the court against what his salary paid for, with salary comparisons.`,
+    // The ?salary= comp anchor is a view of this page, not a page of its own.
+    path: `/players/${player.id}`,
+    image: headshot
+      ? { url: headshot, width: 1040, height: 760, alt: player.name }
+      : undefined,
+  });
+}
+
 export default async function PlayerPage({
   params,
   searchParams,
@@ -653,8 +682,21 @@ export default async function PlayerPage({
       ? ` \u2014 closest ${comps.rows.length} of ${comps.totalCount}`
       : "";
 
+  const headshot = headshotUrl(player.nbaPersonId);
+
   return (
     <div className={PAGE_COLUMN}>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={jsonLd({
+          "@context": "https://schema.org",
+          "@type": "Person",
+          name: player.name,
+          url: `${SITE_URL}/players/${player.id}`,
+          jobTitle: "Basketball player",
+          ...(headshot && { image: headshot }),
+        })}
+      />
       <div className="mb-6 flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
         <div className="flex min-w-0 items-center gap-4">
           <PlayerHeadshot nbaPersonId={player.nbaPersonId} name={player.name} />

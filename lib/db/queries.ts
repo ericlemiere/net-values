@@ -1,3 +1,4 @@
+import { cache } from "react";
 import {
   and,
   asc,
@@ -899,13 +900,14 @@ export async function getTeamsForSeason(
 
 // ---- /teams/[abbr] ----
 
-export async function getTeamByAbbr(abbr: string) {
+// Cached per request: generateMetadata and the page both ask for it.
+export const getTeamByAbbr = cache(async (abbr: string) => {
   const rows = await db
     .select({ id: teams.id, abbr: teams.abbr, name: teams.name })
     .from(teams)
     .where(eq(teams.abbr, abbr.toUpperCase()));
   return rows[0];
-}
+});
 
 /** Every season on file for one team, newest first. */
 export async function getTeamHistory(teamId: number) {
@@ -1313,7 +1315,8 @@ export async function getNetValueExamples() {
 
 // ---- Player detail page: full career log, no filtering/pagination ----
 
-export async function getPlayerById(playerId: number) {
+// Cached per request: generateMetadata and the page both ask for it.
+export const getPlayerById = cache(async (playerId: number) => {
   const rows = await db
     .select({
       id: players.id,
@@ -1323,7 +1326,7 @@ export async function getPlayerById(playerId: number) {
     .from(players)
     .where(eq(players.id, playerId));
   return rows[0];
-}
+});
 
 async function getPlayerCareerStatsFrom(
   t: typeof playerStatsTotals | typeof playerStatsPerGame,
@@ -1969,13 +1972,14 @@ export async function getPlayerAwards(playerId: number): Promise<PlayerAward[]> 
 }
 
 /** Seasons that have any award on record, newest first — the awards page filter. */
-export async function getAwardSeasons() {
+// Cached per request: generateMetadata and the page both ask for it.
+export const getAwardSeasons = cache(async () => {
   const rows = await db
     .selectDistinct({ season: playerAwards.season })
     .from(playerAwards)
     .orderBy(desc(playerAwards.season));
   return rows.map((r) => r.season);
-}
+});
 
 export interface AwardBallotRow {
   playerId: number;
@@ -2186,4 +2190,25 @@ export async function getSeasonNetValueLeaders(season: string) {
       .limit(10),
   ]);
   return { top, bottom };
+}
+
+/**
+ * Every player and team page worth listing in the sitemap. Only players with a
+ * contract or a stat line on file: a bare row in `players` renders a page with
+ * nothing on it, which is not something to ask a search engine to index.
+ */
+export async function getSitemapEntries() {
+  const [playerRows, teamRows] = await Promise.all([
+    db.execute<{ id: number }>(sql`
+      SELECT id FROM ${players} p
+      WHERE EXISTS (SELECT 1 FROM ${salaries} s WHERE s.player_id = p.id)
+         OR EXISTS (SELECT 1 FROM ${playerStatsTotals} ps WHERE ps.player_id = p.id)
+      ORDER BY id
+    `),
+    db.select({ abbr: teams.abbr }).from(teams).orderBy(asc(teams.abbr)),
+  ]);
+  return {
+    playerIds: playerRows.rows.map((r) => Number(r.id)),
+    teamAbbrs: teamRows.map((r) => r.abbr),
+  };
 }

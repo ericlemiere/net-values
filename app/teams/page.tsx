@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { PageHeader } from "@/components/PageHeader";
+import { InfoButton } from "@/components/InfoButton";
+import { TeamNetValueText } from "@/components/TeamNetValueText";
 import { SimpleTable } from "@/components/SimpleTable";
 import { TeamSeasonFilter } from "@/components/TeamSeasonFilter";
 import { TableOverlay } from "@/components/TableNav";
@@ -12,6 +14,17 @@ import {
   type TeamSeasonRow,
 } from "@/lib/db/queries";
 import { PAGE_COLUMN } from "@/lib/layout";
+import { pageMetadata } from "@/lib/site";
+
+export const metadata = pageMetadata({
+  title: "NBA Teams",
+  description:
+    "Every NBA team by season: payroll, record, playoff appearances and the roster's combined Net Value, showing which front offices got the most for their money.",
+  path: "/teams",
+});
+
+const BANNER =
+  "inline-flex max-w-full flex-wrap items-baseline justify-center gap-x-3 gap-y-1 rounded-lg border-2 border-accent bg-background px-2 py-2 md:justify-start md:px-4";
 
 const columns: ColumnDef<TeamSeasonRow>[] = [
   {
@@ -129,22 +142,52 @@ export default async function TeamsPage({
   // Only meaningful once payrolls are on file for the season.
   const withPayroll = rows.filter((r) => r.payroll !== null);
   const totalPayroll = withPayroll.reduce((sum, r) => sum + r.payroll!, 0);
+  // The season's best Team NV. Null for a season nobody has played yet, when
+  // every team's figure is still empty.
+  const bestNetValue = rows.reduce<TeamSeasonRow | null>(
+    (best, r) =>
+      r.netValue !== null && (best === null || r.netValue > best.netValue!)
+        ? r
+        : best,
+    null,
+  );
 
   return (
     <div className={PAGE_COLUMN}>
       <PageHeader
         title="Teams"
         meta={
-          leagueCap !== null && (
-            <div className="inline-flex max-w-full flex-wrap items-baseline justify-center gap-x-3 gap-y-1 rounded-lg border-2 border-accent bg-background px-2 py-2 md:justify-start md:px-4">
-              <span className="text-sm text-white/60">
-                {season} League Salary Cap
-              </span>
-              <span className="font-mono font-semibold tabular-nums text-accent md:text-lg">
-                {formatCurrency(leagueCap)}
-              </span>
-            </div>
-          )
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
+            {leagueCap !== null && (
+              <div className={BANNER}>
+                <span className="text-sm text-white/60">
+                  {season} League Salary Cap
+                </span>
+                <span className="font-mono font-semibold tabular-nums text-accent md:text-lg">
+                  {formatCurrency(leagueCap)}
+                </span>
+              </div>
+            )}
+            {bestNetValue && (
+              <div className={BANNER}>
+                <span className="inline-flex items-center gap-1.5 text-sm text-white/60">
+                  {season} Best Team NV
+                  <InfoButton title="Team Net Value">
+                    <TeamNetValueText />
+                  </InfoButton>
+                </span>
+                <Link
+                  href={`/teams/${bestNetValue.abbr}`}
+                  className="text-sm font-medium text-white hover:underline"
+                >
+                  {bestNetValue.eraName ?? bestNetValue.name}
+                </Link>
+                <span className="font-mono font-semibold tabular-nums text-accent md:text-lg">
+                  {formatScore(bestNetValue.netValue)} NVPs
+                </span>
+              </div>
+            )}
+          </div>
         }
       />
       {/* Stacked on a phone so the count chip keeps its own line instead of

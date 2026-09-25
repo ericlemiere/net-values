@@ -22,6 +22,14 @@ import {
 } from "@/lib/db/queries";
 import { parsePosition } from "@/lib/positions";
 import { PAGE_COLUMN } from "@/lib/layout";
+import { pageMetadata } from "@/lib/site";
+
+export const metadata = pageMetadata({
+  title: "NBA Salaries",
+  description:
+    "Every NBA player salary since 1990-91 with team payroll, share of the salary cap, deserved pay and Net Value, showing who was overpaid and who was a bargain.",
+  path: "/salaries",
+});
 
 type Row = Awaited<ReturnType<typeof getSalaries>>["rows"][number];
 
@@ -205,8 +213,10 @@ export default async function SalariesPage({
   const season = sp.season ?? seasons[0] ?? "ALL";
   const team = sp.team ?? "ALL";
   const pos = parsePosition(sp.pos);
-  const sort = sp.sort ?? "name";
-  const dir = sp.dir === "desc" ? "desc" : "asc";
+  // Highest paid first. Every sort link carries its own dir, so defaulting to
+  // desc here only decides the unsorted landing view.
+  const sort = sp.sort ?? "salary";
+  const dir: "asc" | "desc" = sp.dir === "asc" ? "asc" : "desc";
   const page = Number(sp.page ?? "1");
 
   // Null when season is "ALL" — a single cap figure would be meaningless

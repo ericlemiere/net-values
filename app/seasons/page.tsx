@@ -26,12 +26,33 @@ import {
   type SeasonNetValueRow,
 } from "@/lib/db/queries";
 import { PAGE_COLUMN } from "@/lib/layout";
+import { pageMetadata } from "@/lib/site";
 
-export const metadata = {
-  title: "Seasons - The Net Values",
-  description:
-    "A snapshot of every NBA season: the champion, every award, and the best and worst Net Values of the year.",
-};
+/**
+ * Each season is its own page as far as a search engine is concerned, so it
+ * gets its own title and canonical. The bare /seasons shows the latest one but
+ * stays canonical to itself, since which season that is moves every year.
+ */
+export async function generateMetadata({
+  searchParams,
+}: {
+  searchParams: Promise<{ season?: string }>;
+}) {
+  const [sp, seasons] = await Promise.all([searchParams, getAwardSeasons()]);
+  const season = sp.season && seasons.includes(sp.season) ? sp.season : null;
+  if (!season)
+    return pageMetadata({
+      title: "NBA Seasons",
+      description:
+        "A snapshot of every NBA season: the champion, every award, and the best and worst Net Values of the year.",
+      path: "/seasons",
+    });
+  return pageMetadata({
+    title: `${season} NBA Season`,
+    description: `The ${season} NBA season at a glance: the champion, MVP and every other award, the voting, and the players who most outperformed and underperformed their contracts.`,
+    path: `/seasons?season=${encodeURIComponent(season)}`,
+  });
+}
 
 /**
  * The page reads top to bottom as the season itself: who won it, who was worth

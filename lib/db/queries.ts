@@ -14,6 +14,7 @@ import {
 import { alias } from "drizzle-orm/pg-core";
 import { db } from "./index";
 import { awardKey, type AwardCode } from "@/lib/awards";
+import type { PriceStat } from "@/lib/price-check";
 import {
   players,
   playerStatsTotals,
@@ -2210,5 +2211,86 @@ export async function getSitemapEntries() {
   return {
     playerIds: playerRows.rows.map((r) => Number(r.id)),
     teamAbbrs: teamRows.map((r) => r.abbr),
+  };
+}
+
+/* ----------------------------------------------------------- price check -- */
+
+/**
+ * Each /price-check stat as SQL over one season's totals (`t`) and net value
+ * (`nv`) row. The page computes the same figures in JS for the player on
+ * screen; these exist so the league around him can be ranked on the same
+ * terms.
+ */
+const PRICE_STAT_SQL: Record<PriceStat, SQL> = {
+  gp: sql`t.gp`,
+  mp: sql`t.mp`,
+  sec: sql`t.mp * 60`,
+  pts: sql`t.pts`,
+  reb: sql`t.reb`,
+  orb: sql`t.orb`,
+  ast: sql`t.ast`,
+  stl: sql`t.stl`,
+  blk: sql`t.blk`,
+  fg3m: sql`t.fg3m`,
+  ftm: sql`t.ftm`,
+  nvp: sql`nv.production`,
+  tov: sql`t.tov`,
+  pf: sql`t.pf`,
+  miss: sql`t.fga - t.fgm`,
+};
+
+export interface PriceRank {
+  /** 1 = the fewest dollars per stat in the league. Null when he isn't in the
+   *  pool: no salary, or none of this stat to divide by. */
+  rank: number | null;
+  /** Everyone who was paid and recorded at least one of this stat. */
+  pool: number;
+  /** The middle of that pool, in dollars per stat. */
+  median: number | null;
+}
+
+/**
+ * Where one player's dollars-per-stat sits in his season.
+ *
+ * The pool is every player with a salary and at least one of the stat, so a
+ * player with no blocks is left out rather than dividing by zero. Salary is
+ * net_values' whole-season figure — what the player cost the league, buyouts
+ * included — which is the same number the page shows him being paid.
+ */
+export async function getPriceRank(
+  playerId: number,
+  season: string,
+  stat: PriceStat,
+): Promise<PriceRank> {
+  const expr = PRICE_STAT_SQL[stat];
+  const rows = await db.execute(sql`
+    WITH pool AS (
+      SELECT nv.player_id, nv.salary::float8 / (${expr})::float8 AS ratio
+      FROM ${netValues} nv
+      JOIN ${playerStatsTotals} t
+        ON t.player_id = nv.player_id AND t.season = nv.season
+      WHERE nv.season = ${season}
+        AND nv.salary > 0
+        AND (${expr}) > 0
+    ),
+    me AS (SELECT ratio FROM pool WHERE player_id = ${playerId})
+    SELECT
+      (SELECT count(*) FROM pool)::int AS pool,
+      (SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY ratio) FROM pool)
+        AS median,
+      CASE WHEN EXISTS (SELECT 1 FROM me)
+           THEN (SELECT count(*) FROM pool WHERE ratio < (SELECT ratio FROM me))::int + 1
+      END AS rank
+  `);
+  const row = rows.rows[0] as {
+    pool: number;
+    median: number | null;
+    rank: number | null;
+  };
+  return {
+    pool: Number(row.pool),
+    median: row.median === null ? null : Number(row.median),
+    rank: row.rank === null ? null : Number(row.rank),
   };
 }

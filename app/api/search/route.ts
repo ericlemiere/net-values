@@ -9,8 +9,10 @@ import { searchPlayers, searchTeams } from "@/lib/db/queries";
 // span to sort by) and the dropdown shows them as labeled groups anyway.
 export async function GET(request: NextRequest) {
   const q = request.nextUrl.searchParams.get("q") ?? "";
+  // The /price-check picker only wants players, so it skips the team query.
+  const playersOnly = request.nextUrl.searchParams.get("scope") === "players";
   const [teams, players] = await Promise.all([
-    searchTeams(q),
+    playersOnly ? [] : searchTeams(q),
     searchPlayers(q),
   ]);
   return Response.json({ teams, players });

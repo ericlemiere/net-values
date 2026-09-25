@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { TeamLink } from "@/components/TeamLink";
 import { AwardBadges, CareerAwardBadges } from "@/components/AwardBadges";
@@ -527,6 +528,55 @@ function HeaderBox({
   );
 }
 
+/**
+ * The way into /price-check. A header box like its neighbors, but filled in
+ * the accent and linked, so it reads as the one thing up here you can press —
+ * and it leads with a real figure, which does more to invite a click than a
+ * button label could.
+ */
+function PriceCheckBox({
+  href,
+  value,
+  caption,
+}: {
+  href: string;
+  value: string;
+  caption: string;
+}) {
+  return (
+    <Link
+      href={href}
+      // Hover stays yellow and grows a ring and a glow outside the box, which
+      // none of its neighbors do. Swapping it to their dark fill made it look
+      // like one of them, and running the fill and the text through opposite
+      // color changes at once passed through a muddy frame that read as a
+      // flicker.
+      className="group w-full rounded-lg border-2 border-accent bg-accent px-3 py-2 text-accent-foreground transition-shadow duration-200 ease-out hover:shadow-[0_0_0_3px_var(--background),0_0_0_5px_var(--accent),0_0_24px_4px_color-mix(in_srgb,var(--accent)_45%,transparent)] focus-visible:shadow-[0_0_0_3px_var(--background),0_0_0_5px_var(--accent)] focus-visible:outline-none md:w-auto md:px-4 md:text-right"
+    >
+      <div className="flex items-center justify-between gap-3 md:block md:items-start">
+        <div className="text-sm font-semibold">
+          Price Check{" "}
+          <span
+            aria-hidden="true"
+            className="inline-block transition-transform duration-200 ease-out group-hover:translate-x-1"
+          >
+            &rarr;
+          </span>
+          <div className="text-xs font-normal opacity-60 md:hidden">
+            {caption}
+          </div>
+        </div>
+        <div className="shrink-0 text-right font-mono text-lg font-semibold tabular-nums md:text-2xl">
+          {value}
+        </div>
+      </div>
+      <div className="hidden min-h-4 text-xs opacity-60 md:block">
+        {caption}
+      </div>
+    </Link>
+  );
+}
+
 function pickAnchor(rows: SalRow[], salaryId: number | null) {
   const usable = rows.filter((r) => r.salary !== null && r.leagueCap);
   // An explicit ?salary= wins, whatever season it names.
@@ -677,6 +727,21 @@ export default async function PlayerPage({
     null,
   );
 
+  // The Price Check tile's teaser: what his latest paid season cost per point,
+  // the same season /price-check itself opens on.
+  const payBySeason = new Map(salaries.map((r) => [r.season, r.salary]));
+  const priceTeaser =
+    [...totals]
+      .reverse()
+      .map((t) => ({
+        season: t.season,
+        salary: payBySeason.get(t.season) ?? null,
+        pts: t.pts,
+      }))
+      .filter((t) => t.salary && t.pts)
+      .map((t) => ({ season: t.season, perPoint: t.salary! / t.pts! }))[0] ??
+    null;
+
   const truncation = (comps: { rows: unknown[]; totalCount: number } | null) =>
     comps && comps.totalCount > comps.rows.length
       ? ` \u2014 closest ${comps.rows.length} of ${comps.totalCount}`
@@ -736,6 +801,13 @@ export default async function PlayerPage({
               label="Best Net Value"
               value={formatScore(bestSeason.netValueScore)}
               caption={bestSeason.season}
+            />
+          )}
+          {priceTeaser && (
+            <PriceCheckBox
+              href={`/price-check?p1=${player.id}&s1=${priceTeaser.season}&stat=pts`}
+              value={`$${Math.round(priceTeaser.perPoint).toLocaleString("en-US")}`}
+              caption={`per point, ${priceTeaser.season}`}
             />
           )}
         </div>

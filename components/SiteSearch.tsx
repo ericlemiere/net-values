@@ -30,6 +30,7 @@ export function SiteSearch({
   inputClassName = "px-3 py-1.5",
   inputRef,
   onNavigate,
+  onSelectPlayer,
 }: {
   className?: string;
   /** Sizing for the box itself, so the modal can run a taller field than a
@@ -41,6 +42,9 @@ export function SiteSearch({
   /** Fired when a result is chosen, so the modal can dismiss itself even when
    *  the destination is the page we are already on. */
   onNavigate?: () => void;
+  /** Turns the search into a player picker: teams drop out of the results,
+   *  and choosing a player hands it back here instead of opening his page. */
+  onSelectPlayer?: (player: PlayerSearchResult) => void;
 }) {
   const router = useRouter();
   const listId = useId();
@@ -72,7 +76,8 @@ export function SiteSearch({
     const controller = new AbortController();
     const timer = setTimeout(async () => {
       try {
-        const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`, {
+        const scope = onSelectPlayer ? "&scope=players" : "";
+        const res = await fetch(`/api/search?q=${encodeURIComponent(q)}${scope}`, {
           signal: controller.signal,
         });
         if (!res.ok) return;
@@ -94,7 +99,7 @@ export function SiteSearch({
       clearTimeout(timer);
       controller.abort();
     };
-  }, [query]);
+  }, [query, onSelectPlayer]);
 
   // A click anywhere else dismisses the dropdown. Pointerdown rather than click
   // so the list closes even if the press lands on a link that navigates away.
@@ -126,6 +131,10 @@ export function SiteSearch({
     setTeams([]);
     setPlayers([]);
     onNavigate?.();
+    if (onSelectPlayer && item.kind === "player") {
+      onSelectPlayer(item.player);
+      return;
+    }
     router.push(
       item.kind === "team"
         ? `/teams/${item.team.abbr}`
@@ -165,8 +174,10 @@ export function SiteSearch({
         onChange={onChange}
         onFocus={() => items.length > 0 && setOpen(true)}
         onKeyDown={onKeyDown}
-        placeholder="Search players or teams…"
-        aria-label="Search players or teams"
+        placeholder={
+          onSelectPlayer ? "Search players…" : "Search players or teams…"
+        }
+        aria-label={onSelectPlayer ? "Search players" : "Search players or teams"}
         role="combobox"
         aria-expanded={showList}
         aria-controls={listId}

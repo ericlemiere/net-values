@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { SiteSearch } from "@/components/SiteSearch";
+import type { PlayerSearchResult } from "@/lib/db/queries";
 
 /**
  * The site's one search surface.
@@ -19,11 +20,15 @@ export function SearchModal({
   closing,
   onClose,
   inputRef,
+  onSelectPlayer,
 }: {
   closing: boolean;
   onClose: () => void;
   inputRef: React.RefObject<HTMLInputElement | null>;
+  /** Makes this the player picker /price-check opens — see SiteSearch. */
+  onSelectPlayer?: (player: PlayerSearchResult) => void;
 }) {
+  const label = onSelectPlayer ? "Add a player" : "Search players or teams";
   // The page behind the scrim must not scroll under it, and Escape closes.
   useEffect(() => {
     if (closing) return;
@@ -46,7 +51,7 @@ export function SearchModal({
       className={`search-modal${closing ? " is-closing" : ""}`}
       role="dialog"
       aria-modal="true"
-      aria-label="Search players or teams"
+      aria-label={label}
     >
       {/* Behind the panel, so a press anywhere the panel isn't dismisses. */}
       <div className="search-modal-scrim" onClick={onClose} aria-hidden="true" />
@@ -54,12 +59,12 @@ export function SearchModal({
       <div className="search-modal-panel">
         <div className="mb-2 flex items-center justify-between gap-4">
           <span className="text-xs font-medium uppercase tracking-wide text-white/40">
-            Search
+            {onSelectPlayer ? "Add player" : "Search"}
           </span>
           <button
             type="button"
             onClick={onClose}
-            aria-label="Close search"
+            aria-label={onSelectPlayer ? "Close" : "Close search"}
             className="-mr-1 -mt-1 inline-flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded text-white/50 transition-colors hover:text-accent"
           >
             <svg
@@ -83,6 +88,7 @@ export function SearchModal({
           inputClassName="px-4 py-3 rounded-lg"
           inputRef={inputRef}
           onNavigate={onClose}
+          onSelectPlayer={onSelectPlayer}
         />
       </div>
     </div>

@@ -10,7 +10,7 @@ import {
   PriceViewToggle,
   RemovePlayerButton,
 } from "@/components/PriceCheckControls";
-import { formatCurrency } from "@/lib/format";
+import { formatCurrency, formatScore } from "@/lib/format";
 import {
   getPlayerById,
   getPlayerCareerSalaries,
@@ -26,6 +26,7 @@ import {
   parsePriceView,
   type PriceCheckState,
   type PriceStat,
+  type PriceStatDef,
   type PriceView,
 } from "@/lib/price-check";
 import { PAGE_COLUMN } from "@/lib/layout";
@@ -259,7 +260,6 @@ function PlayerCard({
               {player.name}
             </Link>
           </h2>
-          {season && <div className="mt-1 font-mono text-sm text-white/50">{season}</div>}
         </div>
         <RemovePlayerButton state={state} slot={index} name={player.name} />
       </div>
@@ -282,6 +282,12 @@ function PlayerCard({
                 <div className={FIGURE_LABEL}>Salary</div>
                 <div className="font-mono text-2xl font-semibold tabular-nums">
                   {formatCurrency(salary)}
+                </div>
+              </div>
+              <div className="px-1">
+                <div className={FIGURE_LABEL}>Net Value</div>
+                <div className="font-mono text-lg font-semibold tabular-nums">
+                  {formatScore(pay?.netValueScore ?? null)}
                 </div>
               </div>
               <div className="px-1">
@@ -312,6 +318,7 @@ function PlayerCard({
             stat={stat}
             rank={rank}
             view={view}
+            season={season}
           />
         </>
       )}
@@ -373,16 +380,22 @@ function TeamsPlayed({
 }
 
 /**
- * "12th cheapest", counted from whichever end of the league he is nearer, so
- * a max contract reads "40th most expensive" rather than "456th cheapest".
+ * "12th lowest price per point in the league in 2025-26", counted from
+ * whichever end of the league he is nearer, so a max contract reads "40th
+ * highest" rather than "456th lowest".
  */
-function rankLine(rank: number, pool: number, view: PriceView, many: string) {
+function rankLine(
+  rank: number,
+  pool: number,
+  view: PriceView,
+  def: PriceStatDef,
+  season: string,
+) {
   const top = rank <= pool / 2;
   const place = ordinal(top ? rank : pool - rank + 1);
-  const of = `of ${pool.toLocaleString("en-US")} players`;
   if (view === "dollars")
-    return `${place} ${top ? "cheapest" : "most expensive"} in the league, ${of}`;
-  return `${place} ${top ? "most" : "fewest"} ${many} per $1M, ${of}`;
+    return `${place} ${top ? "lowest" : "highest"} price per ${def.one} in the league in ${season}`;
+  return `${place} ${top ? "most" : "fewest"} ${def.many} per $1M in the league in ${season}`;
 }
 
 /** The answer: the salary divided by the stat, and where that sits in the league. */
@@ -392,12 +405,14 @@ function PriceFigure({
   stat,
   rank,
   view,
+  season,
 }: {
   salary: number | null;
   total: number | null;
   stat: PriceStat;
   rank: PriceRank | null;
   view: PriceView;
+  season: string;
 }) {
   const def = PRICE_STATS[stat];
 
@@ -438,7 +453,7 @@ function PriceFigure({
       </div>
       {rank?.rank != null && (
         <div className="mt-2 text-sm text-white/60">
-          {rankLine(rank.rank, rank.pool, view, def.many)}
+          {rankLine(rank.rank, rank.pool, view, def, season)}
         </div>
       )}
       {median && (

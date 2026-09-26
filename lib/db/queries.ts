@@ -12,6 +12,7 @@ import {
   type SQL,
 } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
+import { cached } from "./cached";
 import { db } from "./index";
 import { awardKey, type AwardCode } from "@/lib/awards";
 import type { PriceStat } from "@/lib/price-check";
@@ -176,7 +177,7 @@ async function distinctSeasons(
  * subquery has, so they resolve outward and are safe. This one is not, and
  * fifteen rows are not worth the trap.
  */
-export async function getTeams() {
+export const getTeams = cached("getTeams", async function getTeams() {
   const [rows, identities] = await Promise.all([
     db
       .select({ id: teams.id, abbr: teams.abbr, name: teams.name })
@@ -208,17 +209,17 @@ export async function getTeams() {
     name: t.name,
     eras: byTeam.get(t.id) ?? null,
   }));
-}
+});
 
-export async function getStatsSeasons() {
+export const getStatsSeasons = cached("getStatsSeasons", async function getStatsSeasons() {
   return distinctSeasons(playerStatsPerGame);
-}
-export async function getAdvancedStatsSeasons() {
+});
+export const getAdvancedStatsSeasons = cached("getAdvancedStatsSeasons", async function getAdvancedStatsSeasons() {
   return distinctSeasons(advancedStats);
-}
-export async function getSalariesSeasons() {
+});
+export const getSalariesSeasons = cached("getSalariesSeasons", async function getSalariesSeasons() {
   return distinctSeasons(salaries);
-}
+});
 
 const statSortColumnsFor = (
   t: typeof playerStatsTotals | typeof playerStatsPerGame,
@@ -318,12 +319,12 @@ async function getPlayerStatsFrom(
   return { rows, totalCount: Number(countResult[0].count), page };
 }
 
-export async function getPlayerStatsTotals(params: ListParams) {
+export const getPlayerStatsTotals = cached("getPlayerStatsTotals", async function getPlayerStatsTotals(params: ListParams) {
   return getPlayerStatsFrom(playerStatsTotals, params);
-}
-export async function getPlayerStatsPerGame(params: ListParams) {
+});
+export const getPlayerStatsPerGame = cached("getPlayerStatsPerGame", async function getPlayerStatsPerGame(params: ListParams) {
   return getPlayerStatsFrom(playerStatsPerGame, params);
-}
+});
 
 /**
  * TS% and USG% exist in both sources, so the table shows nba.com's wherever it
@@ -376,7 +377,7 @@ const advancedSortColumns = {
 
 export type AdvancedSortKey = keyof typeof advancedSortColumns;
 
-export async function getAdvancedStats(params: ListParams) {
+export const getAdvancedStats = cached("getAdvancedStats", async function getAdvancedStats(params: ListParams) {
   const page = clampPage(params.page);
   const sortCol =
     advancedSortColumns[params.sort as AdvancedSortKey] ?? advancedStats.vorp;
@@ -458,7 +459,7 @@ export async function getAdvancedStats(params: ListParams) {
   ]);
 
   return { rows, totalCount: Number(countResult[0].count), page };
-}
+});
 
 // Team payroll and league cap live in their own tables (one row per team-season
 // / per season) rather than being duplicated onto every salary row, so the two
@@ -562,7 +563,7 @@ const payDifferenceSql = sql<number | null>`(
  * of what the league could afford to pay anyone. That's the comparison people
  * actually mean when they ask what an old contract would be worth now.
  */
-export async function getCurrentCap() {
+export const getCurrentCap = cached("getCurrentCap", async function getCurrentCap() {
   const rows = await db
     .select({ season: seasons.season, leagueCap: seasons.leagueCap })
     .from(seasons)
@@ -597,7 +598,7 @@ export async function getCurrentCap() {
     dollarsPerWin: priced[0]?.dollarsPerWin ?? null,
     pricedSeason: priced[0]?.season ?? null,
   };
-}
+});
 
 const salarySelection = {
   id: salaries.id,
@@ -662,16 +663,16 @@ export type SalariesSortKey = keyof typeof salariesSortColumns;
 // The league cap for one season, for display above the salaries table. Read
 // from `seasons` rather than off a result row so it still resolves when the
 // current page of salaries is empty. Null for "ALL", which spans many caps.
-export async function getLeagueCap(season: string) {
+export const getLeagueCap = cached("getLeagueCap", async function getLeagueCap(season: string) {
   if (season === "ALL") return null;
   const rows = await db
     .select({ leagueCap: seasons.leagueCap })
     .from(seasons)
     .where(eq(seasons.season, season));
   return rows[0]?.leagueCap ?? null;
-}
+});
 
-export async function getSalaries(params: ListParams) {
+export const getSalaries = cached("getSalaries", async function getSalaries(params: ListParams) {
   const page = clampPage(params.page);
   const sortCol =
     salariesSortColumns[params.sort as SalariesSortKey] ?? salaries.salary;
@@ -742,7 +743,7 @@ export async function getSalaries(params: ListParams) {
   ]);
 
   return { rows, totalCount: Number(countResult[0].count), page };
-}
+});
 
 // ---- /teams ----
 
@@ -772,13 +773,13 @@ export interface TeamSeasonRow {
 }
 
 /** Seasons that have a team record, newest first. */
-export async function getTeamSeasons() {
+export const getTeamSeasons = cached("getTeamSeasons", async function getTeamSeasons() {
   const rows = await db
     .selectDistinct({ season: teamSeasons.season })
     .from(teamSeasons)
     .orderBy(desc(teamSeasons.season));
   return rows.map((r) => r.season);
-}
+});
 
 /**
  * One row per team for a season: record, payroll, and how that payroll sits
@@ -787,7 +788,7 @@ export async function getTeamSeasons() {
  * Roster size is counted from `salaries` rather than the stats tables so it
  * describes who was paid, which is what the payroll figure is the sum of.
  */
-export async function getTeamsForSeason(
+export const getTeamsForSeason = cached("getTeamsForSeason", async function getTeamsForSeason(
   season: string,
 ): Promise<TeamSeasonRow[]> {
   const rosterSize = db
@@ -897,21 +898,21 @@ export async function getTeamsForSeason(
     .leftJoin(teamNetValue, eq(teamNetValue.team, teams.abbr))
     .where(eq(teamSeasons.season, season))
     .orderBy(desc(teamSeasons.wins), asc(teams.name));
-}
+});
 
 // ---- /teams/[abbr] ----
 
 // Cached per request: generateMetadata and the page both ask for it.
-export const getTeamByAbbr = cache(async (abbr: string) => {
+export const getTeamByAbbr = cache(cached("getTeamByAbbr", async (abbr: string) => {
   const rows = await db
     .select({ id: teams.id, abbr: teams.abbr, name: teams.name })
     .from(teams)
     .where(eq(teams.abbr, abbr.toUpperCase()));
   return rows[0];
-});
+}));
 
 /** Every season on file for one team, newest first. */
-export async function getTeamHistory(teamId: number) {
+export const getTeamHistory = cached("getTeamHistory", async function getTeamHistory(teamId: number) {
   return db
     .select({
       season: teamSeasons.season,
@@ -964,7 +965,7 @@ export async function getTeamHistory(teamId: number) {
     .leftJoin(seasons, eq(seasons.season, teamSeasons.season))
     .where(eq(teamSeasons.teamId, teamId))
     .orderBy(desc(teamSeasons.season));
-}
+});
 
 /**
  * Every name this franchise has gone by, oldest first.
@@ -972,7 +973,7 @@ export async function getTeamHistory(teamId: number) {
  * Empty for the twenty-four franchises that have never changed, which is what
  * lets the page say nothing rather than say "always known as" to no purpose.
  */
-export async function getTeamIdentities(
+export const getTeamIdentities = cached("getTeamIdentities", async function getTeamIdentities(
   teamId: number,
 ): Promise<TeamIdentity[]> {
   return db
@@ -985,17 +986,17 @@ export async function getTeamIdentities(
     .from(teamIdentities)
     .where(eq(teamIdentities.teamId, teamId))
     .orderBy(asc(teamIdentities.firstSeason));
-}
+});
 
 /** Seasons this team paid anybody, newest first — drives the roster filter. */
-export async function getTeamRosterSeasons(abbr: string) {
+export const getTeamRosterSeasons = cached("getTeamRosterSeasons", async function getTeamRosterSeasons(abbr: string) {
   const rows = await db
     .selectDistinct({ season: salaries.season })
     .from(salaries)
     .where(eq(salaries.team, abbr.toUpperCase()))
     .orderBy(desc(salaries.season));
   return rows.map((r) => r.season);
-}
+});
 
 export type TeamRosterRow = Awaited<ReturnType<typeof getTeamRoster>>[number];
 
@@ -1006,7 +1007,7 @@ export type TeamRosterRow = Awaited<ReturnType<typeof getTeamRoster>>[number];
  * has one combined stat line with no single team on it, and dropping him from
  * his own team's roster would be worse than showing the combined line.
  */
-export async function getTeamRoster(abbr: string, season: string) {
+export const getTeamRoster = cached("getTeamRoster", async function getTeamRoster(abbr: string, season: string) {
   const team = abbr.toUpperCase();
   const where =
     season === "ALL"
@@ -1072,7 +1073,7 @@ export async function getTeamRoster(abbr: string, season: string) {
     )
     .where(where)
     .orderBy(desc(salaries.season), orderByNullsLast(salaries.salary, "desc"));
-}
+});
 
 /**
  * A player counts toward his team's Net Value only if he was on a full
@@ -1130,7 +1131,7 @@ export interface TeamNetValue {
  * put -1.57 on Portland and +0.10 on Los Angeles, which between them are
  * exactly his -1.47.
  */
-export async function getTeamNetValues(abbr: string): Promise<TeamNetValue[]> {
+export const getTeamNetValues = cached("getTeamNetValues", async function getTeamNetValues(abbr: string): Promise<TeamNetValue[]> {
   const rows = await db.execute(sql`
     WITH qualifying AS (
       SELECT sh.team, sh.season, sh.score, sh.played_here
@@ -1174,7 +1175,7 @@ export async function getTeamNetValues(abbr: string): Promise<TeamNetValue[]> {
     ORDER BY season DESC
   `);
   return rows.rows as unknown as TeamNetValue[];
-}
+});
 
 export interface NetValueExample {
   playerId: number;
@@ -1214,7 +1215,7 @@ const exampleSelection = {
 };
 
 /** Named player-seasons for the explainer, read live so the page can't drift. */
-export async function getNetValueExamples() {
+export const getNetValueExamples = cached("getNetValueExamples", async function getNetValueExamples() {
   /*
    * The most recent SCORED season, which is not the most recent season on
    * file: next season's salaries are loaded as soon as contracts are signed,
@@ -1312,12 +1313,12 @@ export async function getNetValueExamples() {
     latestBottom: latestBottom as NetValueExample[],
     pricing: priced[0] ?? null,
   };
-}
+});
 
 // ---- Player detail page: full career log, no filtering/pagination ----
 
 // Cached per request: generateMetadata and the page both ask for it.
-export const getPlayerById = cache(async (playerId: number) => {
+export const getPlayerById = cache(cached("getPlayerById", async (playerId: number) => {
   const rows = await db
     .select({
       id: players.id,
@@ -1327,7 +1328,7 @@ export const getPlayerById = cache(async (playerId: number) => {
     .from(players)
     .where(eq(players.id, playerId));
   return rows[0];
-});
+}));
 
 async function getPlayerCareerStatsFrom(
   t: typeof playerStatsTotals | typeof playerStatsPerGame,
@@ -1372,14 +1373,14 @@ async function getPlayerCareerStatsFrom(
     .orderBy(asc(t.season));
 }
 
-export async function getPlayerCareerStatsTotals(playerId: number) {
+export const getPlayerCareerStatsTotals = cached("getPlayerCareerStatsTotals", async function getPlayerCareerStatsTotals(playerId: number) {
   return getPlayerCareerStatsFrom(playerStatsTotals, playerId);
-}
-export async function getPlayerCareerStatsPerGame(playerId: number) {
+});
+export const getPlayerCareerStatsPerGame = cached("getPlayerCareerStatsPerGame", async function getPlayerCareerStatsPerGame(playerId: number) {
   return getPlayerCareerStatsFrom(playerStatsPerGame, playerId);
-}
+});
 
-export async function getPlayerCareerAdvancedStats(playerId: number) {
+export const getPlayerCareerAdvancedStats = cached("getPlayerCareerAdvancedStats", async function getPlayerCareerAdvancedStats(playerId: number) {
   return db
     .select({
       id: advancedStats.id,
@@ -1404,7 +1405,7 @@ export async function getPlayerCareerAdvancedStats(playerId: number) {
     .from(advancedStats)
     .where(eq(advancedStats.playerId, playerId))
     .orderBy(asc(advancedStats.season));
-}
+});
 
 /** One of the contracts that paid a player in a single season. */
 export interface PlayerContract {
@@ -1435,7 +1436,7 @@ export type PlayerCareerSalary = Awaited<
  * figure against each team the player passed through, and the model already
  * knows to count it once.
  */
-export async function getPlayerCareerSalaries(playerId: number) {
+export const getPlayerCareerSalaries = cached("getPlayerCareerSalaries", async function getPlayerCareerSalaries(playerId: number) {
   const rows = await db.execute(sql`
     WITH paid AS (
       SELECT s.id, s.season, s.team, s.salary, s.source
@@ -1554,7 +1555,7 @@ export async function getPlayerCareerSalaries(playerId: number) {
     expectedProduction: number | null;
     availability: number | null;
   }[];
-}
+});
 
 export interface SalaryComp {
   id: number;
@@ -1611,7 +1612,7 @@ const compPosSql = sql`split_part(${nearestPosSql(
  * ever sees the few hundred contracts that already cost the right amount,
  * brings the same query in at about 25ms.
  */
-export async function getSalaryComps({
+export const getSalaryComps = cached("getSalaryComps", async function getSalaryComps({
   playerId,
   targetPct,
   season,
@@ -1739,7 +1740,7 @@ export async function getSalaryComps({
         });
 
   return { rows: ordered, totalCount };
-}
+});
 
 /**
  * The position a player was listed at around a season, as one of the five
@@ -1748,7 +1749,7 @@ export async function getSalaryComps({
  * Same "nearest season" rule the /salaries Pos column uses, so a contract for
  * a season not yet played is filed under the position he last played.
  */
-export async function getPlayerPositionForSeason(
+export const getPlayerPositionForSeason = cached("getPlayerPositionForSeason", async function getPlayerPositionForSeason(
   playerId: number,
   season: string,
 ): Promise<string | null> {
@@ -1759,7 +1760,7 @@ export async function getPlayerPositionForSeason(
     )}, '-', 1) AS pos`);
   const pos = (rows.rows[0] as { pos: string | null } | undefined)?.pos;
   return pos ? pos : null;
-}
+});
 
 // ---- Header search ----
 
@@ -1821,7 +1822,7 @@ export interface TeamSearchResult {
  * current identity over a former one over a bare alias, so searching "charlotte"
  * returns the Hornets once rather than three times.
  */
-export async function searchTeams(
+export const searchTeams = cached("searchTeams", async function searchTeams(
   query: string,
 ): Promise<TeamSearchResult[]> {
   const q = query.trim();
@@ -1862,9 +1863,9 @@ export async function searchTeams(
     ORDER BY starts DESC, name ASC
   `);
   return rows.rows as unknown as TeamSearchResult[];
-}
+});
 
-export async function searchPlayers(
+export const searchPlayers = cached("searchPlayers", async function searchPlayers(
   query: string,
 ): Promise<PlayerSearchResult[]> {
   const q = query.trim();
@@ -1890,7 +1891,7 @@ export async function searchPlayers(
       sql`${lastSeason} desc nulls last`,
       asc(players.name),
     );
-}
+});
 
 /* ---------------------------------------------------------------- awards -- */
 
@@ -1920,8 +1921,18 @@ export interface PlayerAward {
 export async function getAwardsForRows(
   rows: { playerId: number; season: string }[],
 ): Promise<Map<string, PlayerAward[]>> {
+  if (rows.length === 0) return new Map();
+  // Only the ids and seasons go in, so the cache key isn't every column of
+  // whatever table the rows came from.
+  const pairs = rows.map((r) => ({ playerId: r.playerId, season: r.season }));
+  return new Map(await awardEntriesForRows(pairs));
+}
+
+// The cache holds JSON, which a Map doesn't survive, so this returns entries.
+const awardEntriesForRows = cached("awardEntriesForRows", async function awardEntriesForRows(
+  rows: { playerId: number; season: string }[],
+): Promise<[string, PlayerAward[]][]> {
   const byKey = new Map<string, PlayerAward[]>();
-  if (rows.length === 0) return byKey;
 
   const playerIds = [...new Set(rows.map((r) => r.playerId))];
   const seasons = [...new Set(rows.map((r) => r.season))];
@@ -1951,11 +1962,11 @@ export async function getAwardsForRows(
     });
     byKey.set(key, list);
   }
-  return byKey;
-}
+  return [...byKey];
+});
 
 /** One player's winning awards across his whole career, newest season first. */
-export async function getPlayerAwards(playerId: number): Promise<PlayerAward[]> {
+export const getPlayerAwards = cached("getPlayerAwards", async function getPlayerAwards(playerId: number): Promise<PlayerAward[]> {
   const rows = await db
     .select({
       award: playerAwards.award,
@@ -1970,17 +1981,17 @@ export async function getPlayerAwards(playerId: number): Promise<PlayerAward[]> 
     season: r.season,
     teamNumber: r.teamNumber,
   }));
-}
+});
 
 /** Seasons that have any award on record, newest first — the awards page filter. */
 // Cached per request: generateMetadata and the page both ask for it.
-export const getAwardSeasons = cache(async () => {
+export const getAwardSeasons = cache(cached("getAwardSeasons", async () => {
   const rows = await db
     .selectDistinct({ season: playerAwards.season })
     .from(playerAwards)
     .orderBy(desc(playerAwards.season));
   return rows.map((r) => r.season);
-});
+}));
 
 export interface AwardBallotRow {
   playerId: number;
@@ -2003,6 +2014,13 @@ export interface AwardBallotRow {
  * by then — the same rule the rest of the site follows.
  */
 export async function getSeasonAwards(season: string) {
+  return new Map(await seasonAwardEntries(season));
+}
+
+// The cache holds JSON, which a Map doesn't survive, so this returns entries.
+const seasonAwardEntries = cached("seasonAwardEntries", async function seasonAwardEntries(
+  season: string,
+) {
   const rows = await db
     .select({
       award: playerAwards.award,
@@ -2057,8 +2075,8 @@ export async function getSeasonAwards(season: string) {
     });
     byAward.set(code, list);
   }
-  return byAward;
-}
+  return [...byAward];
+});
 
 export interface AwardWinnerRow {
   playerId: number;
@@ -2078,7 +2096,7 @@ export interface AwardWinnerRow {
  * shared Rookie of the Year votes in this range are a fact about the award,
  * not a duplicate to clean up.
  */
-export async function getAwardWinners(
+export const getAwardWinners = cached("getAwardWinners", async function getAwardWinners(
   award: AwardCode,
 ): Promise<AwardWinnerRow[]> {
   const rows = await db
@@ -2110,7 +2128,7 @@ export async function getAwardWinners(
     .where(and(eq(playerAwards.award, award), eq(playerAwards.won, true)))
     .orderBy(desc(playerAwards.season), asc(players.name));
   return rows;
-}
+});
 
 export interface SeasonChampion {
   abbr: string;
@@ -2122,7 +2140,7 @@ export interface SeasonChampion {
 }
 
 /** Who won the title that season, or null for a season not yet decided. */
-export async function getSeasonChampion(
+export const getSeasonChampion = cached("getSeasonChampion", async function getSeasonChampion(
   season: string,
 ): Promise<SeasonChampion | null> {
   const rows = await db
@@ -2143,7 +2161,7 @@ export async function getSeasonChampion(
     .where(and(eq(teamSeasons.season, season), eq(teamSeasons.champion, true)))
     .limit(1);
   return rows[0] ?? null;
-}
+});
 
 export interface SeasonNetValueRow {
   playerId: number;
@@ -2173,7 +2191,7 @@ const seasonNetValueSelection = {
  * the books but not yet played, whose rows carry a salary and no score, comes
  * back empty instead of ten unplayed contracts.
  */
-export async function getSeasonNetValueLeaders(season: string) {
+export const getSeasonNetValueLeaders = cached("getSeasonNetValueLeaders", async function getSeasonNetValueLeaders(season: string) {
   const [top, bottom] = await Promise.all([
     db
       .select(seasonNetValueSelection)
@@ -2191,14 +2209,14 @@ export async function getSeasonNetValueLeaders(season: string) {
       .limit(10),
   ]);
   return { top, bottom };
-}
+});
 
 /**
  * Every player and team page worth listing in the sitemap. Only players with a
  * contract or a stat line on file: a bare row in `players` renders a page with
  * nothing on it, which is not something to ask a search engine to index.
  */
-export async function getSitemapEntries() {
+export const getSitemapEntries = cached("getSitemapEntries", async function getSitemapEntries() {
   const [playerRows, teamRows] = await Promise.all([
     db.execute<{ id: number }>(sql`
       SELECT id FROM ${players} p
@@ -2212,7 +2230,7 @@ export async function getSitemapEntries() {
     playerIds: playerRows.rows.map((r) => Number(r.id)),
     teamAbbrs: teamRows.map((r) => r.abbr),
   };
-}
+});
 
 /* ----------------------------------------------------------- price check -- */
 
@@ -2258,7 +2276,7 @@ export interface PriceRank {
  * net_values' whole-season figure — what the player cost the league, buyouts
  * included — which is the same number the page shows him being paid.
  */
-export async function getPriceRank(
+export const getPriceRank = cached("getPriceRank", async function getPriceRank(
   playerId: number,
   season: string,
   stat: PriceStat,
@@ -2293,4 +2311,4 @@ export async function getPriceRank(
     median: row.median === null ? null : Number(row.median),
     rank: row.rank === null ? null : Number(row.rank),
   };
-}
+});

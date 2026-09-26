@@ -23,12 +23,14 @@ Usage:
 import sys
 
 from backfill_stats import current_season, run
+from revalidate import revalidate
 
 
 def main():
     season = sys.argv[1] if len(sys.argv) > 1 else current_season()
     print(f"updating stats for {season}")
     run([season])
+    revalidate()
 
 
 if __name__ == "__main__":

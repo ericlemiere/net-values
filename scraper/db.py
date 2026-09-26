@@ -1,18 +1,29 @@
 """Shared Postgres connection helper for the scraper scripts."""
 import os
+from typing import Optional
 import re
 
 
-def load_database_url() -> str:
-    url = os.environ.get("DATABASE_URL")
-    if url:
-        return url
+def load_env(name: str) -> Optional[str]:
+    """A setting from the environment, falling back to the app's .env.local."""
+    value = os.environ.get(name)
+    if value:
+        return value
     env_path = os.path.join(os.path.dirname(__file__), "..", ".env.local")
+    if not os.path.exists(env_path):
+        return None
     with open(env_path) as f:
         for line in f:
-            m = re.match(r"^DATABASE_URL=(.*)$", line.strip())
+            m = re.match(rf"^{re.escape(name)}=(.*)$", line.strip())
             if m:
-                return m.group(1).strip()
+                return m.group(1).strip().strip('"')
+    return None
+
+
+def load_database_url() -> str:
+    url = load_env("DATABASE_URL")
+    if url:
+        return url
     raise RuntimeError("DATABASE_URL not found in environment or .env.local")
 
 

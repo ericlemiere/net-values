@@ -40,9 +40,9 @@ export const metadata: Metadata = {
     siteName: SITE_NAME,
     type: "website",
     locale: "en_US",
-    images: [{ url: "/tnv.png", width: 1254, height: 1254, alt: SITE_NAME }],
+    images: [{ url: "/tnv2.png", width: 1254, height: 1254, alt: SITE_NAME }],
   },
-  twitter: { card: "summary", images: ["/tnv.png"] },
+  twitter: { card: "summary", images: ["/tnv2.png"] },
   icons: {
     icon: [{ url: "/tnv2.png" }],
     apple: [{ url: "/tnv2.png" }],

@@ -44,7 +44,7 @@ export function pageMetadata({
 }): Metadata {
   const fullTitle = `${title} - ${SITE_NAME}`;
   const card = image ?? {
-    url: "/tnv.png",
+    url: "/tnv2.png",
     width: 1254,
     height: 1254,
     alt: SITE_NAME,

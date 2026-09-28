@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { formatScore } from "@/lib/format";
-import { describe } from "@/lib/glossary";
+import { describe, glossaryFor, tooltip } from "@/lib/glossary";
+import { GlossaryButton } from "./GlossaryButton";
 import { PlayerLink } from "./PlayerLink";
 import { awardKey, type Award } from "@/lib/awards";
 import { TeamLink } from "./TeamLink";
@@ -175,10 +176,15 @@ export function CompsTable({
     <div className="mb-8 w-full min-w-0">
       {/* Titles wrap rather than stretch the cell: "Point Guard Historical Cap
           Comps" is long, and on a phone it has to fold somewhere. */}
-      <h2 className="text-lg font-semibold wrap-break-word text-white">
-        {title}
-      </h2>
-      <div className="mb-2 min-h-5 text-sm text-white/60">{subtitle}</div>
+      <div className="mb-2 flex items-end justify-between gap-3">
+        <div className="min-w-0">
+          <h2 className="text-lg font-semibold wrap-break-word text-white">
+            {title}
+          </h2>
+          <div className="min-h-5 text-sm text-white/60">{subtitle}</div>
+        </div>
+        <GlossaryButton entries={glossaryFor(columns)} />
+      </div>
       {/* Once the rows scroll, the gutter keeps the vertical scrollbar from
           squeezing the content into a horizontal scroll of its own. */}
       <div
@@ -202,7 +208,7 @@ export function CompsTable({
                           : "descending"
                         : "none"
                     }
-                    title={describe(col.key)}
+                    title={tooltip(describe(col.key))}
                     className={`whitespace-nowrap p-0 font-medium ${alignClass(col.align)} ${
                       isActive ? "bg-accent" : ""
                     }`}

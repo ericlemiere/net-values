@@ -542,6 +542,63 @@ body {
  * frame in between for a transition to start from. The exit replays the same
  * keyframes backwards.
  */
+/*
+ * The explanatory <dialog> (components/Modal.tsx) fades in and out, on the
+ * same timing as the search modal: 200ms in, a quicker 160ms out.
+ *
+ * A dialog goes from display:none to shown in one step, which a transition
+ * can't see. `@starting-style` gives the entrance a "before" to fade from,
+ * and `allow-discrete` holds display (and the top layer, `overlay`) until the
+ * exit fade has finished. A browser without them just shows and hides it.
+ */
+.modal-dialog,
+.modal-dialog::backdrop {
+  opacity: 0;
+  transition:
+    opacity 160ms ease-in,
+    overlay 160ms ease-in allow-discrete,
+    display 160ms ease-in allow-discrete;
+}
+
+.modal-dialog {
+  transform: translateY(6px) scale(0.98);
+  transition:
+    opacity 160ms ease-in,
+    transform 160ms ease-in,
+    overlay 160ms ease-in allow-discrete,
+    display 160ms ease-in allow-discrete;
+}
+
+.modal-dialog[open],
+.modal-dialog[open]::backdrop {
+  opacity: 1;
+  transition-duration: 200ms;
+  transition-timing-function: ease-out;
+}
+
+.modal-dialog[open] {
+  transform: none;
+}
+
+@starting-style {
+  .modal-dialog[open],
+  .modal-dialog[open]::backdrop {
+    opacity: 0;
+  }
+
+  .modal-dialog[open] {
+    transform: translateY(6px) scale(0.98);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .modal-dialog,
+  .modal-dialog::backdrop {
+    transform: none;
+    transition: none;
+  }
+}
+
 .search-modal {
   position: fixed;
   inset: 0;

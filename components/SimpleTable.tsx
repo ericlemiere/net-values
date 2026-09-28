@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { describe } from "@/lib/glossary";
+import { describe, glossaryFor, tooltip } from "@/lib/glossary";
+import { GlossaryButton } from "./GlossaryButton";
 import { TABLE_BREAKOUT, TABLE_BREAKOUT_FIT } from "@/lib/layout";
 import {
   SHEET,
@@ -38,6 +39,13 @@ interface SimpleTableProps<Row> {
   /** Marks the row the rest of the page is currently anchored to. */
   isActive?: (row: Row) => boolean;
   emptyMessage?: string;
+  /**
+   * Show the glossary "?" above the table's top-right corner. Off when the
+   * page already puts one in a toolbar of its own, beside its filters.
+   */
+  glossary?: boolean;
+  /** Sits under the table's bottom-right corner, e.g. a row count. */
+  footer?: ReactNode;
 }
 
 export function SimpleTable<Row>({
@@ -51,7 +59,10 @@ export function SimpleTable<Row>({
   rowHref,
   isActive,
   emptyMessage = "No data.",
+  glossary = true,
+  footer,
 }: SimpleTableProps<Row>) {
+  const entries = glossary ? glossaryFor(columns) : [];
   return (
     // Every branch here carries a `max-w`, and none of them is belt and braces.
     // A wrapper sized to its own content measures against its max-content, not
@@ -73,10 +84,17 @@ export function SimpleTable<Row>({
             : ""
       }`}
     >
-      {title && <h2 className="text-lg font-semibold text-white">{title}</h2>}
-      {(title || subtitle) && (
-        <div className="mb-2 min-h-5 text-sm text-white/60">
-          {subtitle}
+      {(title || subtitle || entries.length > 0) && (
+        <div className="mb-2 flex items-end justify-between gap-3">
+          <div className="min-w-0">
+            {title && (
+              <h2 className="text-lg font-semibold text-white">{title}</h2>
+            )}
+            {(title || subtitle) && (
+              <div className="min-h-5 text-sm text-white/60">{subtitle}</div>
+            )}
+          </div>
+          <GlossaryButton entries={entries} />
         </div>
       )}
       <div className={SHEET}>
@@ -86,7 +104,7 @@ export function SimpleTable<Row>({
               {columns.map((col) => (
                 <th
                   key={col.key}
-                  title={describe(col.key, col.description)}
+                  title={tooltip(describe(col.key, col.definition))}
                   className={`whitespace-nowrap px-2 py-2 font-medium ${alignClass(col.align)}`}
                 >
                   {col.label}
@@ -144,6 +162,7 @@ export function SimpleTable<Row>({
           </tbody>
         </table>
       </div>
+      {footer && <div className="mt-3 flex justify-end">{footer}</div>}
     </div>
   );
 }

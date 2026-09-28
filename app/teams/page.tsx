@@ -6,7 +6,14 @@ import { SimpleTable } from "@/components/SimpleTable";
 import { TeamSeasonFilter } from "@/components/TeamSeasonFilter";
 import { TableOverlay } from "@/components/TableNav";
 import { COUNT_CHIP, type ColumnDef } from "@/components/DataTable";
-import { formatCurrency, formatScore, formatStat } from "@/lib/format";
+import { GlossaryButton } from "@/components/GlossaryButton";
+import {
+  formatCompactCurrency,
+  formatCurrency,
+  formatScore,
+  formatStat,
+} from "@/lib/format";
+import { glossaryFor } from "@/lib/glossary";
 import {
   getLeagueCap,
   getTeamSeasons,
@@ -44,7 +51,7 @@ const columns: ColumnDef<TeamSeasonRow>[] = [
         )}
         <Link
           href={`/teams/${r.abbr}`}
-          className={`hover:underline ${r.champion ? "font-semibold" : ""}`}
+          className={`sheet-link ${r.champion ? "font-semibold" : ""}`}
           title={
             r.eraName && r.eraName !== r.name
               ? `${r.eraName}, now the ${r.name}`
@@ -168,6 +175,25 @@ export default async function TeamsPage({
                 </span>
               </div>
             )}
+            {withPayroll.length > 0 && (
+              <div className={BANNER}>
+                <span className="text-sm text-white/60">
+                  {season} Total League Payroll
+                </span>
+                {/* Billions, so shortened; the exact sum is on hover. */}
+                <span
+                  className="font-mono font-semibold tabular-nums text-accent md:text-lg"
+                  title={formatCurrency(totalPayroll)}
+                >
+                  {formatCompactCurrency(totalPayroll)}
+                </span>
+                {withPayroll.length < rows.length && (
+                  <span className="text-xs text-white/50">
+                    {withPayroll.length} of {rows.length} teams on file
+                  </span>
+                )}
+              </div>
+            )}
             {bestNetValue && (
               <div className={BANNER}>
                 <span className="inline-flex items-center gap-1.5 text-sm text-white/60">
@@ -183,29 +209,18 @@ export default async function TeamsPage({
                   {bestNetValue.eraName ?? bestNetValue.name}
                 </Link>
                 <span className="font-mono font-semibold tabular-nums text-accent md:text-lg">
-                  {formatScore(bestNetValue.netValue)} NVPs
+                  {formatScore(bestNetValue.netValue)}
                 </span>
               </div>
             )}
           </div>
         }
       />
-      {/* Stacked on a phone so the count chip keeps its own line instead of
-          being squeezed against the dropdown, which is how the salaries and
-          stats pages lay the same pair out. */}
-      <div className="mb-4 flex min-w-0 flex-col items-stretch justify-between gap-4 md:flex-row md:items-center">
+      {/* The glossary shares the filter's row rather than taking one of its
+          own above the table, the way the salaries and stats pages do it. */}
+      <div className="mb-3 flex min-w-0 items-end justify-between gap-4">
         <TeamSeasonFilter seasons={seasons} currentSeason={season} />
-        <div className={`shrink-0 ${COUNT_CHIP}`}>
-          {rows.length} teams
-          {withPayroll.length > 0 && (
-            <>
-              {" · "}
-              {formatCurrency(totalPayroll)} total payroll
-              {withPayroll.length < rows.length &&
-                ` (${withPayroll.length} of ${rows.length} on file)`}
-            </>
-          )}
-        </div>
+        <GlossaryButton entries={glossaryFor(columns)} />
       </div>
       <TableOverlay>
         <SimpleTable
@@ -213,6 +228,8 @@ export default async function TeamsPage({
           rows={rows}
           rowKey={(r) => r.teamId}
           emptyMessage="No team records for this season."
+          glossary={false}
+          footer={<div className={COUNT_CHIP}>{rows.length} teams</div>}
         />
       </TableOverlay>
     </div>

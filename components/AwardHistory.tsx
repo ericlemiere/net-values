@@ -6,6 +6,7 @@ import { SeasonLink } from "@/components/SeasonLink";
 import { SimpleTable } from "@/components/SimpleTable";
 import type { ColumnDef } from "@/components/DataTable";
 import { formatScore } from "@/lib/format";
+import { GLOSSARY } from "@/lib/glossary";
 import { AWARDS, AWARD_PAGES, type AwardCode } from "@/lib/awards";
 import { getAwardWinners, type AwardWinnerRow } from "@/lib/db/queries";
 import { PAGE_COLUMN } from "@/lib/layout";
@@ -43,8 +44,7 @@ export async function AwardHistory({ award }: { award: AwardCode }) {
       key: "netValue",
       label: "Net Value",
       align: "right",
-      description:
-        "Production minus what his pay expected of him. About 2.5 team wins per NVP.",
+      definition: GLOSSARY.netValueScore,
       render: (r) =>
         r.netValueScore === null ? "—" : formatScore(r.netValueScore),
     },
@@ -52,7 +52,7 @@ export async function AwardHistory({ award }: { award: AwardCode }) {
       key: "nvRank",
       label: "NV Rank",
       align: "right",
-      description: "Where that Net Value placed him in the league that season.",
+      definition: GLOSSARY.netValueRank,
       render: (r) => (r.seasonRank === null ? "—" : `#${r.seasonRank}`),
     },
   ];

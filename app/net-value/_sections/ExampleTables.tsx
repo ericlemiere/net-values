@@ -13,6 +13,7 @@ import {
 import type { NetValueExample } from "@/lib/db/queries";
 import { awardKey, type Award } from "@/lib/awards";
 import { TABLE_BREAKOUT } from "@/lib/layout";
+import { GLOSSARY } from "@/lib/glossary";
 
 function exampleColumns(
   showSeason: boolean,
@@ -74,16 +75,14 @@ function exampleColumns(
       key: "production",
       label: "Value Produced",
       align: "right",
-      description:
-        "NVPs. His share of the points his team's offense and defense generated above league average, counted up from replacement level.",
+      definition: GLOSSARY.valueProduced,
       render: (r) => formatStat(r.production),
     },
     {
       key: "expectedProduction",
       label: "Value Bought",
       align: "right",
-      description:
-        "NVPs. What his salary bought at that season's going rate, scaled by his Charged Share.",
+      definition: GLOSSARY.valueBought,
       render: (r) => formatStat(r.expectedProduction),
     },
     {

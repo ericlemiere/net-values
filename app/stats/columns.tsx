@@ -5,7 +5,7 @@ import { TeamLink } from "@/components/TeamLink";
 import { SeasonLink } from "@/components/SeasonLink";
 import type { StatType } from "@/lib/stat-types";
 import { formatNumber, formatPie, formatStat } from "@/lib/format";
-import { GLOSSARY } from "@/lib/glossary";
+import { withBasis } from "@/lib/glossary";
 import type { getAdvancedStats, getPlayerStatsPerGame } from "@/lib/db/queries";
 
 type BoxScoreRow = Awaited<
@@ -83,8 +83,8 @@ export function getBoxScoreColumns(
   const stat = statType === "totals" ? formatNumber : formatStat;
   // The same column means different things in the two views, so the tooltip
   // has to say which one you're looking at.
-  const per = statType === "totals" ? " Season total." : " Per game.";
-  const note = (key: string) => (GLOSSARY[key] ?? "") + per;
+  const note = (key: string) =>
+    withBasis(key, statType === "totals" ? "totals" : "per_game");
   return [
     ...identityColumns<BoxScoreRow>(showSeason, awards),
     {
@@ -105,14 +105,14 @@ export function getBoxScoreColumns(
     },
     {
       key: "fgm",
-      description: note("fgm"),
+      definition: note("fgm"),
       label: "FGM",
       align: "right",
       render: (r) => stat(r.fgm),
     },
     {
       key: "fga",
-      description: note("fga"),
+      definition: note("fga"),
       label: "FGA",
       align: "right",
       render: (r) => stat(r.fga),
@@ -125,14 +125,14 @@ export function getBoxScoreColumns(
     },
     {
       key: "fg3m",
-      description: note("fg3m"),
+      definition: note("fg3m"),
       label: "3PM",
       align: "right",
       render: (r) => stat(r.fg3m),
     },
     {
       key: "fg3a",
-      description: note("fg3a"),
+      definition: note("fg3a"),
       label: "3PA",
       align: "right",
       render: (r) => stat(r.fg3a),
@@ -145,14 +145,14 @@ export function getBoxScoreColumns(
     },
     {
       key: "fg2m",
-      description: note("fg2m"),
+      definition: note("fg2m"),
       label: "2PM",
       align: "right",
       render: (r) => stat(r.fg2m),
     },
     {
       key: "fg2a",
-      description: note("fg2a"),
+      definition: note("fg2a"),
       label: "2PA",
       align: "right",
       render: (r) => stat(r.fg2a),
@@ -171,14 +171,14 @@ export function getBoxScoreColumns(
     },
     {
       key: "ftm",
-      description: note("ftm"),
+      definition: note("ftm"),
       label: "FTM",
       align: "right",
       render: (r) => stat(r.ftm),
     },
     {
       key: "fta",
-      description: note("fta"),
+      definition: note("fta"),
       label: "FTA",
       align: "right",
       render: (r) => stat(r.fta),
@@ -191,63 +191,63 @@ export function getBoxScoreColumns(
     },
     {
       key: "orb",
-      description: note("orb"),
+      definition: note("orb"),
       label: "OREB",
       align: "right",
       render: (r) => stat(r.orb),
     },
     {
       key: "drb",
-      description: note("drb"),
+      definition: note("drb"),
       label: "DREB",
       align: "right",
       render: (r) => stat(r.drb),
     },
     {
       key: "reb",
-      description: note("reb"),
+      definition: note("reb"),
       label: "REB",
       align: "right",
       render: (r) => stat(r.reb),
     },
     {
       key: "ast",
-      description: note("ast"),
+      definition: note("ast"),
       label: "AST",
       align: "right",
       render: (r) => stat(r.ast),
     },
     {
       key: "stl",
-      description: note("stl"),
+      definition: note("stl"),
       label: "STL",
       align: "right",
       render: (r) => stat(r.stl),
     },
     {
       key: "blk",
-      description: note("blk"),
+      definition: note("blk"),
       label: "BLK",
       align: "right",
       render: (r) => stat(r.blk),
     },
     {
       key: "tov",
-      description: note("tov"),
+      definition: note("tov"),
       label: "TOV",
       align: "right",
       render: (r) => stat(r.tov),
     },
     {
       key: "pf",
-      description: note("pf"),
+      definition: note("pf"),
       label: "PF",
       align: "right",
       render: (r) => stat(r.pf),
     },
     {
       key: "pts",
-      description: note("pts"),
+      definition: note("pts"),
       label: "PTS",
       align: "right",
       render: (r) => stat(r.pts),
@@ -265,7 +265,7 @@ export function getAdvancedColumns(
       key: "mp",
       label: "MP",
       align: "right",
-      description: "Minutes played. Season total.",
+      definition: withBasis("mp", "totals"),
       render: (r) => formatNumber(r.mp),
     },
 

@@ -5,6 +5,8 @@ import { PlayerLink } from "@/components/PlayerLink";
 import { TeamLink } from "@/components/TeamLink";
 import { SeasonSnapshotFilter } from "@/components/SeasonSnapshotFilter";
 import { SimpleTable } from "@/components/SimpleTable";
+import { GlossaryButton } from "@/components/GlossaryButton";
+import { GLOSSARY, tooltip, type GlossaryEntry } from "@/lib/glossary";
 import { TableOverlay } from "@/components/TableNav";
 import type { ColumnDef } from "@/components/DataTable";
 import { formatCurrency, formatScore } from "@/lib/format";
@@ -118,9 +120,11 @@ function Band({
       <div className="mb-4">
         <h2 className="text-lg font-semibold tracking-tight">
           {href ? (
-            <Link href={href} className="transition-colors hover:text-accent underline underline-offset-2">
+            <Link
+              href={href}
+              className="transition-colors hover:text-accent underline underline-offset-2"
+            >
               {title}
-            
             </Link>
           ) : (
             title
@@ -236,6 +240,19 @@ function netValueCells(score: number | null, rank: number | null) {
   );
 }
 
+/** The ballot's two explained headings, shared by their tooltips and the
+ *  glossary so the two can't drift apart. */
+const BALLOT_NET_VALUE: GlossaryEntry = {
+  key: "netValueScore",
+  label: "Net Value",
+  ...GLOSSARY.netValueScore,
+};
+const BALLOT_NV_RANK: GlossaryEntry = {
+  key: "netValueRank",
+  label: "NV Rank",
+  ...GLOSSARY.netValueRank,
+};
+
 /** A voted award's finishing order. The vote tallies live in the database but
  *  aren't shown — what the page is for is who won and what he was worth. */
 function Ballot({ rows }: { rows: AwardBallotRow[] }) {
@@ -243,53 +260,62 @@ function Ballot({ rows }: { rows: AwardBallotRow[] }) {
     // Five columns don't need the whole page. Capped so the table reads as a
     // block of related numbers rather than a row of figures marooned at either
     // edge of a wide monitor.
-    <div className="sheet-scrollbar w-full max-w-2xl overflow-x-auto overscroll-x-contain rounded-lg border-2 border-accent bg-surface">
-      <table className="w-max min-w-full text-sm text-black">
-        <thead className="bg-surface border-b-2 border-accent">
-          <tr>
-            <th className="px-3 py-2 text-right font-medium text-black/40">
-              #
-            </th>
-            <th className="px-3 py-2 text-left font-medium">Player</th>
-            <th className="px-3 py-2 text-left font-medium">Team</th>
-            <th
-              className="px-3 py-2 text-right font-medium"
-              title="Production minus what his pay expected of him. About 2.5 team wins per NVP."
-            >
-              Net Value
-            </th>
-            <th
-              className="px-3 py-2 text-right font-medium"
-              title="Where that Net Value placed him in the league that season."
-            >
-              NV Rank
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r, i) => (
-            <tr
-              key={r.playerId}
-              className={`${i % 2 === 0 ? "bg-surface" : "bg-surface-alt"} hover:bg-surface-hover transition-colors`}
-            >
-              <td className="px-3 py-1.5 text-right font-mono text-[0.8125rem] tabular-nums text-black/40">
-                {r.rank ?? "—"}
-              </td>
-              <td className="whitespace-nowrap px-3 py-1.5">
-                {/* The winner is named above the table already, so the weight
-                    here is what tells a shared award from a clear one. */}
-                <span className={r.won ? "font-semibold" : ""}>
-                  <PlayerLink id={r.playerId} name={r.name} />
-                </span>
-              </td>
-              <td className="whitespace-nowrap px-3 py-1.5 font-mono text-[0.8125rem]">
-                {r.team ? <TeamLink abbr={r.team} label={r.teamLabel} /> : "—"}
-              </td>
-              {netValueCells(r.netValueScore, r.seasonRank)}
+    <div className="w-full max-w-2xl">
+      <div className="mb-2 flex justify-end">
+        <GlossaryButton entries={[BALLOT_NET_VALUE, BALLOT_NV_RANK]} />
+      </div>
+      <div className="sheet-scrollbar w-full overflow-x-auto overscroll-x-contain rounded-lg border-2 border-accent bg-surface">
+        <table className="w-max min-w-full text-sm text-black">
+          <thead className="bg-surface border-b-2 border-accent">
+            <tr>
+              <th className="px-3 py-2 text-right font-medium text-black/40">
+                #
+              </th>
+              <th className="px-3 py-2 text-left font-medium">Player</th>
+              <th className="px-3 py-2 text-left font-medium">Team</th>
+              <th
+                className="px-3 py-2 text-right font-medium"
+                title={tooltip(BALLOT_NET_VALUE)}
+              >
+                {BALLOT_NET_VALUE.label}
+              </th>
+              <th
+                className="px-3 py-2 text-right font-medium"
+                title={tooltip(BALLOT_NV_RANK)}
+              >
+                {BALLOT_NV_RANK.label}
+              </th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {rows.map((r, i) => (
+              <tr
+                key={r.playerId}
+                className={`${i % 2 === 0 ? "bg-surface" : "bg-surface-alt"} hover:bg-surface-hover transition-colors`}
+              >
+                <td className="px-3 py-1.5 text-right font-mono text-[0.8125rem] tabular-nums text-black/40">
+                  {r.rank ?? "—"}
+                </td>
+                <td className="whitespace-nowrap px-3 py-1.5">
+                  {/* The winner is named above the table already, so the weight
+                    here is what tells a shared award from a clear one. */}
+                  <span className={r.won ? "font-semibold" : ""}>
+                    <PlayerLink id={r.playerId} name={r.name} />
+                  </span>
+                </td>
+                <td className="whitespace-nowrap px-3 py-1.5 font-mono text-[0.8125rem]">
+                  {r.team ? (
+                    <TeamLink abbr={r.team} label={r.teamLabel} />
+                  ) : (
+                    "—"
+                  )}
+                </td>
+                {netValueCells(r.netValueScore, r.seasonRank)}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -470,10 +496,7 @@ export default async function SeasonsPage({
           ))}
 
           {ballots.length > 0 && (
-            <Band
-              id="voting"
-              title="Award Votes"
-            >
+            <Band id="voting" title="Award Votes">
               <div className="grid min-w-0 gap-8 lg:grid-cols-2">
                 {ballots.map((code) => (
                   <section

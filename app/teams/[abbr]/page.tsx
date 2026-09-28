@@ -28,6 +28,7 @@ import {
   type TeamRosterRow,
   type TeamNetValue,
 } from "@/lib/db/queries";
+import { withBasis } from "@/lib/glossary";
 import { PAGE_COLUMN } from "@/lib/layout";
 import { SITE_URL, jsonLd, pageMetadata } from "@/lib/site";
 
@@ -81,7 +82,7 @@ function historyColumnsFor(
                 r.champion ? "font-semibold" : ""
               }`}
             >
-              {r.season}
+              <SeasonLink season={r.season} />
             </span>
             {era && (
               <span
@@ -139,15 +140,12 @@ function historyColumnsFor(
       key: "teamNetValue",
       label: "Team Net Value",
       align: "center",
-      description:
-        "The roster's Net Value added up: wins the squad returned above what it cost. Counts only players on a full contract.",
       render: (r) => (r.netValue ? formatScore(r.netValue.total) : "—"),
     },
     {
       key: "teamNetValueRank",
       label: "Team NV Rank",
       align: "center",
-      description: "Where that ranked among the league's teams that season.",
       render: (r) => (r.netValue ? formatRank(r.netValue.rank) : "—"),
     },
     // {
@@ -236,8 +234,6 @@ function rosterColumns(
       key: "netValueShare",
       label: "Net Value",
       align: "right",
-      description:
-        "This team's share of the player's Net Value. On a bought-out contract it is the charge alone, since the production went to whoever he played for.",
       render: (r) => formatScore(r.netValueShare),
     },
     {
@@ -252,28 +248,28 @@ function rosterColumns(
       key: "mp",
       label: "MPG",
       align: "right",
-      description: "Minutes played. Per game.",
+      definition: withBasis("mp", "per_game"),
       render: (r) => (r.playedHere === false ? "—" : formatStat(r.mp)),
     },
     {
       key: "pts",
       label: "PTS",
       align: "right",
-      description: "Points. Per game.",
+      definition: withBasis("pts", "per_game"),
       render: (r) => (r.playedHere === false ? "—" : formatStat(r.pts)),
     },
     {
       key: "reb",
       label: "REB",
       align: "right",
-      description: "Total rebounds. Per game.",
+      definition: withBasis("reb", "per_game"),
       render: (r) => (r.playedHere === false ? "—" : formatStat(r.reb)),
     },
     {
       key: "ast",
       label: "AST",
       align: "right",
-      description: "Assists. Per game.",
+      definition: withBasis("ast", "per_game"),
       render: (r) => (r.playedHere === false ? "—" : formatStat(r.ast)),
     },
   ];

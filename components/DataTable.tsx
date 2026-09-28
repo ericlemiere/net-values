@@ -1,6 +1,12 @@
 import type { ReactNode } from "react";
 import { NavLink, TableOverlay } from "./TableNav";
-import { describe } from "@/lib/glossary";
+import {
+  describe,
+  glossaryFor,
+  tooltip,
+  type Definition,
+} from "@/lib/glossary";
+import { GlossaryButton } from "./GlossaryButton";
 import { TABLE_BREAKOUT } from "@/lib/layout";
 import { SeasonFilter } from "./SeasonFilter";
 import { TeamFilter, type TeamOption } from "./TeamFilter";
@@ -16,7 +22,7 @@ export interface ColumnDef<Row> {
    * means different things in different views — `mp` is a per-game average on
    * one table and a season total on another.
    */
-  description?: string;
+  definition?: Definition;
   /**
    * Keeps this cell out of the row-wide link. Set it on any column whose own
    * render puts a link in the cell: an anchor inside an anchor is invalid
@@ -165,7 +171,7 @@ export function DataTable<Row>({
 
   return (
     <div className={`min-w-0 max-w-screen ${TABLE_BREAKOUT}`}>
-      <div className="mb-4 flex min-w-0 flex-wrap items-center justify-between gap-4">
+      <div className="mb-3 flex min-w-0 flex-wrap items-end justify-between gap-4">
         <div className="flex flex-col md:flex-row min-w-0 md:items-center gap-4">
           <SeasonFilter
             basePath={basePath}
@@ -197,9 +203,7 @@ export function DataTable<Row>({
             extraParams={extraParams}
           />
         </div>
-        <div className={`shrink-0 ${COUNT_CHIP}`}>
-          {totalCount.toLocaleString()} rows
-        </div>
+        <GlossaryButton entries={glossaryFor(columns)} />
       </div>
       <TableOverlay>
         <div className={SHEET_SCROLL}>
@@ -234,7 +238,7 @@ export function DataTable<Row>({
                   return (
                     <th
                       key={col.key}
-                      title={describe(col.key, col.description)}
+                      title={tooltip(describe(col.key, col.definition))}
                       aria-sort={
                         isActive
                           ? dir === "asc"
@@ -297,52 +301,63 @@ export function DataTable<Row>({
           </table>
         </div>
       </TableOverlay>
-      <div className="mt-4 flex items-center justify-center gap-6 text-sm">
-        <NavLink
-          href={buildHref(
-            basePath,
-            {
-              season: currentSeason,
-              team: currentTeam,
-              pos: currentPos,
-              sort,
-              dir,
-              page: Math.max(1, page - 1),
-            },
-            extraParams,
-          )}
-          className={`rounded border border-white/20 px-3 py-1.5 transition-colors ${
-            page <= 1
-              ? "pointer-events-none opacity-30"
-              : "hover:border-accent hover:bg-accent hover:text-black"
-          }`}
+      {/* Pager centered under the table, row count at its right edge. A phone
+          hasn't the width for both on one line, so there the count comes
+          first, still flush right, and the pager drops beneath it. */}
+      <div className="mt-4 flex flex-col items-center gap-3 text-sm md:grid md:grid-cols-[1fr_auto_1fr]">
+        <div
+          className={`order-first self-end md:order-last md:justify-self-end ${COUNT_CHIP}`}
         >
-          ← Previous
-        </NavLink>
-        <div className="tabular-nums text-white/60">
-          Page {page} of {totalPages}
+          {totalCount.toLocaleString()} rows
         </div>
-        <NavLink
-          href={buildHref(
-            basePath,
-            {
-              season: currentSeason,
-              team: currentTeam,
-              pos: currentPos,
-              sort,
-              dir,
-              page: Math.min(totalPages, page + 1),
-            },
-            extraParams,
-          )}
-          className={`rounded border border-white/20 px-3 py-1.5 transition-colors ${
-            page >= totalPages
-              ? "pointer-events-none opacity-30"
-              : "hover:border-accent hover:bg-accent hover:text-black"
-          }`}
-        >
-          Next →
-        </NavLink>
+        <div className="hidden md:block" />
+        <div className="flex items-center gap-6">
+          <NavLink
+            href={buildHref(
+              basePath,
+              {
+                season: currentSeason,
+                team: currentTeam,
+                pos: currentPos,
+                sort,
+                dir,
+                page: Math.max(1, page - 1),
+              },
+              extraParams,
+            )}
+            className={`rounded border border-white/20 px-3 py-1.5 transition-colors ${
+              page <= 1
+                ? "pointer-events-none opacity-30"
+                : "hover:border-accent hover:bg-accent hover:text-black"
+            }`}
+          >
+            ← Previous
+          </NavLink>
+          <div className="tabular-nums text-white/60">
+            Page {page} of {totalPages}
+          </div>
+          <NavLink
+            href={buildHref(
+              basePath,
+              {
+                season: currentSeason,
+                team: currentTeam,
+                pos: currentPos,
+                sort,
+                dir,
+                page: Math.min(totalPages, page + 1),
+              },
+              extraParams,
+            )}
+            className={`rounded border border-white/20 px-3 py-1.5 transition-colors ${
+              page >= totalPages
+                ? "pointer-events-none opacity-30"
+                : "hover:border-accent hover:bg-accent hover:text-black"
+            }`}
+          >
+            Next →
+          </NavLink>
+        </div>
       </div>
     </div>
   );

@@ -24,7 +24,10 @@ export function PageHeader({
   meta?: ReactNode;
 }) {
   return (
-    <div className="mb-4 flex flex-col gap-4 md:min-h-11.5 md:flex-row md:items-center md:gap-8">
+    // Wraps rather than squeezes: when `meta` is too wide to sit beside the
+    // title, it drops beneath it whole instead of stacking its banners into
+    // the narrow space left over.
+    <div className="mb-4 flex flex-col gap-4 md:min-h-11.5 md:flex-row md:flex-wrap md:items-center md:gap-x-8 md:gap-y-3">
       <h1 className="min-w-0 text-2xl font-semibold tracking-tight">{title}</h1>
       {meta ? <div className="min-w-0 max-w-full">{meta}</div> : null}
     </div>

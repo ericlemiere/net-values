@@ -21,6 +21,7 @@ import {
   getAwardsForRows,
 } from "@/lib/db/queries";
 import { parsePosition } from "@/lib/positions";
+import { GLOSSARY } from "@/lib/glossary";
 import { PAGE_COLUMN } from "@/lib/layout";
 import { pageMetadata } from "@/lib/site";
 
@@ -57,11 +58,13 @@ function getColumns(
       key: "name",
       label: "Name",
       defaultDir: "asc",
-      render: (r) => <PlayerLink
+      render: (r) => (
+        <PlayerLink
           id={r.playerId}
           name={r.name}
           awards={awards.get(awardKey(r.playerId, r.season))}
-        />,
+        />
+      ),
     },
     ...(showSeason
       ? [
@@ -82,8 +85,7 @@ function getColumns(
       // Contracts carry no position of their own, so this is the position he
       // was listed at nearest the contract year. It is the only way the
       // upcoming season - all salaries, no games played yet - has one at all.
-      description:
-        "Position, taken from the nearest season the player has a stat line for. Contracts for a season not yet played show the position he last played.",
+      definition: GLOSSARY.posNearest,
       render: (r) => r.pos ?? "\u2014",
     },
     {
@@ -139,15 +141,20 @@ function getColumns(
       ? [
           {
             key: "capAdjustedSalary",
-            label: `Salary in ${currentCap.season} $`,
+            label: "Today's Equivalent",
             align: "center" as const,
             // Not sortable: it's a fixed multiple of % of League Cap, so
             // sorting by it would just repeat that column's order.
-            description: `The same share of the cap, restated at the ${currentCap.season} cap. What this contract would pay if it were signed now.`,
             render: capAdjusted,
           },
         ]
       : []),
+    {
+      key: "netValueScore",
+      label: "Net Value",
+      align: "center",
+      render: (r) => formatScore(r.netValueScore),
+    },
     {
       key: "deservedSalary",
       label: "Deserved Pay",
@@ -158,8 +165,7 @@ function getColumns(
       key: "payDifference",
       label: "Difference",
       align: "center",
-      description:
-        "Deserved pay minus actual pay, for the whole season. Blank on a contract that was only part of one — a season split between two teams is one player-season on the production side, and there is no honest way to charge a share of the gap to one team's books. The player's own page shows the season whole.",
+      definition: GLOSSARY.payDifferenceContract,
       render: (r) => {
         // Ben Simmons' 2024-25 is $39.3M owed by Brooklyn, who waived him, and
         // $755,826 from the Clippers, who signed him. The gap is measured
@@ -183,12 +189,6 @@ function getColumns(
           </span>
         );
       },
-    },
-    {
-      key: "netValueScore",
-      label: "Net Value",
-      align: "center",
-      render: (r) => formatScore(r.netValueScore),
     },
   ];
 }
@@ -280,10 +280,10 @@ export default async function SalariesPage({
         Every team-season from 1990-91 on now carries a payroll. Phoenix before
         2011-12 and Washington before 1997-98 were long missing, since the
         original import read each player&rsquo;s team from a roster table that
-        never had them. Both were recovered from the same Hoopshype source. Three
-        training-camp contracts totalling $88,367 are still unmatched, listed in
-        the scraper&rsquo;s unmatched_recovered_salaries.csv rather than guessed
-        onto a player.
+        never had them. Both were recovered from the same Hoopshype source.
+        Three training-camp contracts totalling $88,367 are still unmatched,
+        listed in the scraper&rsquo;s unmatched_recovered_salaries.csv rather
+        than guessed onto a player.
       </p>
     </div>
   );

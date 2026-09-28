@@ -18,7 +18,7 @@ import {
   formatSignedCurrency,
   payGapClass,
 } from "@/lib/format";
-import { GLOSSARY } from "@/lib/glossary";
+import { GLOSSARY, withBasis } from "@/lib/glossary";
 import {
   getCurrentCap,
   getAwardsForRows,
@@ -48,8 +48,7 @@ type SalRow = Awaited<ReturnType<typeof getPlayerCareerSalaries>>[number];
 // a per-game 10.8 FGM is fractional, a season total of 1034 is not.
 function getStatsColumns(mode: "per_game" | "totals"): ColumnDef<StatsRow>[] {
   const stat = mode === "totals" ? formatNumber : formatStat;
-  const per = mode === "totals" ? " Season total." : " Per game.";
-  const note = (key: string) => (GLOSSARY[key] ?? "") + per;
+  const note = (key: string) => withBasis(key, mode);
   return [
     {
       key: "season",
@@ -86,21 +85,21 @@ function getStatsColumns(mode: "per_game" | "totals"): ColumnDef<StatsRow>[] {
     // in others. It takes formatStat in both modes rather than following `stat`.
     {
       key: "mp",
-      description: note("mp"),
+      definition: note("mp"),
       label: "MP",
       align: "right",
       render: (r) => formatStat(r.mp),
     },
     {
       key: "fgm",
-      description: note("fgm"),
+      definition: note("fgm"),
       label: "FGM",
       align: "right",
       render: (r) => stat(r.fgm),
     },
     {
       key: "fga",
-      description: note("fga"),
+      definition: note("fga"),
       label: "FGA",
       align: "right",
       render: (r) => stat(r.fga),
@@ -113,14 +112,14 @@ function getStatsColumns(mode: "per_game" | "totals"): ColumnDef<StatsRow>[] {
     },
     {
       key: "fg3m",
-      description: note("fg3m"),
+      definition: note("fg3m"),
       label: "3PM",
       align: "right",
       render: (r) => stat(r.fg3m),
     },
     {
       key: "fg3a",
-      description: note("fg3a"),
+      definition: note("fg3a"),
       label: "3PA",
       align: "right",
       render: (r) => stat(r.fg3a),
@@ -133,14 +132,14 @@ function getStatsColumns(mode: "per_game" | "totals"): ColumnDef<StatsRow>[] {
     },
     {
       key: "fg2m",
-      description: note("fg2m"),
+      definition: note("fg2m"),
       label: "2PM",
       align: "right",
       render: (r) => stat(r.fg2m),
     },
     {
       key: "fg2a",
-      description: note("fg2a"),
+      definition: note("fg2a"),
       label: "2PA",
       align: "right",
       render: (r) => stat(r.fg2a),
@@ -159,14 +158,14 @@ function getStatsColumns(mode: "per_game" | "totals"): ColumnDef<StatsRow>[] {
     },
     {
       key: "ftm",
-      description: note("ftm"),
+      definition: note("ftm"),
       label: "FTM",
       align: "right",
       render: (r) => stat(r.ftm),
     },
     {
       key: "fta",
-      description: note("fta"),
+      definition: note("fta"),
       label: "FTA",
       align: "right",
       render: (r) => stat(r.fta),
@@ -179,63 +178,63 @@ function getStatsColumns(mode: "per_game" | "totals"): ColumnDef<StatsRow>[] {
     },
     {
       key: "orb",
-      description: note("orb"),
+      definition: note("orb"),
       label: "OREB",
       align: "right",
       render: (r) => stat(r.orb),
     },
     {
       key: "drb",
-      description: note("drb"),
+      definition: note("drb"),
       label: "DREB",
       align: "right",
       render: (r) => stat(r.drb),
     },
     {
       key: "reb",
-      description: note("reb"),
+      definition: note("reb"),
       label: "REB",
       align: "right",
       render: (r) => stat(r.reb),
     },
     {
       key: "ast",
-      description: note("ast"),
+      definition: note("ast"),
       label: "AST",
       align: "right",
       render: (r) => stat(r.ast),
     },
     {
       key: "stl",
-      description: note("stl"),
+      definition: note("stl"),
       label: "STL",
       align: "right",
       render: (r) => stat(r.stl),
     },
     {
       key: "blk",
-      description: note("blk"),
+      definition: note("blk"),
       label: "BLK",
       align: "right",
       render: (r) => stat(r.blk),
     },
     {
       key: "tov",
-      description: note("tov"),
+      definition: note("tov"),
       label: "TOV",
       align: "right",
       render: (r) => stat(r.tov),
     },
     {
       key: "pf",
-      description: note("pf"),
+      definition: note("pf"),
       label: "PF",
       align: "right",
       render: (r) => stat(r.pf),
     },
     {
       key: "pts",
-      description: note("pts"),
+      definition: note("pts"),
       label: "PTS",
       align: "right",
       render: (r) => stat(r.pts),
@@ -401,9 +400,14 @@ function getSalariesColumns(
       key: "salary",
       label: "Salary",
       align: "right",
-      description:
-        "Everything the player was paid that season. Where a contract was bought out, that is the old team's money plus the new team's added together.",
+      definition: GLOSSARY.salarySeasonTotal,
       render: (r) => formatCurrency(r.salary),
+    },
+    {
+      key: "salaryRank",
+      label: "Pay Rank",
+      align: "right",
+      render: (r) => formatRank(r.salaryRank),
     },
     {
       key: "teamPayroll",
@@ -431,11 +435,8 @@ function getSalariesColumns(
     },
     {
       key: "capAdjustedSalary",
-      label: currentCap ? `Salary in ${currentCap.season} $` : "Cap-Adjusted",
+      label: "Today's Equivalent",
       align: "right",
-      description: `The same share of the cap, restated at the ${
-        currentCap?.season ?? "current"
-      } cap. What this contract would pay if it were signed now.`,
       // Scaled from the raw salary and the two caps, not from % of League Cap:
       // that column is rounded to two decimals, and multiplying it back out
       // lands up to ~$8,000 from the real figure. Blank for the current
@@ -452,10 +453,16 @@ function getSalariesColumns(
           : "—",
     },
     {
-      key: "salaryRank",
-      label: "Pay Rank",
+      key: "netValueScore",
+      label: "Net Value",
       align: "right",
-      render: (r) => formatRank(r.salaryRank),
+      render: (r) => formatScore(r.netValueScore),
+    },
+    {
+      key: "netValueRank",
+      label: "NV Rank",
+      align: "right",
+      render: (r) => formatRank(r.netValueRank),
     },
     {
       key: "deservedSalary",
@@ -480,18 +487,6 @@ function getSalariesColumns(
           </span>
         );
       },
-    },
-    {
-      key: "netValueScore",
-      label: "Net Value",
-      align: "right",
-      render: (r) => formatScore(r.netValueScore),
-    },
-    {
-      key: "netValueRank",
-      label: "NV Rank",
-      align: "right",
-      render: (r) => formatRank(r.netValueRank),
     },
   ];
 }

@@ -4,11 +4,13 @@ import {
   asc,
   desc,
   eq,
+  getTableName,
   ilike,
   inArray,
   isNotNull,
   sql,
   type AnyColumn,
+  type Table,
   type SQL,
 } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
@@ -32,6 +34,7 @@ import {
   teamIdentities,
   teamAliases,
   playerAwards,
+  playerTeamSplits,
 } from "./schema";
 
 export const PAGE_SIZE = 100;
@@ -112,6 +115,37 @@ function eraAbbrSql(team: AnyColumn | SQL, season: AnyColumn | SQL) {
     LIMIT 1)`;
 }
 
+/** One of the teams a traded player played for, as `stintTeamsSql` returns it. */
+export interface StintTeam {
+  abbr: string;
+  /** What the franchise was called that season, null if it never changed. */
+  label: string | null;
+}
+
+/**
+ * Every team a player suited up for that season, in order — or NULL for the
+ * great majority who stayed put and have no rows in player_team_splits.
+ *
+ * The season tables store a traded player's row with team NULL (bref) or with
+ * the last team he played for (nba.com), neither of which says what happened.
+ * This is what the Team cell shows instead: WAS → ATL.
+ *
+ * Takes the outer table's NAME and writes the correlation out qualified, for
+ * the reason nearestPosSql gives: player_team_splits has its own player_id and
+ * season, so an unqualified outer reference from a single-table query would
+ * bind to the inner row.
+ */
+function stintTeamsSql(outer: Table) {
+  const name = getTableName(outer);
+  return sql<StintTeam[] | null>`(
+    SELECT json_agg(
+      json_build_object('abbr', sp.team, 'label', ${eraAbbrSql(sql`sp.team`, sql`sp.season`)})
+      ORDER BY sp.stint)
+    FROM ${playerTeamSplits} sp
+    WHERE sp.player_id = ${sql.raw(`"${name}".player_id`)}
+      AND sp.season = ${sql.raw(`"${name}".season`)})`;
+}
+
 /**
  * The position a player was listed at around a given season.
  *
@@ -143,11 +177,12 @@ function nearestPosSql(outerPlayerId: SQL, outerSeason: SQL) {
     LIMIT 1)`;
 }
 
-/** The salaries page's own position expression, correlated to a salary row. */
-const salaryPosSql = nearestPosSql(
-  sql`salaries.player_id`,
-  sql`salaries.season`,
-);
+/**
+ * A salary with a figure. $0 is not a salary but a missing one: two-way
+ * contracts from 2017-18 through 2021-22, which basketball-reference lists
+ * without a number. Net Value leaves them out too (compute_net_values.py).
+ */
+const hasSalary = sql`${salaries.salary} > 0`;
 
 async function distinctSeasons(
   table: typeof playerStatsPerGame | typeof advancedStats | typeof salaries,
@@ -275,6 +310,7 @@ async function getPlayerStatsFrom(
       season: t.season,
       team: t.team,
       teamLabel: eraAbbrSql(t.team, t.season),
+      teams: stintTeamsSql(t),
       pos: t.pos,
       age: t.age,
       gp: t.gp,
@@ -396,6 +432,7 @@ export const getAdvancedStats = cached("getAdvancedStats", async function getAdv
       season: advancedStats.season,
       team: advancedStats.team,
       teamLabel: eraAbbrSql(advancedStats.team, advancedStats.season),
+      teams: stintTeamsSql(advancedStats),
       pos: advancedStats.pos,
       age: advancedStats.age,
       gp: advancedStats.gp,
@@ -541,18 +578,18 @@ const deservedPay = db
 /**
  * Deserved pay minus what he was actually paid: money left on the table.
  *
- * Both sides are whole-season figures. A bought-out season is two contracts
- * but one player-season, and the ladder above ranks player-seasons, so
- * charging the gap against one team's slice of the pay would say a team that
- * only wrote half the checks got half the bargain. Rows that are only part of
- * a season come back null rather than repeating the season's gap on each: the
- * figure has no per-contract meaning, and null is also what sorts them out of
- * the way when the table is ordered by this column.
+ * Both sides are whole-season figures, because the ladder above ranks
+ * player-seasons. A row that is only part of a season — one team's share of a
+ * traded player's pay, or a waived contract — comes back null rather than
+ * repeating the season's gap against a fraction of the money. Null also sorts
+ * those rows out of the way when the table is ordered by this column.
  */
-const payDifferenceSql = sql<number | null>`(
-  CASE WHEN ${salaries.salary} = ${netValues.salary}
-    THEN ${deservedPay.salary} - ${netValues.salary}
-  END)`;
+function payDifferenceSql(rowSalary: AnyColumn | SQL) {
+  return sql<number | null>`(
+    CASE WHEN ${rowSalary} = ${netValues.salary}
+      THEN ${deservedPay.salary} - ${netValues.salary}
+    END)`;
+}
 
 /**
  * The most recent league cap on file, used to restate historical salaries in
@@ -600,65 +637,75 @@ export const getCurrentCap = cached("getCurrentCap", async function getCurrentCa
   };
 });
 
-const salarySelection = {
-  id: salaries.id,
-  season: salaries.season,
-  team: salaries.team,
-  teamLabel: eraAbbrSql(salaries.team, salaries.season),
-  pos: salaryPosSql,
-  salary: salaries.salary,
-  teamPayroll: teamPayrolls.payroll,
-  leagueCap: seasons.leagueCap,
-  pctOfTeamCap: pctOfTeamCapSql,
-  pctOfLeagueCap: pctOfLeagueCapSql,
-  /**
-   * This row's own Net Value, meaning this team's share of the player's.
-   *
-   * The table lists one row per contract, so a bought-out season is two rows,
-   * and hanging the player's whole score on both would print the same figure
-   * twice for money that was split. Falls back to the whole score where there
-   * is no share to read, which is every ordinary single-contract season.
-   */
-  netValueScore: sql<number | null>`coalesce(${netValueShares.score}, ${netValues.netValueScore})::float8`,
-  netValue: sql<number | null>`${netValues.netValue}::float8`,
-  /**
-   * The player's pay for the whole season, which is what the two columns
-   * below are measured against. Not the same as `salary` above on a season
-   * that was split between two teams.
-   */
-  seasonSalary: netValues.salary,
-  deservedSalary: deservedPay.salary,
-  payDifference: payDifferenceSql,
-  netValueRank: netValues.seasonRank,
-  salaryRank: netValues.salaryRank,
-  production: sql<number | null>`${netValues.production}::float8`,
-  expectedProduction: sql<
-    number | null
-  >`${netValues.expectedProduction}::float8`,
-  availability: sql<number | null>`${netValues.availability}::float8`,
-  /** False on a row that is a team paying a player who played elsewhere. */
-  playedHere: netValueShares.playedHere,
-};
+/** One row of /salaries. See getSalaries for the two shapes it takes. */
+export interface SalaryRow {
+  id: number;
+  playerId: number;
+  name: string;
+  season: string;
+  team: string | null;
+  teamLabel: string | null;
+  /** Every team he played for that season, in order, if he was traded. */
+  teams: StintTeam[] | null;
+  pos: string | null;
+  salary: number | null;
+  /** Apportioned rather than on file: one team's part of a traded season. */
+  estimated: boolean;
+  /** False on a waived contract: money owed by a team he didn't play for. */
+  playedHere: boolean;
+  teamPayroll: number | null;
+  leagueCap: number | null;
+  pctOfTeamCap: number | null;
+  pctOfLeagueCap: number | null;
+  netValueScore: number | null;
+  /** His whole season's salary, which deserved pay is measured against. */
+  seasonSalary: number | null;
+  deservedSalary: number | null;
+  payDifference: number | null;
+  netValueRank: number | null;
+  salaryRank: number | null;
+  /** Each team's part of the season, on an unfiltered row; else empty. */
+  contracts: PlayerContract[];
+}
 
-const salariesSortColumns = {
-  name: players.name,
-  season: salaries.season,
-  team: salaries.team,
-  pos: salaryPosSql,
-  salary: salaries.salary,
-  teamPayroll: teamPayrolls.payroll,
-  pctOfTeamCap: pctOfTeamCapSql,
-  pctOfLeagueCap: pctOfLeagueCapSql,
-  // Matches what the column renders — the share where there is one.
-  netValueScore: sql`coalesce(${netValueShares.score}, ${netValues.netValueScore})`,
-  netValue: netValues.netValue,
-  netValueRank: netValues.seasonRank,
-  salaryRank: netValues.salaryRank,
-  deservedSalary: deservedPay.salary,
-  payDifference: payDifferenceSql,
-} as const;
+/**
+ * Every team that paid him that season, as the player page's salary log
+ * reads them: the teams he played for in order, then any waived contract.
+ * Takes the outer query's columns written out, for the reason nearestPosSql
+ * gives.
+ */
+function contractsSql(outerPlayerId: SQL, outerSeason: SQL) {
+  return sql<PlayerContract[]>`(
+    SELECT COALESCE(JSON_AGG(
+             JSON_BUILD_OBJECT(
+               'team', sh.team, 'salary', sh.salary,
+               'playedHere', sh.played_here,
+               'estimated', sh.salary_estimated,
+               'score', sh.score::float8,
+               'teamPayroll', tp.payroll,
+               'teamLabel', ${eraAbbrSql(sql`sh.team`, sql`sh.season`)})
+             ORDER BY sh.played_here DESC, sp.stint NULLS LAST, sh.salary DESC NULLS LAST),
+           '[]'::json)
+    FROM ${netValueShares} sh
+    LEFT JOIN ${playerTeamSplits} sp
+           ON sp.player_id = sh.player_id AND sp.season = sh.season AND sp.team = sh.team
+    LEFT JOIN ${teams} sht ON sht.abbr = sh.team
+    LEFT JOIN ${teamPayrolls} tp ON tp.team_id = sht.id AND tp.season = sh.season
+    WHERE sh.player_id = ${outerPlayerId} AND sh.season = ${outerSeason})`;
+}
 
-export type SalariesSortKey = keyof typeof salariesSortColumns;
+/** True when the outer row's player-season was split between teams by a trade. */
+function tradedSql(outer: Table) {
+  const name = getTableName(outer);
+  return sql<boolean>`EXISTS (
+    SELECT 1 FROM ${playerTeamSplits} tr
+    WHERE tr.player_id = ${sql.raw(`"${name}".player_id`)}
+      AND tr.season = ${sql.raw(`"${name}".season`)})`;
+}
+
+function pctOf(part: AnyColumn | SQL, whole: AnyColumn | SQL) {
+  return sql<number | null>`round(100.0 * ${part} / nullif(${whole}, 0), 2)::float8`;
+}
 
 // The league cap for one season, for display above the salaries table. Read
 // from `seasons` rather than off a result row so it still resolves when the
@@ -672,77 +719,137 @@ export const getLeagueCap = cached("getLeagueCap", async function getLeagueCap(s
   return rows[0]?.leagueCap ?? null;
 });
 
-export const getSalaries = cached("getSalaries", async function getSalaries(params: ListParams) {
+/**
+ * /salaries: one row per player-season, or under a team filter, one row per
+ * player that team paid.
+ *
+ * UNFILTERED, a row is his season as the model sees it (net_values): the
+ * salary the teams he played for paid, his Net Value and both ranks, which are
+ * league-wide and so line up with the row count. A traded season names its
+ * teams in order and leaves Team Payroll blank, there being no one payroll to
+ * be a share of; `contracts` carries each team's part for the rows the page
+ * folds under it, and any waived contract it shows beneath.
+ *
+ * FILTERED TO A TEAM, a row is that team's part (net_value_shares): what it
+ * paid, as a share of its own payroll, and its piece of his Net Value. James
+ * Harden's 2021-22 on BKN is Brooklyn's ~$30.0M and -0.40, not his $44.3M
+ * season. A waived contract shows on the team that is still paying it. The
+ * ranks stay the player's league-wide ones; deserved pay and the difference
+ * are whole-season figures and blank on a row that is only part of one.
+ */
+export const getSalaries = cached("getSalaries", async function getSalaries(
+  params: ListParams,
+): Promise<{ rows: SalaryRow[]; totalCount: number; page: number }> {
   const page = clampPage(params.page);
-  const sortCol =
-    salariesSortColumns[params.sort as SalariesSortKey] ?? salaries.salary;
-  // A salary row with no figure is noise here: every column but the player,
-  // season and team renders blank. `and` drops the undefined that listWhere
-  // returns for the unfiltered case, so `where` is always defined and the
-  // count query below stays in step with the rows.
-  const where = and(
-    isNotNull(salaries.salary),
-    listWhere(salaries.season, salaries.team, salaryPosSql, params),
-  )!;
+  const byTeam = params.team !== "ALL";
 
-  const rowsQuery = db
+  // The row's own team, salary and score: the season's, or one team's part.
+  const nv = netValues;
+  const sh = netValueShares;
+  const team = byTeam ? sh.team : nv.team;
+  const salary = byTeam ? sh.salary : nv.salary;
+  const pos = nearestPosSql(sql`net_values.player_id`, sql`net_values.season`);
+  const payroll = byTeam
+    ? sql<number | null>`${teamPayrolls.payroll}`
+    : sql<number | null>`CASE WHEN ${tradedSql(nv)} THEN NULL ELSE ${teamPayrolls.payroll} END`;
+  const score = byTeam
+    ? sql<number | null>`${sh.score}::float8`
+    : sql<number | null>`${nv.netValueScore}::float8`;
+
+  const sortColumns = {
+    name: players.name,
+    season: nv.season,
+    team,
+    pos,
+    salary,
+    teamPayroll: payroll,
+    pctOfTeamCap: pctOf(salary, payroll),
+    pctOfLeagueCap: pctOf(salary, seasons.leagueCap),
+    netValueScore: score,
+    netValueRank: nv.seasonRank,
+    salaryRank: nv.salaryRank,
+    deservedSalary: deservedPay.salary,
+    payDifference: payDifferenceSql(salary),
+  };
+  const sortCol =
+    sortColumns[params.sort as keyof typeof sortColumns] ?? salary;
+
+  const clauses: SQL[] = [isNotNull(salary)];
+  if (params.season !== "ALL") clauses.push(eq(nv.season, params.season));
+  if (byTeam) clauses.push(eq(sh.team, params.team));
+  if (params.pos !== "ALL")
+    clauses.push(sql`split_part(${pos}, '-', 1) = ${params.pos}`);
+  const where = and(...clauses)!;
+
+  const base = db
     .select({
-      playerId: salaries.playerId,
+      id: byTeam ? sh.id : nv.id,
+      playerId: nv.playerId,
       name: players.name,
-      ...salarySelection,
+      season: nv.season,
+      team,
+      teamLabel: eraAbbrSql(team, nv.season),
+      teams: stintTeamsSql(nv),
+      pos,
+      salary,
+      estimated: byTeam
+        ? sh.salaryEstimated
+        : sql<boolean>`false`,
+      playedHere: byTeam ? sh.playedHere : sql<boolean>`true`,
+      teamPayroll: payroll,
+      leagueCap: seasons.leagueCap,
+      pctOfTeamCap: pctOf(salary, payroll),
+      pctOfLeagueCap: pctOf(salary, seasons.leagueCap),
+      netValueScore: score,
+      seasonSalary: nv.salary,
+      // Whole-season, like the difference beside it, so blank on a row that
+      // is only one team's part of the season.
+      deservedSalary: sql<number | null>`(
+        CASE WHEN ${salary} = ${nv.salary} THEN ${deservedPay.salary} END)`,
+      payDifference: payDifferenceSql(salary),
+      netValueRank: nv.seasonRank,
+      salaryRank: nv.salaryRank,
+      contracts: byTeam
+        ? sql<PlayerContract[]>`'[]'::json`
+        : contractsSql(sql`net_values.player_id`, sql`net_values.season`),
     })
-    .from(salaries)
-    .innerJoin(players, eq(players.id, salaries.playerId))
-    // salaries.team is a canonical abbreviation, so it reaches team_payrolls
-    // via teams.abbr. LEFT so a salary row still shows when its team payroll
-    // or that season's league cap is missing.
-    .leftJoin(teams, eq(teams.abbr, salaries.team))
+    .from(nv);
+  const joined = (byTeam
+    ? base.innerJoin(sh, and(eq(sh.playerId, nv.playerId), eq(sh.season, nv.season)))
+    : base
+  )
+    .innerJoin(players, eq(players.id, nv.playerId))
+    .leftJoin(teams, eq(teams.abbr, team))
     .leftJoin(
       teamPayrolls,
-      and(
-        eq(teamPayrolls.teamId, teams.id),
-        eq(teamPayrolls.season, salaries.season),
-      ),
+      and(eq(teamPayrolls.teamId, teams.id), eq(teamPayrolls.season, nv.season)),
     )
-    .leftJoin(seasons, eq(seasons.season, salaries.season))
-    .leftJoin(
-      netValues,
-      and(
-        eq(netValues.playerId, salaries.playerId),
-        eq(netValues.season, salaries.season),
-      ),
-    )
-    // Joined on the team too, so each contract row picks up its own slice.
-    .leftJoin(
-      netValueShares,
-      and(
-        eq(netValueShares.playerId, salaries.playerId),
-        eq(netValueShares.season, salaries.season),
-        eq(netValueShares.team, salaries.team),
-      ),
-    )
+    .leftJoin(seasons, eq(seasons.season, nv.season))
     // LEFT, since a season with no games played yet has no rung on the ladder.
     .leftJoin(
       deservedPay,
-      and(
-        eq(deservedPay.playerId, salaries.playerId),
-        eq(deservedPay.season, salaries.season),
-      ),
-    )
-    .orderBy(orderByNullsLast(sortCol, params.dir), asc(players.name))
-    .limit(PAGE_SIZE)
-    .offset((page - 1) * PAGE_SIZE);
+      and(eq(deservedPay.playerId, nv.playerId), eq(deservedPay.season, nv.season)),
+    );
 
-  const countQuery = db
-    .select({ count: sql<number>`count(*)` })
-    .from(salaries);
+  const count = db.select({ count: sql<number>`count(*)` }).from(nv);
+  const counted = byTeam
+    ? count.innerJoin(sh, and(eq(sh.playerId, nv.playerId), eq(sh.season, nv.season)))
+    : count;
 
   const [rows, countResult] = await Promise.all([
-    rowsQuery.where(where),
-    countQuery.where(where),
+    joined
+      .where(where)
+      .orderBy(orderByNullsLast(sortCol, params.dir), asc(players.name))
+      .limit(PAGE_SIZE)
+      .offset((page - 1) * PAGE_SIZE),
+    counted.where(where),
   ]);
 
-  return { rows, totalCount: Number(countResult[0].count), page };
+  return {
+    rows: rows as SalaryRow[],
+    totalCount: Number(countResult[0].count),
+    page,
+  };
 });
 
 // ---- /teams ----
@@ -798,7 +905,7 @@ export const getTeamsForSeason = cached("getTeamsForSeason", async function getT
       n: sql<number>`count(*)`.as("n"),
     })
     .from(salaries)
-    .where(isNotNull(salaries.salary))
+    .where(hasSalary)
     .groupBy(salaries.team, salaries.season)
     .as("roster");
 
@@ -1007,15 +1114,20 @@ export type TeamRosterRow = Awaited<ReturnType<typeof getTeamRoster>>[number];
  * has one combined stat line with no single team on it, and dropping him from
  * his own team's roster would be worse than showing the combined line.
  */
+/** A split's season total as a per-game figure, else the season row's own. */
+function perGameSplitSql(splitTotal: AnyColumn, seasonPerGame: AnyColumn) {
+  return sql<number | null>`coalesce(${splitTotal} / nullif(${playerTeamSplits.gp}, 0), ${seasonPerGame})::float8`;
+}
+
 export const getTeamRoster = cached("getTeamRoster", async function getTeamRoster(abbr: string, season: string) {
   const team = abbr.toUpperCase();
   const where =
     season === "ALL"
-      ? and(eq(salaries.team, team), isNotNull(salaries.salary))!
+      ? and(eq(salaries.team, team), hasSalary)!
       : and(
           eq(salaries.team, team),
           eq(salaries.season, season),
-          isNotNull(salaries.salary),
+          hasSalary,
         )!;
 
   return db
@@ -1039,11 +1151,17 @@ export const getTeamRoster = cached("getTeamRoster", async function getTeamRoste
        * so rather than read as a player who turned up and did nothing.
        */
       playedHere: netValueShares.playedHere,
-      gp: playerStatsPerGame.gp,
-      mp: playerStatsPerGame.mp,
-      pts: playerStatsPerGame.pts,
-      reb: playerStatsPerGame.reb,
-      ast: playerStatsPerGame.ast,
+      /*
+       * A traded player's line with THIS team, from his split, falling back to
+       * the season row for everyone else. Without the split both of his teams
+       * showed his whole season. Splits are stored as totals, hence the divide;
+       * ::float8 because pg returns numeric from a raw expression as a string.
+       */
+      gp: sql<number | null>`coalesce(${playerTeamSplits.gp}, ${playerStatsPerGame.gp})`,
+      mp: perGameSplitSql(playerTeamSplits.mp, playerStatsPerGame.mp),
+      pts: perGameSplitSql(playerTeamSplits.pts, playerStatsPerGame.pts),
+      reb: perGameSplitSql(playerTeamSplits.reb, playerStatsPerGame.reb),
+      ast: perGameSplitSql(playerTeamSplits.ast, playerStatsPerGame.ast),
     })
     .from(salaries)
     .innerJoin(players, eq(players.id, salaries.playerId))
@@ -1069,6 +1187,14 @@ export const getTeamRoster = cached("getTeamRoster", async function getTeamRoste
       and(
         eq(playerStatsPerGame.playerId, salaries.playerId),
         eq(playerStatsPerGame.season, salaries.season),
+      ),
+    )
+    .leftJoin(
+      playerTeamSplits,
+      and(
+        eq(playerTeamSplits.playerId, salaries.playerId),
+        eq(playerTeamSplits.season, salaries.season),
+        eq(playerTeamSplits.team, team),
       ),
     )
     .where(where)
@@ -1340,6 +1466,7 @@ async function getPlayerCareerStatsFrom(
       season: t.season,
       team: t.team,
       teamLabel: eraAbbrSql(t.team, t.season),
+      teams: stintTeamsSql(t),
       pos: t.pos,
       age: t.age,
       gp: t.gp,
@@ -1387,6 +1514,7 @@ export const getPlayerCareerAdvancedStats = cached("getPlayerCareerAdvancedStats
       season: advancedStats.season,
       team: advancedStats.team,
       teamLabel: eraAbbrSql(advancedStats.team, advancedStats.season),
+      teams: stintTeamsSql(advancedStats),
       pos: advancedStats.pos,
       age: advancedStats.age,
       gp: advancedStats.gp,
@@ -1407,6 +1535,65 @@ export const getPlayerCareerAdvancedStats = cached("getPlayerCareerAdvancedStats
     .orderBy(asc(advancedStats.season));
 });
 
+/**
+ * A player's traded seasons, one row per team, in the order he played for
+ * them. Box-score columns are that stint's season totals; the player page
+ * divides by gp for its per-game table.
+ */
+export const getPlayerTeamSplits = cached("getPlayerTeamSplits", async function getPlayerTeamSplits(playerId: number) {
+  const t = playerTeamSplits;
+  return db
+    .select({
+      id: t.id,
+      season: t.season,
+      stint: t.stint,
+      team: t.team,
+      teamLabel: eraAbbrSql(t.team, t.season),
+      firstGame: t.firstGame,
+      lastGame: t.lastGame,
+      pos: t.pos,
+      age: t.age,
+      gp: t.gp,
+      gs: t.gs,
+      mp: t.mp,
+      fgm: t.fgm,
+      fga: t.fga,
+      fgPct: t.fgPct,
+      fg3m: t.fg3m,
+      fg3a: t.fg3a,
+      fg3Pct: t.fg3Pct,
+      fg2m: t.fg2m,
+      fg2a: t.fg2a,
+      fg2Pct: t.fg2Pct,
+      efgPct: t.efgPct,
+      ftm: t.ftm,
+      fta: t.fta,
+      ftPct: t.ftPct,
+      orb: t.orb,
+      drb: t.drb,
+      reb: t.reb,
+      ast: t.ast,
+      stl: t.stl,
+      blk: t.blk,
+      tov: t.tov,
+      pf: t.pf,
+      pts: t.pts,
+      per: t.per,
+      tsPct: t.tsPct,
+      usgPct: t.usgPct,
+      ows: t.ows,
+      dws: t.dws,
+      ws: t.ws,
+      obpm: t.obpm,
+      dbpm: t.dbpm,
+      bpm: t.bpm,
+      vorp: t.vorp,
+    })
+    .from(t)
+    .where(eq(t.playerId, playerId))
+    .orderBy(asc(t.season), asc(t.stint));
+});
+
 /** One of the contracts that paid a player in a single season. */
 export interface PlayerContract {
   team: string | null;
@@ -1415,6 +1602,15 @@ export interface PlayerContract {
   salary: number | null;
   /** False on money owed by a team he no longer played for — a buyout. */
   playedHere: boolean;
+  /**
+   * True when the salary is apportioned rather than on file: a traded
+   * player's pay split across his teams by days on each roster.
+   */
+  estimated?: boolean;
+  /** This team's piece of his Net Value. */
+  score?: number | null;
+  /** That team's payroll for the season. */
+  teamPayroll?: number | null;
 }
 
 export type PlayerCareerSalary = Awaited<
@@ -1441,7 +1637,7 @@ export const getPlayerCareerSalaries = cached("getPlayerCareerSalaries", async f
     WITH paid AS (
       SELECT s.id, s.season, s.team, s.salary, s.source
       FROM ${salaries} s
-      WHERE s.player_id = ${playerId}
+      WHERE s.player_id = ${playerId} AND s.salary > 0
     ),
     collapsed AS (
       SELECT season,
@@ -1459,6 +1655,9 @@ export const getPlayerCareerSalaries = cached("getPlayerCareerSalaries", async f
              JSON_AGG(
                JSON_BUILD_OBJECT('team', sh.team, 'salary', sh.salary,
                                  'playedHere', sh.played_here,
+                                 'estimated', sh.salary_estimated,
+                                 'score', sh.score::float8,
+                                 'teamPayroll', tp.payroll,
                                  'teamLabel', (
                                    SELECT ti.abbr FROM ${teamIdentities} ti
                                      JOIN ${teams} era_team ON era_team.id = ti.team_id
@@ -1466,10 +1665,20 @@ export const getPlayerCareerSalaries = cached("getPlayerCareerSalaries", async f
                                       AND sh.season >= ti.first_season
                                       AND (ti.last_season IS NULL OR sh.season <= ti.last_season)
                                     LIMIT 1))
-               ORDER BY sh.played_here DESC, sh.salary DESC NULLS LAST
+               -- The teams he played for in the order he played for them,
+               -- then anyone still paying him from before.
+               ORDER BY sh.played_here DESC, sp.stint NULLS LAST, sh.salary DESC NULLS LAST
              ) AS contracts,
-             SUM(sh.salary) FILTER (WHERE sh.played_here) AS played_salary
+             -- Only meaningful against one team: a traded season has no
+             -- single payroll to be a share of, and its rows carry their own.
+             CASE WHEN COUNT(*) FILTER (WHERE sh.played_here) = 1
+                  THEN SUM(sh.salary) FILTER (WHERE sh.played_here) END AS played_salary,
+             COUNT(*) FILTER (WHERE sh.played_here) > 1 AS traded
       FROM ${netValueShares} sh
+      LEFT JOIN ${playerTeamSplits} sp
+             ON sp.player_id = sh.player_id AND sp.season = sh.season AND sp.team = sh.team
+      LEFT JOIN ${teams} sht ON sht.abbr = sh.team
+      LEFT JOIN ${teamPayrolls} tp ON tp.team_id = sht.id AND tp.season = sh.season
       WHERE sh.player_id = ${playerId}
       GROUP BY sh.season
     ),
@@ -1493,19 +1702,33 @@ export const getPlayerCareerSalaries = cached("getPlayerCareerSalaries", async f
                AND c.season >= ti.first_season
                AND (ti.last_season IS NULL OR c.season <= ti.last_season)
              LIMIT 1) AS "teamLabel",
-           c.salary::int AS salary,
+           (SELECT json_agg(json_build_object('abbr', st.team, 'label', (
+                     SELECT ti.abbr FROM ${teamIdentities} ti
+                       JOIN ${teams} era_team ON era_team.id = ti.team_id
+                      WHERE era_team.abbr = st.team
+                        AND st.season >= ti.first_season
+                        AND (ti.last_season IS NULL OR st.season <= ti.last_season)
+                      LIMIT 1)) ORDER BY st.stint)
+              FROM ${playerTeamSplits} st
+             WHERE st.player_id = ${playerId} AND st.season = c.season) AS teams,
+           -- What the teams he played for paid, which is what the model
+           -- judges him on. A waived contract is left out here and shows as a
+           -- row of its own; paidTotal keeps it, for career earnings.
+           COALESCE(nv.salary, c.salary)::int AS salary,
+           c.salary::int AS "paidTotal",
            COALESCE(sp.contracts, up.contracts) AS contracts,
-           tp.payroll AS "teamPayroll",
+           CASE WHEN sp.traded THEN NULL ELSE tp.payroll END AS "teamPayroll",
            se.league_cap AS "leagueCap",
            -- Against the payroll of the team he actually played for, using
            -- only what THAT team paid him. Charging Portland's buyout against
            -- the Lakers' books would read as a far bigger slice of their
            -- payroll than Ayton ever took up.
-           round(100.0 * COALESCE(sp.played_salary, c.salary)
-                 / NULLIF(tp.payroll, 0), 2) AS "pctOfTeamCap",
-           -- Against the league cap it is the whole season's pay, because that
-           -- is what the player cost the league, whoever wrote the checks.
-           round(100.0 * c.salary / NULLIF(se.league_cap, 0), 2) AS "pctOfLeagueCap",
+           CASE WHEN sp.traded THEN NULL
+                ELSE round(100.0 * COALESCE(sp.played_salary, c.salary)
+                           / NULLIF(tp.payroll, 0), 2) END AS "pctOfTeamCap",
+           -- Against the league cap it is the same played-for pay as the
+           -- Salary column; a waived contract's share shows on its own row.
+           round(100.0 * COALESCE(nv.salary, c.salary) / NULLIF(se.league_cap, 0), 2) AS "pctOfLeagueCap",
            nv.net_value_score::float8 AS "netValueScore",
            nv.net_value::float8 AS "netValue",
            nv.season_rank AS "netValueRank",
@@ -1539,7 +1762,11 @@ export const getPlayerCareerSalaries = cached("getPlayerCareerSalaries", async f
     season: string;
     team: string | null;
     teamLabel: string | null;
+    /** Every team he played for, in order, on a traded season; else null. */
+    teams: StintTeam[] | null;
     salary: number | null;
+    /** Everything he was paid that season, waived contracts included. */
+    paidTotal: number | null;
     contracts: PlayerContract[];
     teamPayroll: number | null;
     leagueCap: number | null;
@@ -1672,6 +1899,7 @@ export const getSalaryComps = cached("getSalaryComps", async function getSalaryC
       FROM ${salaries} s
       JOIN ${seasons} ON ${seasons.season} = s.season
       WHERE s.player_id <> ${playerId}
+        AND s.salary > 0
         AND ${seasonFilter}
         AND abs(${pct} - ${targetPct}) <= ${tolerance}
     ),

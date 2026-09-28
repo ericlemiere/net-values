@@ -6,6 +6,10 @@ has to be refreshed before the numbers mean anything:
   box score stats   nba_api, via update_daily
   VORP              basketball-reference's advanced page, which is where
                     production comes from
+  team splits       a traded player's season, one row per team: nba.com's game
+                    logs (one request) for the box score and bref's per-team
+                    rows for the rest, so a trade shows up the day after the
+                    player's first game with his new team
   team records      basketball-reference standings — not just for the /teams
                     page, but because GAMES PLAYED SO FAR sets the availability
                     denominator. Without it, a player who has started every game
@@ -47,6 +51,7 @@ def main():
 
     import update_daily
     import backfill_advanced
+    import backfill_team_splits
     import backfill_teams
     import backfill_awards
     import compute_net_values
@@ -58,6 +63,10 @@ def main():
     print(f"\n=== advanced stats from bref: {end_year} ===")
     sys.argv = ["backfill_advanced", str(end_year)]
     backfill_advanced.main()
+
+    print(f"\n=== team splits: {end_year} ===")
+    sys.argv = ["backfill_team_splits", str(end_year)]
+    backfill_team_splits.main()
 
     print(f"\n=== team records from bref: {end_year} ===")
     sys.argv = ["backfill_teams", str(end_year)]

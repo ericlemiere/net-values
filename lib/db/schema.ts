@@ -197,6 +197,79 @@ export const advancedStats = pgTable(
   ],
 );
 
+/**
+ * A traded player's season, one row per team he played for.
+ *
+ * The three tables above are unique on (player_id, season), so a traded
+ * player's row there is his whole season: team NULL on the bref-sourced rows,
+ * and on nba.com's the last team he played for, which credits every game to
+ * it. This holds the pieces. Only multi-team seasons have rows here; a player
+ * who stayed put has nothing to split.
+ *
+ * Box-score columns are season TOTALS for that stint, never per-game — the
+ * per-game view divides by gp. From 1996-97 on they are summed from nba.com's
+ * game logs, which is also where the dates come from, and they sum back to the
+ * season row exactly. Before that they are bref's per-team totals rows.
+ *
+ * gs, pos and age come from bref only; nba.com's game logs carry none of the
+ * three. The advanced columns are bref's per-team rows too, and stay NULL
+ * until the bref pass has seen that stint.
+ *
+ * Written by scraper/backfill_team_splits.py, and refreshed for the season in
+ * progress by the morning job.
+ */
+export const playerTeamSplits = pgTable(
+  "player_team_splits",
+  {
+    id: serial("id").primaryKey(),
+    playerId: integer("player_id")
+      .notNull()
+      .references(() => players.id),
+    season: text("season").notNull(),
+    ...statColumns(),
+    team: varchar("team", { length: 3 }).notNull(),
+    /** 1 for the team he started the season with, then in order. */
+    stint: integer("stint").notNull(),
+    /** First and last game with this team, "YYYY-MM-DD". NULL before 1996-97. */
+    firstGame: text("first_game"),
+    lastGame: text("last_game"),
+    /**
+     * How long he was this team's, as days on the roster and as games the team
+     * played in that window. The trade is taken to fall midway between his last
+     * game for one team and his first for the next, and the first stint starts
+     * on opening night. Days apportion a salary the way the league pays it;
+     * games are what his minutes are measured against. NULL before 1996-97,
+     * where there are no dates.
+     */
+    rosterDays: integer("roster_days"),
+    teamGames: integer("team_games"),
+    /**
+     * What he produced for this team, written by compute_production.py, which
+     * credits each stint against its own team's results. The stints sum to his
+     * season's player_production row.
+     */
+    production: numeric("production", { precision: 8, scale: 3, mode: "number" }),
+    per: stat("per"),
+    tsPct: stat("ts_pct"),
+    usgPct: stat("usg_pct"),
+    ows: stat("ows"),
+    dws: stat("dws"),
+    ws: stat("ws"),
+    obpm: stat("obpm"),
+    dbpm: stat("dbpm"),
+    bpm: stat("bpm"),
+    vorp: stat("vorp"),
+  },
+  (t) => [
+    uniqueIndex("player_team_splits_player_season_team_idx").on(
+      t.playerId,
+      t.season,
+      t.team,
+    ),
+    index("player_team_splits_season_team_idx").on(t.season, t.team),
+  ],
+);
+
 // League-wide per-season context. One row per season, replacing what used to be
 // a league_cap value duplicated onto every individual salary row.
 // Sourced from basketball-reference's salary cap history page (1984-85+).
@@ -505,6 +578,12 @@ export const netValueShares = pgTable(
     score: numeric("score", { precision: 6, scale: 2, mode: "number" }),
     /** True on the team whose uniform he actually wore. */
     playedHere: boolean("played_here").notNull(),
+    /**
+     * True when `salary` is apportioned rather than read off a contract row:
+     * a player traded mid-season whose salary is on file under one team only,
+     * split across his teams by days on each roster.
+     */
+    salaryEstimated: boolean("salary_estimated").notNull().default(false),
     source: varchar("source", { length: 20 }).notNull(),
     /** `score` under the old VORP model — see net_values.netValueScoreVorp. */
     scoreVorp: numeric("score_vorp", {

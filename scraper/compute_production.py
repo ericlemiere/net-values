@@ -198,35 +198,67 @@ COLUMNS = [
 def load_players(cur, season_filter):
     """Every player-season with minutes, its team's ratings, and the extras.
 
+    A traded player comes in as one row per team from player_team_splits
+    instead of his season row, so each stint is priced against the team he was
+    actually playing for. His season row names one team for the whole year —
+    his last, on nba.com's rows — which credited that team's roster with
+    minutes it never had and left the other short. `split_id` marks the stint
+    rows; main() adds them back up into one season row.
+
+    The tracking-defense counts are season totals with no per-team version, so
+    a stint takes the share of them that its minutes are of his season.
+    Scoring's assisted share is a rate and passes through as it is.
+
     The team join goes through team_aliases so that a stat line filed under WSB,
     SEA or VAN finds the franchise that team_season_ratings knows as WAS, OKC or
-    MEM. A LEFT JOIN on the ratings keeps the pre-1997 multi-team rows, whose
-    team is NULL and which are priced against the league instead.
+    MEM. A LEFT JOIN on the ratings keeps any row with no team on file, which is
+    priced against the league instead.
     """
-    sql = """
-        SELECT t.player_id, t.season, t.team, t.mp, t.gp,
-               t.fga, t.fta, t.pts, t.ast, t.tov, t.orb, t.drb, t.stl, t.blk, t.pf,
+    box = ("fga", "fta", "pts", "ast", "tov", "orb", "drb", "stl", "blk", "pf")
+    season_box = ", ".join(f"t.{c}" for c in box)
+    stint_box = ", ".join(f"sp.{c}" for c in box)
+    tracking = ("d_fga", "deflections", "contested_shots", "loose_balls_recovered",
+                "charges_drawn")
+    scaled = ", ".join(f"d.{c} * x.mp / NULLIF(season_row.mp, 0) AS {c}" for c in tracking)
+    sql = f"""
+        WITH x AS (
+            SELECT t.player_id, t.season, t.team, t.mp, t.gp, {season_box}, t.pos,
+                   NULL::int AS split_id
+            FROM player_stats_totals t
+            WHERE NOT EXISTS (
+                SELECT 1 FROM player_team_splits sp
+                WHERE sp.player_id = t.player_id AND sp.season = t.season)
+            UNION ALL
+            SELECT sp.player_id, sp.season, sp.team, sp.mp, sp.gp, {stint_box},
+                   COALESCE(sp.pos, t.pos), sp.id
+            FROM player_team_splits sp
+            LEFT JOIN player_stats_totals t
+                   ON t.player_id = sp.player_id AND t.season = sp.season
+        )
+        SELECT x.player_id, x.season, x.team, x.mp, x.gp,
+               x.fga, x.fta, x.pts, x.ast, x.tov, x.orb, x.drb, x.stl, x.blk, x.pf,
                COALESCE(al.team_id, te.id) AS team_id,
                r.poss AS team_poss, r.gp AS team_gp,
                r.off_rating, r.def_rating,
-               t.pos,
+               x.pos, x.split_id,
                s.pct_ast_fgm,
-               d.d_fga, d.d_fg_pct, d.normal_fg_pct, d.deflections,
-               d.contested_shots, d.loose_balls_recovered, d.charges_drawn
-        FROM player_stats_totals t
-        LEFT JOIN teams te ON te.abbr = t.team
-        LEFT JOIN team_aliases al ON al.alias = t.team
+               {scaled}, d.d_fg_pct, d.normal_fg_pct
+        FROM x
+        LEFT JOIN player_stats_totals season_row
+               ON season_row.player_id = x.player_id AND season_row.season = x.season
+        LEFT JOIN teams te ON te.abbr = x.team
+        LEFT JOIN team_aliases al ON al.alias = x.team
         LEFT JOIN team_season_ratings r
-               ON r.team_id = COALESCE(al.team_id, te.id) AND r.season = t.season
+               ON r.team_id = COALESCE(al.team_id, te.id) AND r.season = x.season
         LEFT JOIN player_scoring_splits s
-               ON s.player_id = t.player_id AND s.season = t.season
+               ON s.player_id = x.player_id AND s.season = x.season
         LEFT JOIN player_tracking_defense d
-               ON d.player_id = t.player_id AND d.season = t.season
-        WHERE t.mp IS NOT NULL AND t.mp > 0
+               ON d.player_id = x.player_id AND d.season = x.season
+        WHERE x.mp IS NOT NULL AND x.mp > 0
     """
     params = []
     if season_filter:
-        sql += " AND t.season = %s"
+        sql += " AND x.season = %s"
         params.append(season_filter)
     cur.execute(sql, params)
     cols = [c.name for c in cur.description]
@@ -269,10 +301,10 @@ def add_usage(players, league):
     """Attach floor share, possessions and the per-100 denominators.
 
     A player's share of his team's floor time is measured against the ROSTER's
-    own minutes rather than against games x 48 x 5. Those differ whenever
-    someone was traded, because these sources file a traded player's whole
-    season under one team, so a roster that gained him has more minutes on the
-    books than it really played and one that lost him has fewer.
+    own minutes rather than against games x 48 x 5. Traded players now arrive
+    as one row per team (see load_players), so the two are close, but not equal:
+    the few stints with no split on file, and rounding in the sources, still
+    leave a roster's minutes a little off the team's.
 
     Normalising against the roster is what keeps a team's credits summing to
     exactly what the team did. Measuring each player's possessions
@@ -305,8 +337,9 @@ def add_usage(players, league):
             p["games"] = min(int(p["team_gp"]), 82)
 
     for p in unattached:
-        # A stat line naming no team: the pre-1997 multi-team rows. There is no
-        # roster to measure him against, so he is placed on a league-average one.
+        # A stat line naming no team: a traded player's season with no splits on
+        # file, which is now rare. There is no roster to measure him against, so
+        # he is placed on a league-average one.
         lg = league[p["season"]]
         p["on_floor"] = f(p["mp"]) / (48.0 * lg["gp"])
         p["floor_share"] = p["on_floor"] / 5.0
@@ -578,20 +611,41 @@ def compute(players, league):
         p["def_points"] = p["def_raw"]
         p["source"] = "league_average"
 
-    rows = []
     for p in players:
         points = p["off_points"] + p["def_points"]
-        per100 = lambda v: 100.0 * v / p["poss"] if p["poss"] else 0.0
-        impact = per100(points)
-        production = (impact - REPLACEMENT) * p["on_floor"] * (p["games"] / 82.0)
+        impact = 100.0 * points / p["poss"] if p["poss"] else 0.0
+        p["production"] = (impact - REPLACEMENT) * p["on_floor"] * (p["games"] / 82.0)
+
+    # One row per player-season. A traded player's stints are added back up:
+    # the counting figures sum, the per-100 rates are recomputed over his
+    # combined possessions, and floor share is his minutes-weighted average
+    # across the rosters he was on. Quality and tracking are season-level
+    # already, so every stint carries the same value.
+    seasons = {}
+    for p in players:
+        seasons.setdefault((p["player_id"], p["season"]), []).append(p)
+    rows = []
+    for (player_id, season), parts in seasons.items():
+        minutes = sum(f(p["mp"]) for p in parts)
+        poss = sum(p["poss"] for p in parts)
+        off = sum(p["off_points"] for p in parts)
+        deff = sum(p["def_points"] for p in parts)
+        per100 = lambda v: 100.0 * v / poss if poss else 0.0
+        floor_share = (
+            sum(p["floor_share"] * f(p["mp"]) for p in parts) / minutes if minutes else 0.0
+        )
+        first = parts[0]
         rows.append(
             (
-                p["player_id"], p["season"], p["team"],
-                round(f(p["mp"]), 1), round(p["floor_share"], 5),
-                round(p["off_points"], 2), round(p["def_points"], 2),
-                round(per100(p["off_points"]), 2), round(per100(p["def_points"]), 2),
-                round(impact, 2), round(p["quality"], 3), bool(p["tracked"]),
-                round(production, 3), p["source"],
+                player_id, season,
+                first["team"] if len(parts) == 1 else None,
+                round(minutes, 1), round(floor_share, 5),
+                round(off, 2), round(deff, 2),
+                round(per100(off), 2), round(per100(deff), 2),
+                round(per100(off + deff), 2), round(first["quality"], 3),
+                bool(first["tracked"]),
+                round(sum(p["production"] for p in parts), 3),
+                first["source"] if len({p["source"] for p in parts}) == 1 else "team_anchored",
             )
         )
     return rows
@@ -620,6 +674,17 @@ def main():
         cur,
         f"INSERT INTO player_production (player_id, season, {', '.join(COLUMNS)}) VALUES %s",
         rows,
+        page_size=1000,
+    )
+    # Each stint's own share, for net value to credit team by team.
+    execute_values(
+        cur,
+        """
+        UPDATE player_team_splits sp SET production = v.production
+        FROM (VALUES %s) AS v (id, production)
+        WHERE sp.id = v.id
+        """,
+        [(p["split_id"], round(p["production"], 3)) for p in players if p["split_id"]],
         page_size=1000,
     )
     conn.commit()

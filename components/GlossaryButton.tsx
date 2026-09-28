@@ -31,7 +31,7 @@ export function GlossaryButton({
         title="What do these columns mean?"
         // The pseudo-element widens what a finger can hit to a usable size.
         // Solid black so the logo watermark behind it doesn't cut through.
-        className={`relative inline-flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-full border border-white/50 bg-black text-xs font-semibold leading-none text-white/80 transition-colors after:absolute after:-inset-2 hover:border-accent hover:text-accent ${className}`}
+        className={`relative inline-flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-full border border-accent/50 bg-black text-xs font-semibold leading-none text-white/80 transition-colors after:absolute after:-inset-2 hover:border-accent hover:text-accent ${className}`}
       >
         ?
       </button>

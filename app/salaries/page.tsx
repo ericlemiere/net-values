@@ -2,7 +2,7 @@ import { DataTable, type ColumnDef } from "@/components/DataTable";
 import { PageHeader } from "@/components/PageHeader";
 import { PlayerLink } from "@/components/PlayerLink";
 import { awardKey, type Award } from "@/lib/awards";
-import { TeamLink } from "@/components/TeamLink";
+import { SeasonTeams } from "@/components/TeamLink";
 import { SeasonLink } from "@/components/SeasonLink";
 import {
   formatCurrency,
@@ -19,6 +19,8 @@ import {
   getTeams,
   PAGE_SIZE,
   getAwardsForRows,
+  type PlayerContract,
+  type SalaryRow,
 } from "@/lib/db/queries";
 import { parsePosition } from "@/lib/positions";
 import { GLOSSARY } from "@/lib/glossary";
@@ -32,7 +34,52 @@ export const metadata = pageMetadata({
   path: "/salaries",
 });
 
-type Row = Awaited<ReturnType<typeof getSalaries>>["rows"][number];
+/** `part` is set on the rows set under a season: one team's piece of it. */
+type Row = SalaryRow & { part?: PlayerContract };
+
+/** One contract of a season as a row under it, like the player page's. */
+function contractRow(row: Row, c: PlayerContract): Row {
+  return {
+    ...row,
+    part: c,
+    id: row.id,
+    team: c.team,
+    teamLabel: c.teamLabel,
+    teams: null,
+    contracts: [],
+    salary: c.salary,
+    estimated: Boolean(c.estimated),
+    playedHere: c.playedHere,
+    salaryRank: null,
+    netValueRank: null,
+    teamPayroll: c.teamPayroll ?? null,
+    pctOfTeamCap:
+      c.salary !== null && c.teamPayroll
+        ? Math.round((10000 * c.salary) / c.teamPayroll) / 100
+        : null,
+    pctOfLeagueCap:
+      c.salary !== null && row.leagueCap
+        ? Math.round((10000 * c.salary) / row.leagueCap) / 100
+        : null,
+    // A waived contract isn't the player's to be judged on; the model charges
+    // it to the team that waived him.
+    netValueScore: c.playedHere ? (c.score ?? null) : null,
+    deservedSalary: null,
+    payDifference: null,
+  };
+}
+
+/** A traded season's teams, behind its +/− button. */
+function tradedSplits(row: Row): Row[] | undefined {
+  const played = row.contracts.filter((c) => c.playedHere);
+  return played.length > 1 ? played.map((c) => contractRow(row, c)) : undefined;
+}
+
+/** A waived contract, always shown under the season it was paid in. */
+function waivedContracts(row: Row): Row[] | undefined {
+  const waived = row.contracts.filter((c) => !c.playedHere && c.salary);
+  return waived.length > 0 ? waived.map((c) => contractRow(row, c)) : undefined;
+}
 
 function getColumns(
   showSeason: boolean,
@@ -93,15 +140,18 @@ function getColumns(
       label: "Team",
       align: "center",
       defaultDir: "asc",
-      // A bought-out contract is two rows, one per team paying it. The marker
-      // says which of them was only writing checks, so the Net Value beside
-      // it — a charge with no production against it — reads as intended.
+      // A waived contract is marked, so the row reads as money a team still
+      // owed rather than a season he played there.
       render: (r) => (
         <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
-          <TeamLink abbr={r.team} label={r.teamLabel} />
-          {r.playedHere === false && (
+          {r.part ? (
+            <SeasonTeams abbr={r.team} label={r.teamLabel} />
+          ) : (
+            <SeasonTeams abbr={r.team} label={r.teamLabel} teams={r.teams} />
+          )}
+          {!r.playedHere && (
             <span
-              title="Bought out: this team owed the money, he played elsewhere"
+              title="Waived: this team still owed him, he played elsewhere"
               className="rounded border border-black/20 bg-black/5 px-1 py-px text-[0.625rem] font-medium uppercase tracking-wide text-black/50"
             >
               Waived
@@ -114,7 +164,17 @@ function getColumns(
       key: "salary",
       label: "Salary",
       align: "center",
-      render: (r) => formatCurrency(r.salary),
+      render: (r) =>
+        r.estimated ? (
+          <span
+            className="cursor-help underline decoration-black/40 decoration-dotted underline-offset-2"
+            title="Estimated: his season salary is on file under one team, so it is split across his teams by days on each roster."
+          >
+            {formatCurrency(r.salary)}
+          </span>
+        ) : (
+          formatCurrency(r.salary)
+        ),
     },
     {
       key: "teamPayroll",
@@ -167,10 +227,11 @@ function getColumns(
       align: "center",
       definition: GLOSSARY.payDifferenceContract,
       render: (r) => {
-        // Ben Simmons' 2024-25 is $39.3M owed by Brooklyn, who waived him, and
-        // $755,826 from the Clippers, who signed him. The gap is measured
-        // against the $40M season, so printing it beside the Clippers' figure
-        // would read as their having overpaid by thirty million dollars.
+        // A row that is one team's part of a season: the gap is measured
+        // against his whole season, so printing it beside a fraction of the
+        // money would misstate it. Blank on the rows set under a season, and
+        // explained where a team filter makes the part the row itself.
+        if (r.part) return "\u2014";
         if (r.salary !== r.seasonSalary) {
           return (
             <span
@@ -255,8 +316,11 @@ export default async function SalariesPage({
           currentCap,
           awards,
         )}
-        rows={rows}
-        rowKey={(r) => r.id}
+        rows={rows as Row[]}
+        rowKey={(r) => `${r.id}-${r.part?.team ?? ""}`}
+        splits={tradedSplits}
+        splitsLabel="pay and Net Value by team"
+        attached={waivedContracts}
         seasons={seasons}
         currentSeason={season}
         teams={teams}
@@ -269,21 +333,7 @@ export default async function SalariesPage({
         pageSize={PAGE_SIZE}
       />
       <p className="text-sm text-white/60 mt-8">
-        Team payrolls come from Basketball-Reference for 2011-12 onward and from
-        Hoopshype for 1990-91 through 2010-11. Salaries split the same way, but
-        not cleanly: Basketball-Reference lists a figure only for players on a
-        team&rsquo;s books at the time it was read, so Hoopshype still fills
-        gaps in the modern era too, through 2022-23. Percentages are computed
-        against that season&rsquo;s team payroll and league salary cap.
-      </p>
-      <p className="text-sm text-white/60 mt-3">
-        Every team-season from 1990-91 on now carries a payroll. Phoenix before
-        2011-12 and Washington before 1997-98 were long missing, since the
-        original import read each player&rsquo;s team from a roster table that
-        never had them. Both were recovered from the same Hoopshype source.
-        Three training-camp contracts totalling $88,367 are still unmatched,
-        listed in the scraper&rsquo;s unmatched_recovered_salaries.csv rather
-        than guessed onto a player.
+        Salaries from Basketball-Reference, with gaps filled from HoopsHype.
       </p>
     </div>
   );

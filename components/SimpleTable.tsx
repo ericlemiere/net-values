@@ -1,7 +1,8 @@
 import Link from "next/link";
-import type { ReactNode } from "react";
+import { Fragment, type ReactNode } from "react";
 import { describe, glossaryFor, tooltip } from "@/lib/glossary";
 import { GlossaryButton } from "./GlossaryButton";
+import { SplitGroup, SplitToggle } from "./SplitRows";
 import { TABLE_BREAKOUT, TABLE_BREAKOUT_FIT } from "@/lib/layout";
 import {
   SHEET,
@@ -46,6 +47,20 @@ interface SimpleTableProps<Row> {
   glossary?: boolean;
   /** Sits under the table's bottom-right corner, e.g. a row count. */
   footer?: ReactNode;
+  /**
+   * Rows folded under a row, opened by a +/− button in its `splitColumn` cell —
+   * a traded player's season, one row per team. Rows with none get no button.
+   */
+  splits?: (row: Row) => Row[] | undefined;
+  /** The column whose cell holds the +/− button. */
+  splitColumn?: string;
+  /** What the +/− button opens, for its label: "Show {splitsLabel}". */
+  splitsLabel?: string;
+  /**
+   * Rows always shown under a row, styled like the folded ones but with no
+   * button — a waived contract under the season it was still being paid in.
+   */
+  attached?: (row: Row) => Row[] | undefined;
 }
 
 export function SimpleTable<Row>({
@@ -61,8 +76,24 @@ export function SimpleTable<Row>({
   emptyMessage = "No data.",
   glossary = true,
   footer,
+  splits,
+  splitColumn = "team",
+  splitsLabel = "stats by team",
+  attached,
 }: SimpleTableProps<Row>) {
   const entries = glossary ? glossaryFor(columns) : [];
+  // A row set under another: same stripe as its parent, set off by muted text
+  // and an empty lead cell, so the group reads as one block and the striping
+  // below it doesn't shift.
+  const subRow = (child: Row, i: number) => (
+    <tr key={rowKey(child)} className={`${stripeClass(i)} text-black/60`}>
+      {columns.map((col, c) => (
+        <td key={col.key} className={`px-3 py-1 ${cellClass(col.align)}`}>
+          {c === 0 ? null : col.render(child)}
+        </td>
+      ))}
+    </tr>
+  );
   return (
     // Every branch here carries a `max-w`, and none of them is belt and braces.
     // A wrapper sized to its own content measures against its max-content, not
@@ -116,11 +147,15 @@ export function SimpleTable<Row>({
             {rows.map((row, i) => {
               const href = rowHref?.(row);
               // A column that renders its own link opts out, so we never nest
-              // one anchor inside another.
+              // one anchor inside another. The +/− is a button, so its
+              // cell opts out too.
+              const children = splits?.(row) ?? [];
               const linked = (col: ColumnDef<Row>) =>
-                Boolean(href) && !col.noRowLink;
+                Boolean(href) &&
+                !col.noRowLink &&
+                !(children.length > 0 && col.key === splitColumn);
               const active = isActive?.(row) ?? false;
-              return (
+              const tr = (
                 <tr
                   key={rowKey(row)}
                   aria-current={active ? "true" : undefined}
@@ -141,12 +176,35 @@ export function SimpleTable<Row>({
                         <Link href={href!} className="block px-3 py-1.5">
                           {col.render(row)}
                         </Link>
+                      ) : children.length > 0 && col.key === splitColumn ? (
+                        <span className="inline-flex items-center align-middle">
+                          {col.render(row)}
+                          <SplitToggle label={splitsLabel} />
+                        </span>
                       ) : (
                         col.render(row)
                       )}
                     </td>
                   ))}
                 </tr>
+              );
+              const always = (attached?.(row) ?? []).map((a) => subRow(a, i));
+              const group =
+                children.length === 0 ? (
+                  tr
+                ) : (
+                  <SplitGroup
+                    key={rowKey(row)}
+                    row={tr}
+                    splits={children.map((child) => subRow(child, i))}
+                  />
+                );
+              if (always.length === 0) return group;
+              return (
+                <Fragment key={rowKey(row)}>
+                  {group}
+                  {always}
+                </Fragment>
               );
             })}
             {rows.length === 0 && (

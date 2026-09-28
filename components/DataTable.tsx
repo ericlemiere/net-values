@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { Fragment, type ReactNode } from "react";
 import { NavLink, TableOverlay } from "./TableNav";
 import {
   describe,
@@ -7,6 +7,7 @@ import {
   type Definition,
 } from "@/lib/glossary";
 import { GlossaryButton } from "./GlossaryButton";
+import { SplitGroup, SplitToggle } from "./SplitRows";
 import { TABLE_BREAKOUT } from "@/lib/layout";
 import { SeasonFilter } from "./SeasonFilter";
 import { TeamFilter, type TeamOption } from "./TeamFilter";
@@ -137,6 +138,14 @@ interface DataTableProps<Row> {
   pageSize: number;
   /** Extra query params (e.g. stat type toggle) preserved across every link this table builds. */
   extraParams?: Record<string, string>;
+  /** Rows folded under a row behind a +/− button. See SimpleTable. */
+  splits?: (row: Row) => Row[] | undefined;
+  /** The column whose cell holds the +/− button. */
+  splitColumn?: string;
+  /** What the +/− button opens, for its label: "Show {splitsLabel}". */
+  splitsLabel?: string;
+  /** Rows always shown under a row. See SimpleTable. */
+  attached?: (row: Row) => Row[] | undefined;
 }
 
 function buildHref(
@@ -166,8 +175,33 @@ export function DataTable<Row>({
   totalCount,
   pageSize,
   extraParams,
+  splits,
+  splitColumn = "team",
+  splitsLabel = "by team",
+  attached,
 }: DataTableProps<Row>) {
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+  // The # column is a rank in the sorted column's own natural order — the
+  // direction it sorts on first click. Reversing the sort reverses the count,
+  // so the worst Net Value of 603 reads #603 at the top rather than #1.
+  const sortedCol = columns.find((c) => c.key === sort);
+  const reversed = dir !== (sortedCol?.defaultDir ?? "desc");
+  const rankOf = (i: number) => {
+    const position = (page - 1) * pageSize + i;
+    return reversed ? totalCount - position : position + 1;
+  };
+  // A row set under another: its parent's stripe, muted text, and no number
+  // of its own, since it isn't a row of the ranking.
+  const subRow = (child: Row, i: number) => (
+    <tr key={rowKey(child)} className={`${stripeClass(i)} text-black/60`}>
+      <td />
+      {columns.map((col, c) => (
+        <td key={col.key} className={`px-3 py-1 ${cellClass(col.align)}`}>
+          {c === 0 ? null : col.render(child)}
+        </td>
+      ))}
+    </tr>
+  );
 
   return (
     <div className={`min-w-0 max-w-screen ${TABLE_BREAKOUT}`}>
@@ -212,7 +246,7 @@ export function DataTable<Row>({
               <tr>
                 <th
                   className="px-3 py-2 text-right font-medium text-black/40"
-                  title="Rank within the current sort and page."
+                  title="Position by the sorted column in its usual order. Reversing the sort counts down."
                 >
                   #
                 </th>
@@ -269,24 +303,52 @@ export function DataTable<Row>({
               </tr>
             </thead>
             <tbody>
-              {rows.map((row, i) => (
-                <tr
-                  key={rowKey(row)}
-                  className={`${stripeClass(i)} ${SHEET_ROW_HOVER}`}
-                >
-                  <td className="px-3 py-1.5 text-right font-mono text-[0.8125rem] tabular-nums text-black/40">
-                    {(page - 1) * pageSize + i + 1}
-                  </td>
-                  {columns.map((col) => (
-                    <td
-                      key={col.key}
-                      className={`px-3 py-1.5 ${cellClass(col.align)}`}
-                    >
-                      {col.render(row)}
+              {rows.map((row, i) => {
+                const children = splits?.(row) ?? [];
+                const tr = (
+                  <tr
+                    key={rowKey(row)}
+                    className={`${stripeClass(i)} ${SHEET_ROW_HOVER}`}
+                  >
+                    <td className="px-3 py-1.5 text-right font-mono text-[0.8125rem] tabular-nums text-black/40">
+                      {rankOf(i)}
                     </td>
-                  ))}
-                </tr>
-              ))}
+                    {columns.map((col) => (
+                      <td
+                        key={col.key}
+                        className={`px-3 py-1.5 ${cellClass(col.align)}`}
+                      >
+                        {children.length > 0 && col.key === splitColumn ? (
+                          <span className="inline-flex items-center align-middle">
+                            {col.render(row)}
+                            <SplitToggle label={splitsLabel} />
+                          </span>
+                        ) : (
+                          col.render(row)
+                        )}
+                      </td>
+                    ))}
+                  </tr>
+                );
+                const group =
+                  children.length === 0 ? (
+                    tr
+                  ) : (
+                    <SplitGroup
+                      key={rowKey(row)}
+                      row={tr}
+                      splits={children.map((child) => subRow(child, i))}
+                    />
+                  );
+                const always = (attached?.(row) ?? []).map((a) => subRow(a, i));
+                if (always.length === 0) return group;
+                return (
+                  <Fragment key={rowKey(row)}>
+                    {group}
+                    {always}
+                  </Fragment>
+                );
+              })}
               {rows.length === 0 && (
                 <tr>
                   <td

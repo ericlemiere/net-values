@@ -43,9 +43,19 @@ suited up scores the same as a minimum one.
 
 A SEASON IS FILED UNDER THE TEAM HE PLAYED FOR, not the team that paid most.
 Those differ on every bought-out contract, where the old team keeps owing the
-money and the player is somewhere else. The money is still charged in full —
-it was really spent — but net_value_shares splits it back across the teams that
-each paid part of it, so the old team wears its own mistake.
+money and the player is somewhere else.
+
+A WAIVED CONTRACT IS NOT THE PLAYER'S. His Net Value, salary, pay rank and
+the season's pool count only what the teams he played for paid. The money a
+waiving team still owes is charged to that team alone, as its own row in
+net_value_shares, so the old team wears its own mistake and his season is
+judged on the deal he was actually playing under.
+
+A TRADED PLAYER'S SEASON IS SPLIT BY STINT. His season score is computed as
+for anyone else, then divided among the teams he played for: each is credited
+what he produced there and charged for what it paid over the time it had him.
+See traded_shares for the detail, including how a salary on file under one
+team only is apportioned. The season itself is filed under his last team.
 
 TWO PRODUCTION METRICS ARE PRICED, NOT ONE. Every headline column has a twin
 ending `_vorp`, which is this same arithmetic run on bref's VORP. The pricing
@@ -112,7 +122,7 @@ COLUMNS = [
 # net_value_shares, in the order split_shares builds them.
 SHARE_COLUMNS = [
     "team", "salary", "production_credit", "charge", "score", "played_here",
-    "source", "score_vorp",
+    "salary_estimated", "source", "score_vorp",
 ]
 
 
@@ -132,6 +142,11 @@ SHARE_COLUMNS = [
 #
 # Checked against the league totals this produces: 1.16x-1.31x the cap across
 # eras, which is where NBA payrolls actually sit.
+# A salary of $0 is a figure the source didn't have, not a player who worked
+# for nothing: every one of them is a two-way contract from 2017-18 through
+# 2021-22, which basketball-reference lists without a number. They are left out
+# (`salary > 0` below) rather than priced as free, which scored each of them
+# exactly the season's centering offset and gave them a deserved pay.
 SALARY_FOR_SEASON = """
     CASE WHEN BOOL_OR(s.source = 'sqlite_migration') THEN MAX(s.salary)
          ELSE SUM(s.salary) END
@@ -183,7 +198,7 @@ def load(cur, season_filter):
                ON adv.player_id = s.player_id AND adv.season = s.season
         LEFT JOIN player_production pp
                ON pp.player_id = s.player_id AND pp.season = s.season
-        WHERE s.salary IS NOT NULL
+        WHERE s.salary > 0
           AND se.league_cap IS NOT NULL
     """
     params = []
@@ -212,7 +227,7 @@ def load_salary_rows(cur, season_filter):
         SELECT s.player_id, s.season, s.team, s.salary
         FROM salaries s
         JOIN seasons se ON se.season = s.season
-        WHERE s.salary IS NOT NULL
+        WHERE s.salary > 0
           AND s.team IS NOT NULL
           AND se.league_cap IS NOT NULL
     """
@@ -227,6 +242,35 @@ def load_salary_rows(cur, season_filter):
     return out
 
 
+def load_stints(cur, season_filter):
+    """{(player_id, season): [stint, ...]} for every traded player, in order.
+
+    A stint is one team's part of his season, from player_team_splits: the
+    production compute_production.py credited him there, his minutes, and how
+    long he was on that roster.
+    """
+    sql = """
+        SELECT player_id, season, team, production, mp, gp, team_games, roster_days
+        FROM player_team_splits
+    """
+    params = []
+    if season_filter:
+        sql += " WHERE season = %s"
+        params.append(season_filter)
+    cur.execute(sql + " ORDER BY player_id, season, stint", params)
+    out = {}
+    for player_id, season, team, production, mp, gp, team_games, days in cur.fetchall():
+        out.setdefault((player_id, season), []).append(
+            {
+                "team": team,
+                "production": None if production is None else float(production),
+                "minutes": float(mp or 0), "gp": gp or 0,
+                "team_games": team_games, "roster_days": days,
+            }
+        )
+    return out
+
+
 def load_teams_by_season(cur):
     """{player_id: {season: {team, ...}}} across every season on file.
 
@@ -236,13 +280,43 @@ def load_teams_by_season(cur):
     cur.execute(
         """
         SELECT player_id, season, team FROM salaries
-        WHERE team IS NOT NULL AND salary IS NOT NULL
+        WHERE team IS NOT NULL AND salary > 0
         """
     )
     out = {}
     for player_id, season, team in cur.fetchall():
         out.setdefault(player_id, {}).setdefault(season, set()).add(team)
     return out
+
+
+def load_last_played(cur):
+    """{player_id: {season: team}}: the team each earlier season was filed under.
+
+    Read from the net_values already on file, before this run replaces them,
+    which is what makes it available to a single-season run too. That team is
+    where he played, or for a season he sat out, where he signed — the
+    distinction continuing_team needs.
+    """
+    cur.execute("SELECT player_id, season, team FROM net_values WHERE team IS NOT NULL")
+    out = {}
+    for player_id, season, team in cur.fetchall():
+        out.setdefault(player_id, {})[season] = team
+    return out
+
+
+def continuing_team(player_id, season, teams, last_played):
+    """Last season's team, if it is one of this season's payers.
+
+    For a season not yet played where the contracts alone can't say where he
+    is: Damian Lillard's 2026-27 is owed by Milwaukee, who waived him, and by
+    Portland, who signed him for 2025-26. Both carry over, so signing_team has
+    no answer, but he is plainly still a Trail Blazer.
+    """
+    seasons = last_played.get(player_id, {})
+    prior = max((s for s in seasons if s < season), default=None)
+    if prior is None:
+        return None
+    return seasons[prior] if seasons[prior] in teams else None
 
 
 def signing_team(player_id, season, teams, teams_by_season):
@@ -275,32 +349,91 @@ def signing_team(player_id, season, teams, teams_by_season):
     return new[0] if len(new) == 1 and carried else None
 
 
-def split_shares(p, salary_rows, prod_key="production", prefix=""):
+def charged(availability):
+    """The share of a contract charged at this availability. See AVAILABILITY_FLOOR."""
+    return AVAILABILITY_FLOOR + (1.0 - AVAILABILITY_FLOOR) * availability
+
+
+def split_shares(p, stints, prod_key="production", prefix=""):
     """How one player-season's score divides among the teams that paid him.
 
-    The charge follows the money and the production follows the player, so a
-    bought-out contract lands on the team that owes it while the team he
-    actually played for is judged on what it actually spent.
+    The charge follows the money and the production follows the player. A
+    bought-out contract is split off before any of this (see compute), so the
+    team he actually played for is judged on what it actually spent.
 
-    Two cases never split. A legacy season repeats one full-season figure
-    against each team rather than dividing it, so splitting by those rows would
-    invent money that was never paid; and a season with no score yet has
-    nothing to divide. Both fall back to the whole figure on one team.
+    A player traded mid-season goes to `traded_shares`, which splits both
+    sides by stint. Everyone else: two cases never split. A legacy season
+    repeats one full-season figure against each team rather than dividing it,
+    so splitting by those rows would invent money that was never paid; and a
+    season with no score yet has nothing to divide. Both fall back to the whole
+    figure on one team.
 
-    Returns [(team, salary, production_credit, charge, score, played_here)],
-    whose scores sum to the player's own.
+    Returns [(team, salary, production_credit, charge, score, played_here,
+    salary_estimated)]. The shares of the teams he played for sum to his own
+    score; a waived contract's share comes on top — see dead_shares.
     """
-    rows = salary_rows.get((p["player_id"], p["season"]), [])
+    return played_shares(p, stints, prod_key, prefix) + dead_shares(p, prefix)
+
+
+def dead_shares(p, prefix):
+    """One share per waived contract: money owed by a team he didn't play for.
+
+    It is kept out of the player's own Net Value, which is judged on what the
+    team he played for paid — Damian Lillard's 2025-26 is Portland's $14.1M,
+    not that plus Milwaukee's $22.5M. The waiving team still wears it, charged
+    at the same rate per dollar as his own contract, so its ledger shows what
+    the mistake cost. Unscored while the season has no score.
+    """
+    expected = p.get(f"{prefix}expected")
+    shares = []
+    for team, salary in p["dead"]:
+        charge = (
+            expected * salary / p["salary"]
+            if expected is not None and p["salary"] > 0 else None
+        )
+        shares.append(
+            (team, salary, None if charge is None else 0.0, charge,
+             None if charge is None else -charge, False, False)
+        )
+    return shares
+
+
+def played_shares(p, stints, prod_key, prefix):
+    """The teams he played for, whose shares sum to his own score."""
+    rows = p["rows"]
     expected = p.get(f"{prefix}expected")
     production = p.get(prod_key)
+    if expected is not None and len(stints) > 1:
+        return traded_shares(p, rows, stints, production, expected, prod_key)
+
     total = sum(salary for _, salary in rows)
+
+    # A season not played yet still has real contracts: list each team's
+    # with nothing to score, rather than filing all the money under one team.
+    if expected is None and not p["legacy_salary"] and len(rows) > 1:
+        return [
+            (team, salary, None, None, None, team == p["team"], False)
+            for team, salary in rows
+        ]
 
     if p["legacy_salary"] or expected is None or total <= 0 or not rows:
         return [
             (
                 p["team"], p["salary"], production, expected,
-                p.get(f"{prefix}score"), True,
+                p.get(f"{prefix}score"), True, False,
             )
+        ]
+
+    # No contract on file with the team on his stat line. It happens while a
+    # trade is still settling on the source pages: the salary sits under a
+    # team he hasn't played a game for, and his minutes under one our salary
+    # data doesn't have paying him. It is one contract either way, so it is
+    # filed whole under the team he played for rather than shown as two rows,
+    # one with the money and one with the production.
+    if p["team"] is not None and all(team != p["team"] for team, _ in rows):
+        return [
+            (p["team"], p["salary"], production, expected,
+             production - expected, True, False)
         ]
 
     shares = []
@@ -308,18 +441,78 @@ def split_shares(p, salary_rows, prod_key="production", prefix=""):
         played_here = team == p["team"]
         charge = expected * salary / total
         credit = production if played_here else 0.0
-        shares.append((team, salary, credit, charge, credit - charge, played_here))
-
-    # The team on his stat line with no contract on file. It happens while a
-    # midseason trade is still settling on the source pages — the acquiring
-    # team carries the salary before the player has played a game for them, so
-    # his minutes sit under a team our salary data doesn't have paying him.
-    # Carrying a zero-salary row keeps the shares summing to his score instead
-    # of quietly dropping the production.
-    if p["team"] is not None and not any(s[5] for s in shares):
-        shares.append((p["team"], 0, production, 0.0, production, True))
-
+        shares.append((team, salary, credit, charge, credit - charge, played_here, False))
     return shares
+
+
+def traded_shares(p, rows, stints, production, expected, prod_key):
+    """A traded player's season, one share per team he played for.
+
+    SALARY. Where the contract rows name every team he played for, they are
+    what each paid. Usually they don't: basketball-reference files a traded
+    player's salary under the team he finished with, so James Harden's
+    2025-26 is $39.4M from Cleveland and nothing from the Clippers he played
+    44 games for. That figure is then split across his teams by days on each
+    roster, which is how an NBA salary is actually paid out, and the share is
+    flagged as estimated. A legacy season's single full-season figure is split
+    the same way.
+
+    CHARGE. The season's expectation is not recomputed, only divided: each
+    team's part is weighted by what it paid times how available he was to it —
+    his minutes there against a starter's minutes over the games that team
+    played while he was on its roster.
+
+    PRODUCTION. Each team is credited what he produced for it, from
+    compute_production.py's per-stint figures. Those are scaled to sum to his
+    season figure, which has been floored at zero, so the shares still sum to
+    his score. Where a stint has no figure (the VORP pass, which has none by
+    team), production is split by minutes.
+    """
+    teams = [s["team"] for s in stints]
+    on_file = {t: sal for t, sal in rows if t in teams}
+
+    if not p["legacy_salary"] and all(t in on_file for t in teams):
+        stint_salary, estimated = [on_file[t] for t in teams], False
+    else:
+        # The rows on file for the teams he played for, else his whole season:
+        # a legacy figure, or a salary filed only under a team he never played
+        # for, which is a trade still settling on the source pages rather than
+        # anyone's money disappearing.
+        pool = (
+            sum(on_file.values())
+            if on_file and not p["legacy_salary"] else p["salary"]
+        )
+        spans = [s["roster_days"] or s["gp"] for s in stints]
+        span_total = sum(spans) or 1
+        stint_salary = [round(pool * span / span_total) for span in spans]
+        stint_salary[-1] += pool - sum(stint_salary)
+        estimated = True
+
+    weights = []
+    for s, salary in zip(stints, stint_salary):
+        if s["team_games"]:
+            availability = min(s["minutes"] / (s["team_games"] * STARTER_MINUTES), 1.0)
+        else:
+            availability = p["availability"]
+        weights.append(salary * charged(availability))
+    weight_total = sum(weights)
+    if weight_total <= 0:
+        weights = [1.0] * len(weights)
+        weight_total = float(len(weights))
+    charges = [expected * w / weight_total for w in weights]
+
+    raw = [s["production"] if prod_key == "production" else None for s in stints]
+    if any(r is None for r in raw):
+        minutes = sum(s["minutes"] for s in stints) or 1.0
+        credits = [production * s["minutes"] / minutes for s in stints]
+    else:
+        raw_total = sum(raw)
+        credits = [production * r / raw_total if raw_total > 0 else 0.0 for r in raw]
+
+    return [
+        (s["team"], salary, credit, charge, credit - charge, True, estimated)
+        for s, salary, credit, charge in zip(stints, stint_salary, credits, charges)
+    ]
 
 
 def price_metric(players, pool, prod_key, prefix):
@@ -350,8 +543,7 @@ def price_metric(players, pool, prod_key, prefix):
 
     price = pool / total
     for p in players:
-        charged = AVAILABILITY_FLOOR + (1.0 - AVAILABILITY_FLOOR) * p["availability"]
-        claim = (p["salary"] / pool) * charged
+        claim = (p["salary"] / pool) * charged(p["availability"])
         p[f"{prefix}expected"] = claim * total
         p[f"{prefix}score"] = p[prod_key] - p[f"{prefix}expected"]
 
@@ -373,7 +565,7 @@ def price_metric(players, pool, prod_key, prefix):
     return price
 
 
-def compute(rows, games_by_season, salary_rows, teams_by_season):
+def compute(rows, games_by_season, salary_rows, teams_by_season, stints, last_played):
     """rows -> ([net_values row], [net_value_shares row]).
 
     One net_values row per player-season, and one share row per team that paid
@@ -383,14 +575,35 @@ def compute(rows, games_by_season, salary_rows, teams_by_season):
     for (player_id, season, played_team, paid_team, salary, vorp, produced,
          minutes, has_stats, cap, legacy) in rows:
         paid_teams = [t for t, _ in salary_rows.get((player_id, season), [])]
-        # Where he played, else where he signed, else where the money was.
-        team = played_team or signing_team(
-            player_id, season, paid_teams, teams_by_season
-        ) or paid_team
+        traded = stints.get((player_id, season), [])
+        # Where he played (the last team, if he played for several), else where
+        # he signed, else where he was last season, else where the money was.
+        team = (
+            played_team
+            or (traded[-1]["team"] if traded else None)
+            or signing_team(player_id, season, paid_teams, teams_by_season)
+            or continuing_team(player_id, season, paid_teams, last_played)
+            or paid_team
+        )
+        # Money owed by a team he didn't play for — a waived contract — is
+        # split off here, so everything downstream (his salary, the season's
+        # pool, pay rank, his charge) sees only what the teams he played for
+        # paid. It needs at least one contract with a team he did play for to
+        # set against; without one, the rows are a trade still settling on the
+        # source pages rather than a buyout, and stay whole. Legacy rows repeat
+        # one full-season figure per team and are never split.
+        contracts = salary_rows.get((player_id, season), [])
+        played = {s["team"] for s in traded} or {team}
+        dead = []
+        if not legacy and any(t in played for t, _ in contracts):
+            dead = [(t, sal) for t, sal in contracts if t not in played]
+        if dead:
+            contracts = [(t, sal) for t, sal in contracts if t in played]
+            salary = sum(sal for _, sal in contracts)
         by_season.setdefault(season, []).append(
             {
                 "player_id": player_id, "season": season, "team": team,
-                "salary": int(salary),
+                "salary": int(salary), "rows": contracts, "dead": dead,
                 "production": (
                     max(float(produced), FLOOR) if produced is not None else 0.0
                 ),
@@ -410,11 +623,12 @@ def compute(rows, games_by_season, salary_rows, teams_by_season):
         The two passes walk the same contracts in the same order, so they line
         up team for team and can be zipped.
         """
-        main_shares = split_shares(p, salary_rows)
+        traded = stints.get((p["player_id"], p["season"]), [])
+        main_shares = split_shares(p, traded)
         vorp_shares = split_shares(
-            p, salary_rows, prod_key="production_vorp", prefix="vorp_"
+            p, traded, prod_key="production_vorp", prefix="vorp_"
         )
-        for (team, salary, credit, charge, score, played_here), legacy in zip(
+        for (team, salary, credit, charge, score, played_here, estimated), legacy in zip(
             main_shares, vorp_shares
         ):
             if team is None:
@@ -426,7 +640,7 @@ def compute(rows, games_by_season, salary_rows, teams_by_season):
                     None if credit is None else round(credit, 3),
                     None if charge is None else round(charge, 3),
                     None if score is None else round(score, 2),
-                    played_here, "production",
+                    played_here, estimated, "production",
                     None if vorp_score is None else round(vorp_score, 2),
                 )
             )
@@ -516,6 +730,8 @@ def main():
         load_games(cur),
         load_salary_rows(cur, season_filter),
         load_teams_by_season(cur),
+        load_stints(cur, season_filter),
+        load_last_played(cur),
     )
     # Cheap guard: a column added to COLUMNS without updating every branch that
     # builds a row would otherwise fail deep inside the insert.

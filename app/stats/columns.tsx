@@ -1,7 +1,7 @@
 import type { ColumnDef } from "@/components/DataTable";
 import { PlayerLink } from "@/components/PlayerLink";
 import { awardKey, type Award } from "@/lib/awards";
-import { TeamLink } from "@/components/TeamLink";
+import { SeasonTeams } from "@/components/TeamLink";
 import { SeasonLink } from "@/components/SeasonLink";
 import type { StatType } from "@/lib/stat-types";
 import { formatNumber, formatPie, formatStat } from "@/lib/format";
@@ -49,7 +49,9 @@ function identityColumns<Row extends BoxScoreRow | AdvancedRow>(
       key: "team",
       label: "Team",
       defaultDir: "asc",
-      render: (r) => <TeamLink abbr={r.team} label={r.teamLabel} />,
+      render: (r) => (
+        <SeasonTeams abbr={r.team} label={r.teamLabel} teams={r.teams} />
+      ),
     },
     {
       key: "pos",

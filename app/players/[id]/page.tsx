@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { TeamLink } from "@/components/TeamLink";
+import { SeasonTeams, TeamLink } from "@/components/TeamLink";
 import { AwardBadges, CareerAwardBadges } from "@/components/AwardBadges";
 import { SeasonLink } from "@/components/SeasonLink";
 import { PlayerHeadshot } from "@/components/PlayerHeadshot";
@@ -29,8 +29,10 @@ import {
   getPlayerCareerStatsPerGame,
   getPlayerCareerAdvancedStats,
   getPlayerCareerSalaries,
+  getPlayerTeamSplits,
   getSalaryComps,
   type PlayerAward,
+  type PlayerContract,
 } from "@/lib/db/queries";
 import { POSITION_NAMES, type Position } from "@/lib/positions";
 import { PAGE_COLUMN, TABLE_BREAKOUT } from "@/lib/layout";
@@ -42,7 +44,111 @@ const COMP_LIMIT = 50;
 
 type StatsRow = Awaited<ReturnType<typeof getPlayerCareerStatsPerGame>>[number];
 type AdvRow = Awaited<ReturnType<typeof getPlayerCareerAdvancedStats>>[number];
-type SalRow = Awaited<ReturnType<typeof getPlayerCareerSalaries>>[number];
+/**
+ * A salary log row. `part` is set only on the rows folded under a season: one
+ * team's piece of a season split between several.
+ */
+type SalRow = Awaited<ReturnType<typeof getPlayerCareerSalaries>>[number] & {
+  part?: PlayerContract;
+};
+type SplitRow = Awaited<ReturnType<typeof getPlayerTeamSplits>>[number];
+
+/** Fields every table's split row takes straight from the stint. */
+function splitIdentity(s: SplitRow) {
+  return {
+    id: s.id,
+    season: s.season,
+    team: s.team,
+    teamLabel: s.teamLabel,
+    teams: null,
+    pos: s.pos,
+    age: s.age,
+    gp: s.gp,
+  };
+}
+
+/**
+ * A traded player's stints, shaped as rows of the three stats tables and
+ * keyed by season, for SimpleTable to fold under each season row.
+ *
+ * Stints are stored as totals, so the Career Averages rows divide by games
+ * here. The percentages are already rates and pass through untouched.
+ */
+function groupSplits(splits: SplitRow[]) {
+  const perGame = new Map<string, StatsRow[]>();
+  const totals = new Map<string, StatsRow[]>();
+  const advanced = new Map<string, AdvRow[]>();
+  const push = <R,>(map: Map<string, R[]>, season: string, row: R) =>
+    map.set(season, [...(map.get(season) ?? []), row]);
+
+  for (const s of splits) {
+    const box = {
+      ...splitIdentity(s),
+      gs: s.gs,
+      mp: s.mp,
+      fgm: s.fgm,
+      fga: s.fga,
+      fgPct: s.fgPct,
+      fg3m: s.fg3m,
+      fg3a: s.fg3a,
+      fg3Pct: s.fg3Pct,
+      fg2m: s.fg2m,
+      fg2a: s.fg2a,
+      fg2Pct: s.fg2Pct,
+      efgPct: s.efgPct,
+      ftm: s.ftm,
+      fta: s.fta,
+      ftPct: s.ftPct,
+      orb: s.orb,
+      drb: s.drb,
+      reb: s.reb,
+      ast: s.ast,
+      stl: s.stl,
+      blk: s.blk,
+      tov: s.tov,
+      pf: s.pf,
+      pts: s.pts,
+    };
+    const each = (v: number | null) => (v === null || !s.gp ? null : v / s.gp);
+    push(totals, s.season, box);
+    push(perGame, s.season, {
+      ...box,
+      mp: each(box.mp),
+      fgm: each(box.fgm),
+      fga: each(box.fga),
+      fg3m: each(box.fg3m),
+      fg3a: each(box.fg3a),
+      fg2m: each(box.fg2m),
+      fg2a: each(box.fg2a),
+      ftm: each(box.ftm),
+      fta: each(box.fta),
+      orb: each(box.orb),
+      drb: each(box.drb),
+      reb: each(box.reb),
+      ast: each(box.ast),
+      stl: each(box.stl),
+      blk: each(box.blk),
+      tov: each(box.tov),
+      pf: each(box.pf),
+      pts: each(box.pts),
+    });
+    push(advanced, s.season, {
+      ...splitIdentity(s),
+      mp: s.mp === null ? null : Math.round(s.mp),
+      per: s.per,
+      tsPct: s.tsPct,
+      usgPct: s.usgPct,
+      ows: s.ows,
+      dws: s.dws,
+      ws: s.ws,
+      obpm: s.obpm,
+      dbpm: s.dbpm,
+      bpm: s.bpm,
+      vorp: s.vorp,
+    });
+  }
+  return { perGame, totals, advanced };
+}
 
 // Career Averages and Career Totals share this shape but not its precision:
 // a per-game 10.8 FGM is fractional, a season total of 1034 is not.
@@ -58,7 +164,9 @@ function getStatsColumns(mode: "per_game" | "totals"): ColumnDef<StatsRow>[] {
     {
       key: "team",
       label: "Team",
-      render: (r) => <TeamLink abbr={r.team} label={r.teamLabel} />,
+      render: (r) => (
+        <SeasonTeams abbr={r.team} label={r.teamLabel} teams={r.teams} />
+      ),
     },
     { key: "pos", label: "Pos", render: (r) => r.pos ?? "—" },
     {
@@ -251,7 +359,9 @@ const advancedColumns: ColumnDef<AdvRow>[] = [
   {
     key: "team",
     label: "Team",
-    render: (r) => <TeamLink abbr={r.team} label={r.teamLabel} />,
+    render: (r) => (
+      <SeasonTeams abbr={r.team} label={r.teamLabel} teams={r.teams} />
+    ),
   },
   { key: "pos", label: "Pos", render: (r) => r.pos ?? "—" },
   {
@@ -336,33 +446,76 @@ const advancedColumns: ColumnDef<AdvRow>[] = [
 const MONO_CELL = "font-mono text-[0.8125rem]";
 
 function ContractTeams({ row }: { row: SalRow }) {
-  const contracts = row.contracts ?? [];
-  const owed = contracts.filter((c) => !c.playedHere && c.salary);
-  if (owed.length === 0)
+  if (row.part)
     return (
-      <span className={MONO_CELL}>
-        <TeamLink abbr={row.team} label={row.teamLabel} />
+      <span className="whitespace-nowrap">
+        <span className={MONO_CELL}>
+          <TeamLink abbr={row.team} label={row.teamLabel} />
+        </span>
+        {!row.part.playedHere && (
+          <span
+            className="ml-1 text-xs text-black/50"
+            title="Still owed by a team that had waived him. He played elsewhere."
+          >
+            waived
+          </span>
+        )}
       </span>
     );
-
   return (
-    <span className="flex flex-col gap-0.5 whitespace-nowrap">
-      <span className={MONO_CELL}>
-        <TeamLink abbr={row.team} label={row.teamLabel} />
-      </span>
-      {owed.map((c) => (
-        <span key={c.team} className="text-xs text-black/50">
-          {/* Mono without a size: the sub-line is already text-xs, and
-              MONO_CELL's size would make the abbr outgrow the words next
-              to it. */}
-          <span className="font-mono">
-            <TeamLink abbr={c.team} label={c.teamLabel} />
-          </span>{" "}
-          {formatCurrency(c.salary)} owed
-        </span>
-      ))}
+    <span className={MONO_CELL}>
+      <SeasonTeams abbr={row.team} label={row.teamLabel} teams={row.teams} />
     </span>
   );
+}
+
+/** One contract of a season as a row of its own, under the season row. */
+function contractRow(row: SalRow, c: PlayerContract): SalRow {
+  return {
+    ...row,
+    part: c,
+    team: c.team,
+    teamLabel: c.teamLabel,
+    teams: null,
+    contracts: [],
+    salary: c.salary,
+    salaryRank: null,
+    teamPayroll: c.teamPayroll ?? null,
+    pctOfTeamCap:
+      c.salary !== null && c.teamPayroll
+        ? Math.round((10000 * c.salary) / c.teamPayroll) / 100
+        : null,
+    pctOfLeagueCap:
+      c.salary !== null && row.leagueCap
+        ? Math.round((10000 * c.salary) / row.leagueCap) / 100
+        : null,
+    // A waived contract isn't his to be judged on (the model charges it to
+    // the team that waived him), so it carries no Net Value on his page.
+    netValueScore: c.playedHere ? (c.score ?? null) : null,
+    netValueRank: null,
+    deservedSalary: null,
+    seasonSalary: null,
+  };
+}
+
+/**
+ * The per-team rows folded under a traded season, behind its +/− button: what
+ * each team he played for paid and its piece of his Net Value.
+ */
+function salarySplits(row: SalRow): SalRow[] | undefined {
+  const played = (row.contracts ?? []).filter((c) => c.playedHere);
+  return played.length > 1 ? played.map((c) => contractRow(row, c)) : undefined;
+}
+
+/**
+ * A waived contract, always shown under the season it was paid in: money a
+ * team still owed him after letting him go, which the season row above leaves
+ * out. Damian Lillard's 2025-26 is Portland's $14.1M on the season row and
+ * Milwaukee's $22.5M under it.
+ */
+function waivedContracts(row: SalRow): SalRow[] | undefined {
+  const waived = (row.contracts ?? []).filter((c) => !c.playedHere && c.salary);
+  return waived.length > 0 ? waived.map((c) => contractRow(row, c)) : undefined;
 }
 
 function getSalariesColumns(
@@ -401,7 +554,20 @@ function getSalariesColumns(
       label: "Salary",
       align: "right",
       definition: GLOSSARY.salarySeasonTotal,
-      render: (r) => formatCurrency(r.salary),
+      render: (r) =>
+        r.part?.estimated ? (
+          // Marked with a dotted underline rather than a "~": a character
+          // would widen the column the moment the row opened and shift the
+          // whole table, where an underline takes no room.
+          <span
+            className="cursor-help underline decoration-black/40 decoration-dotted underline-offset-2"
+            title="Estimated: his season salary is on file under one team, so it is split across his teams by days on each roster."
+          >
+            {formatCurrency(r.salary)}
+          </span>
+        ) : (
+          formatCurrency(r.salary)
+        ),
     },
     {
       key: "salaryRank",
@@ -626,15 +792,24 @@ export default async function PlayerPage({
   const player = await getPlayerById(playerId);
   if (!player) notFound();
 
-  const [perGame, totals, advanced, salaries, currentCap, careerAwards] =
-    await Promise.all([
-      getPlayerCareerStatsPerGame(playerId),
-      getPlayerCareerStatsTotals(playerId),
-      getPlayerCareerAdvancedStats(playerId),
-      getPlayerCareerSalaries(playerId),
-      getCurrentCap(),
-      getPlayerAwards(playerId),
-    ]);
+  const [
+    perGame,
+    totals,
+    advanced,
+    salaries,
+    currentCap,
+    careerAwards,
+    teamSplits,
+  ] = await Promise.all([
+    getPlayerCareerStatsPerGame(playerId),
+    getPlayerCareerStatsTotals(playerId),
+    getPlayerCareerAdvancedStats(playerId),
+    getPlayerCareerSalaries(playerId),
+    getCurrentCap(),
+    getPlayerAwards(playerId),
+    getPlayerTeamSplits(playerId),
+  ]);
+  const splits = groupSplits(teamSplits);
 
   const salaryId = Number(sp.salary);
   const anchor = pickAnchor(
@@ -703,8 +878,10 @@ export default async function PlayerPage({
   // Summed from the career log already fetched above rather than a second
   // query. Seasons with no figure on record contribute nothing, so the box
   // says how many it covers instead of presenting a short total as complete.
-  const paidSeasons = salaries.filter((r) => r.salary !== null);
-  const careerEarnings = paidSeasons.reduce((sum, r) => sum + r.salary!, 0);
+  const paidSeasons = salaries.filter((r) => r.paidTotal !== null);
+  // Everything he was paid, waived contracts included: the Salary column
+  // leaves those out, but he was still paid them.
+  const careerEarnings = paidSeasons.reduce((sum, r) => sum + r.paidTotal!, 0);
   const unknownSeasons = salaries.length - paidSeasons.length;
 
   // Only shown when the player is actually on a roster for the season now
@@ -820,10 +997,13 @@ export default async function PlayerPage({
         >
           Salaries
         </SectionHeading>
-        <SimpleTable
+        <SimpleTable<SalRow>
           columns={getSalariesColumns(currentCap, awardsBySeason)}
           rows={salaries}
-          rowKey={(r) => r.id}
+          rowKey={(r) => `${r.id}-${r.part?.team ?? ""}`}
+          splits={salarySplits}
+          splitsLabel="pay and Net Value by team"
+          attached={waivedContracts}
           fit
           breakout
           rowHref={(r) => `/players/${playerId}?salary=${r.id}`}
@@ -928,6 +1108,7 @@ export default async function PlayerPage({
             columns={getStatsColumns("per_game")}
             rows={perGame}
             rowKey={(r) => r.id}
+            splits={(r) => splits.perGame.get(r.season)}
           />
           {totals.length > 0 && (
             <SimpleTable
@@ -935,6 +1116,7 @@ export default async function PlayerPage({
               columns={getStatsColumns("totals")}
               rows={totals}
               rowKey={(r) => r.id}
+              splits={(r) => splits.totals.get(r.season)}
             />
           )}
           <SimpleTable
@@ -942,6 +1124,7 @@ export default async function PlayerPage({
             columns={advancedColumns}
             rows={advanced}
             rowKey={(r) => r.id}
+            splits={(r) => splits.advanced.get(r.season)}
           />
         </div>
       </div>

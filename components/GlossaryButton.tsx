@@ -54,7 +54,7 @@ export function GlossaryButton({
                   // the text's first line however many lines the name takes.
                   // `align-middle` centers on the lowercase letters instead,
                   // which sits the circle visibly low.
-                  <span className="flex h-[1lh] shrink-0 items-center">
+                  <span className="flex h-lh shrink-0 items-center">
                     <InfoButton title={e.name}>
                       <p className="mt-3 text-sm leading-relaxed text-white/70">
                         {e.detail}

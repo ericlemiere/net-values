@@ -25,7 +25,16 @@ export const metadata = pageMetadata({
  * this file is only the order they come in.
  */
 export default async function NetValuePage() {
-  const { season, best, worst, overCap, latestTop, latestBottom, pricing } =
+  const {
+    season,
+    best,
+    worst,
+    overCap,
+    latestTop,
+    latestBottom,
+    pricing,
+    heroBreakdown,
+  } =
     await getNetValueExamples();
 
   // Every example row on the page, so one lookup covers all four tables.
@@ -60,7 +69,12 @@ export default async function NetValuePage() {
 
       <FormulaSection />
       {hero && pricing && (
-        <ExampleSection hero={hero} pricing={pricing} season={season} />
+        <ExampleSection
+          hero={hero}
+          pricing={pricing}
+          season={season}
+          breakdown={heroBreakdown}
+        />
       )}
       <ProductionSection pricing={pricing} />
       <WhySubtract />

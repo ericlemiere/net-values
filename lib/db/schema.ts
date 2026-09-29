@@ -6,6 +6,7 @@ import {
   varchar,
   numeric,
   boolean,
+  jsonb,
   uniqueIndex,
   index,
 } from "drizzle-orm/pg-core";
@@ -932,6 +933,79 @@ export const playerTrackingDefense = pgTable(
  *
  * Recomputed wholesale by scraper/compute_production.py — never edited in place.
  */
+/** One stint's working, as compute_production.py's `breakdown` writes it. */
+export interface ProductionStint {
+  team: string | null;
+  posGroup: string;
+  box: Record<
+    "mp" | "pts" | "fga" | "fta" | "ast" | "tov" | "orb" | "drb" | "stl" | "blk" | "pf",
+    number
+  >;
+  rosterMp: number | null;
+  floorShare: number;
+  onFloor: number;
+  poss: number;
+  slots: number;
+  games: number;
+  off: {
+    tsa: number;
+    ts: number;
+    assisted: number;
+    /** True where the league's average assisted share stood in for his own. */
+    assistedLeague: boolean;
+    shooting: number;
+    used: number;
+    turnovers: number;
+    assists: number;
+    rebounds: number;
+    creation: number;
+  };
+  offBefore: number;
+  offRate: number;
+  boxOff: number;
+  def: { steals: number; blocks: number; rebounds: number; fouls: number };
+  defBefore: number;
+  defRate: number;
+  boxDef: number;
+  quality: {
+    tracked: boolean;
+    features: { key: string; value: number | null; z: number | null; weight: number }[];
+    score: number;
+    mean: number;
+    sd: number;
+    quality: number;
+  };
+  defWeight: number | null;
+  /** Null for a stat line with no team, credited on its box line alone. */
+  anchor: {
+    ortg: number;
+    drtg: number;
+    leagueOrtg: number;
+    leagueDrtg: number;
+    teamPoss: number;
+    teamOff: number;
+    teamDef: number;
+    sumBoxOff: number;
+    sumPoss: number;
+    sumBoxDef: number;
+    sumDefWeight: number;
+  } | null;
+  offPoints: number;
+  defPoints: number;
+  impact: number;
+  value: number;
+}
+
+export interface ProductionBreakdown {
+  /** The season's league rates, all per slot except `ts` and `tov_rate`. */
+  league: Record<
+    | "ts" | "ppp" | "tov_rate" | "used_rate" | "orb_rate" | "drb_rate"
+    | "stl_rate" | "blk_rate" | "pf_rate" | "assisted",
+    number
+  >;
+  stints: ProductionStint[];
+}
+
 export const playerProduction = pgTable(
   "player_production",
   {
@@ -1000,6 +1074,11 @@ export const playerProduction = pgTable(
      * share of any team's surplus and are credited on their own box line alone.
      */
     source: varchar("source", { length: 20 }).notNull(),
+    /**
+     * Every intermediate figure behind `production`, for the explainer's worked
+     * example. Written alongside the result and never read back by the model.
+     */
+    breakdown: jsonb("breakdown").$type<ProductionBreakdown>(),
   },
   (t) => [
     uniqueIndex("player_production_player_season_idx").on(t.playerId, t.season),

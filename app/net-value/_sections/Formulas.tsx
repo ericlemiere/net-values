@@ -86,15 +86,18 @@ function FullFormula() {
               The player&rsquo;s share of the points his team&rsquo;s offense
               and defense generated above league average that season, counted up
               from a replacement-level floor, in NVPs. A season below the floor
-              counts as zero.{" "}
+              counts as zero. Every figure behind it is{" "}
               <a href="#production" className="underline">
-                How it&rsquo;s built
+                built out in full below
               </a>
               .
             </>
           }
         />
-        <Def name="Salary" note="What the player was paid that season." />
+        <Def
+          name="Salary"
+          note="What the teams he played for paid him that season. Money still owed by a team that waived him is charged to that team, not to him. A player traded mid-season is scored on his whole season; his teams then split it, each credited with what he produced there and charged for what it paid over the time it had him."
+        />
         <Def
           name="Minutes Played"
           note="His total minutes on the floor that season."

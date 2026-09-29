@@ -1,7 +1,9 @@
 import { Step, Working } from "@/components/Formula";
 import { AVAILABILITY_FLOOR, type NetValueExample } from "@/lib/db/queries";
 import { formatRank, formatScore, formatStat } from "@/lib/format";
+import type { ProductionBreakdown } from "@/lib/db/schema";
 import { DepthSection } from "./DepthSection";
+import { productionSteps } from "./ExampleProduction";
 import { PROSE } from "./Section";
 import { dollars, nvp, workedExample, type Pricing } from "./numbers";
 
@@ -13,12 +15,18 @@ function Steps({
   hero,
   pricing,
   season,
+  breakdown,
 }: {
   hero: NetValueExample;
   pricing: Pricing;
   season: string;
+  breakdown: ProductionBreakdown | null;
 }) {
   const ex = workedExample(hero, pricing);
+  // Value Produced worked from his box score where the working is on file,
+  // else quoted as one figure. Every later step is numbered on from it.
+  const producedSteps = productionSteps({ hero, breakdown, start: 1 });
+  const at = (producedSteps?.length ?? 1) + 1;
   const availability = hero.availability.toFixed(2);
   const charged = ex.chargedShare.toFixed(2);
   const fullMinutes = Math.round(hero.fullWorkload).toLocaleString();
@@ -32,6 +40,7 @@ function Steps({
       </p>
 
       <ol className="mt-6 space-y-6">
+        {producedSteps ?? (
         <Step
           n={1}
           title="Value Produced: what he did"
@@ -44,9 +53,10 @@ function Steps({
           </a>{" "}
           is covered below.
         </Step>
+        )}
 
         <Step
-          n={2}
+          n={at}
           title="League Production: what everyone did"
           working={`Σ Value Produced over ${pricing.players} players = ${produced} NVPs League Production`}
         >
@@ -54,7 +64,7 @@ function Steps({
         </Step>
 
         <Step
-          n={3}
+          n={at + 1}
           title="Price per NVP: the going rate"
           working={`${dollars(pricing.pool)} League Payroll / ${produced} NVPs League Production = ${dollars(ex.pricePerNvp)} per NVP`}
         >
@@ -62,7 +72,7 @@ function Steps({
         </Step>
 
         <Step
-          n={4}
+          n={at + 2}
           title="Availability and Charged Share: how much of the contract counts"
           working={[
             `30 minutes × ${ex.gamesInSeason} Games in the Season = ${fullMinutes} Full-Season Minutes`,
@@ -80,7 +90,7 @@ function Steps({
         </Step>
 
         <Step
-          n={5}
+          n={at + 3}
           title="Base Bought: what his salary buys"
           working={[
             `${dollars(hero.salary)} Salary / ${dollars(ex.pricePerNvp)} per NVP = ${nvp(ex.fullSeasonClaim)} NVPs for a full season`,
@@ -91,7 +101,7 @@ function Steps({
         </Step>
 
         <Step
-          n={6}
+          n={at + 4}
           title="Season Adjustment: centering the league on zero"
           working={`${nvp(ex.baseBought)} NVPs Base Bought ${
             ex.seasonAdjustment >= 0 ? "+" : "−"
@@ -101,7 +111,7 @@ function Steps({
         </Step>
 
         <Step
-          n={7}
+          n={at + 5}
           title="Net Value: what he did minus what was paid for"
           working={`${nvp(hero.production)} NVPs Value Produced − ${nvp(hero.expectedProduction)} NVPs Value Bought = ${formatScore(hero.netValueScore)} Net Value`}
         >
@@ -139,16 +149,20 @@ function Summary({
   );
 }
 
-export function ExampleSection(props: {
+export function ExampleSection({
+  breakdown,
+  ...props
+}: {
   hero: NetValueExample;
   pricing: Pricing;
   season: string;
+  breakdown: ProductionBreakdown | null;
 }) {
   return (
     <DepthSection
       title={`Example: ${props.hero.name}, ${props.hero.season}`}
       simple={<Summary {...props} />}
-      detailed={<Steps {...props} />}
+      detailed={<Steps {...props} breakdown={breakdown} />}
     />
   );
 }

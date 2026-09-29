@@ -1,4 +1,5 @@
 import { Section, PROSE } from "./Section";
+import { WIN_FIT } from "./numbers";
 
 /** What Net Value can't tell you. */
 export function Limits() {
@@ -9,6 +10,25 @@ export function Limits() {
           Value Produced is a share of what the player&rsquo;s own team did, so
           someone excellent on a team that underachieves around him will read
           low. That is the model working as designed, not a fault in it.
+        </li>
+        <li>
+          There is a margin of error. At the team level, where it can be
+          checked, a roster&rsquo;s total production misses its actual win
+          total by about {WIN_FIT.typicalMiss} wins in a typical season, and by
+          more than 6 in about {WIN_FIT.bigMissShare}. Almost none of that is
+          the model: production matches a team&rsquo;s point margin almost
+          exactly, and point margin itself misses wins by the same amount,
+          because close games don&rsquo;t fall evenly. That luck doesn&rsquo;t
+          carry from one season to the next, so no player is credited with it.
+          The team check can&rsquo;t test how the total is divided between
+          players, so a single player&rsquo;s figure carries a wider error that
+          can&rsquo;t be pinned down. Treat players separated by a few tenths of
+          an NVP as level.
+        </li>
+        <li>
+          Only the regular season counts. Playoff performance plays no part in
+          Value Produced, so a player who rises in the postseason, or fades in
+          it, gets no credit or blame for it here.
         </li>
         <li>
           Defense is the weak half. A team&rsquo;s defensive total is known, but

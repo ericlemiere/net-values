@@ -35,6 +35,7 @@ import {
   teamAliases,
   playerAwards,
   playerTeamSplits,
+  playerProduction,
 } from "./schema";
 
 export const PAGE_SIZE = 100;
@@ -1420,6 +1421,22 @@ export const getNetValueExamples = cached("getNetValueExamples", async function 
       .groupBy(netValues.season),
   ]);
 
+  // The working behind the worked example's Value Produced, for its hero only.
+  const hero = latestTop[0];
+  const heroBreakdown = hero
+    ? ((
+        await db
+          .select({ breakdown: playerProduction.breakdown })
+          .from(playerProduction)
+          .where(
+            and(
+              eq(playerProduction.playerId, hero.playerId),
+              eq(playerProduction.season, hero.season),
+            ),
+          )
+      )[0]?.breakdown ?? null)
+    : null;
+
   // The excluded seasons themselves, so the page can show what it left out
   // rather than quietly dropping them.
   const overCap = (await db
@@ -1438,6 +1455,7 @@ export const getNetValueExamples = cached("getNetValueExamples", async function 
     latestTop: latestTop as NetValueExample[],
     latestBottom: latestBottom as NetValueExample[],
     pricing: priced[0] ?? null,
+    heroBreakdown,
   };
 });
 

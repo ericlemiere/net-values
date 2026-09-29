@@ -1,6 +1,7 @@
 import { Def, Op, V, Working } from "@/components/Formula";
 import { formatStat } from "@/lib/format";
 import { DepthSection } from "./DepthSection";
+import { ProductionFormula } from "./ProductionFormula";
 import { PROSE } from "./Section";
 import { WIN_FIT, type Pricing } from "./numbers";
 
@@ -55,6 +56,11 @@ function Detailed({ pricing }: { pricing: Pricing | null }) {
         shooters did.
       </p>
       <p className={PROSE}>
+        Every figure that goes into it, from the box score up. The worked
+        example above runs a real season through the same stages.
+      </p>
+      <ProductionFormula />
+      <p className={PROSE}>
         {`Value Produced isn't measured in wins, which is why League Production lands on a figure like ${leagueTotal} NVPs rather than the 1,230 games in a season. To find what an NVP is worth, every team's total was fitted against the games it actually won, across ${WIN_FIT.teamSeasons} full 82-game team-seasons:`}
       </p>
       {/* Every number in the fit gets its own line, the same way the formula
@@ -72,7 +78,7 @@ function Detailed({ pricing }: { pricing: Pricing | null }) {
         <div className="mt-3 space-y-3 border-t border-white/15 pt-3 text-white/85">
           <Def
             name="Team Production"
-            note="Every Value Produced by the team's players that season, added up, in NVPs."
+            note="Every Value Produced by the team's players that season, added up, in NVPs. Here a season below replacement counts at its real, negative value rather than zero."
           />
           <Def
             name={`${WIN_FIT.intercept} wins`}

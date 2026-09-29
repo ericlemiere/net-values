@@ -6,12 +6,15 @@ export function Step({
   title,
   children,
   working,
+  before,
 }: {
   n: number;
   title: string;
   children: ReactNode;
   /** A string, or several for a calculation too long to read on one line. */
   working?: ReactNode | string[];
+  /** Block content above the working, such as a table, which can't sit in a <p>. */
+  before?: ReactNode;
 }) {
   return (
     <li className="flex gap-3 sm:gap-4">
@@ -21,6 +24,7 @@ export function Step({
       <div className="min-w-0 flex-1">
         <h3 className="font-semibold text-white">{title}</h3>
         <p className="mt-1 max-w-prose text-sm text-white/70">{children}</p>
+        {before}
         {working && <Working lines={working} className="mt-2" />}
       </div>
     </li>

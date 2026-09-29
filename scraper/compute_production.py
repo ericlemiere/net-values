@@ -52,6 +52,7 @@ Usage:
   python compute_production.py
   python compute_production.py 2024-2025      # one season
 """
+import json
 import math
 import sys
 
@@ -191,7 +192,7 @@ DEFENSE_TRACKING_COEFFICIENTS = {
 COLUMNS = [
     "team", "minutes", "floor_share", "off_points", "def_points",
     "off_per100", "def_per100", "impact_per100", "def_quality", "def_tracked",
-    "production", "source",
+    "production", "source", "breakdown",
 ]
 
 
@@ -260,6 +261,9 @@ def load_players(cur, season_filter):
     if season_filter:
         sql += " AND x.season = %s"
         params.append(season_filter)
+    # Stints in the order they were played. The season row keeps the first
+    # stint's def_quality, which without this changed from run to run.
+    sql += " ORDER BY x.player_id, x.season, x.split_id NULLS FIRST"
     cur.execute(sql, params)
     cols = [c.name for c in cur.description]
     return [dict(zip(cols, row)) for row in cur.fetchall()]
@@ -330,6 +334,7 @@ def add_usage(players, league):
         roster_minutes = sum(f(x["mp"]) for x in roster) or 1.0
         team_poss = float(roster[0]["team_poss"])
         for p in roster:
+            p["roster_mp"] = roster_minutes
             p["floor_share"] = f(p["mp"]) / roster_minutes
             p["on_floor"] = 5.0 * p["floor_share"]
             p["poss"] = p["on_floor"] * team_poss
@@ -414,17 +419,24 @@ def offense_credit(p, lg):
     # Taking the shot is worth something even at ordinary efficiency, because
     # someone has to, and the alternative is a team-mate doing it worse.
     creation = POINTS_PER_POSSESSION_USED * (used - lg["used_rate"] * p["slots"])
+    p["off_parts"] = {
+        "tsa": tsa, "ts": ts, "assisted": assisted,
+        "assistedLeague": p["pct_ast_fgm"] is None,
+        "shooting": shooting, "used": used, "turnovers": turnovers,
+        "assists": assists, "rebounds": rebounds, "creation": creation,
+    }
     return shooting + turnovers + assists + rebounds + creation
 
 
 def defense_credit(p, lg):
     """The part of defense a box score can support, against the same baselines."""
-    return (
-        POINTS_PER_STEAL * (f(p["stl"]) - lg["stl_rate"] * p["slots"])
-        + POINTS_PER_BLOCK * (f(p["blk"]) - lg["blk_rate"] * p["slots"])
-        + POINTS_PER_DREB * (f(p["drb"]) - lg["drb_rate"] * p["slots"])
-        + POINTS_PER_FOUL * (f(p["pf"]) - lg["pf_rate"] * p["slots"])
-    )
+    p["def_parts"] = {
+        "steals": POINTS_PER_STEAL * (f(p["stl"]) - lg["stl_rate"] * p["slots"]),
+        "blocks": POINTS_PER_BLOCK * (f(p["blk"]) - lg["blk_rate"] * p["slots"]),
+        "rebounds": POINTS_PER_DREB * (f(p["drb"]) - lg["drb_rate"] * p["slots"]),
+        "fouls": POINTS_PER_FOUL * (f(p["pf"]) - lg["pf_rate"] * p["slots"]),
+    }
+    return sum(p["def_parts"].values())
 
 
 def defense_features(p):
@@ -503,6 +515,7 @@ def defensive_quality(players):
         sd = math.sqrt(sum((v - mean) ** 2 for v in vals) / len(vals)) or 1.0
         for p in group:
             p["quality"] = (p["raw_quality"] - mean) / sd
+            p["quality_mean"], p["quality_sd"] = mean, sd
 
 
 def spread(players, raw_key, target, weight_key):
@@ -586,6 +599,8 @@ def compute(players, league):
             slots = sum(p["slots"] for p in group) or 1.0
             rate = sum(p[key] for p in group) / slots
             for p in group:
+                p[key + "_before"] = p[key]
+                p[key + "_rate"] = rate
                 p[key] -= rate * p["slots"]
 
 
@@ -599,10 +614,20 @@ def compute(players, league):
             p["def_weight"] = p["poss"] * math.exp(GAMMA * p["quality"])
         off = spread(roster, "off_raw", off_above, "poss")
         deff = spread(roster, "def_raw", def_above, "def_weight")
+        anchor = {
+            "ortg": float(roster[0]["off_rating"]), "drtg": float(roster[0]["def_rating"]),
+            "leagueOrtg": lg["off"], "leagueDrtg": lg["def"],
+            "teamPoss": team_poss, "teamOff": off_above, "teamDef": def_above,
+            "sumBoxOff": sum(p["off_raw"] for p in roster),
+            "sumPoss": sum(p["poss"] for p in roster),
+            "sumBoxDef": sum(p["def_raw"] for p in roster),
+            "sumDefWeight": sum(p["def_weight"] for p in roster),
+        }
         for p in roster:
             p["off_points"] = off[id(p)]
             p["def_points"] = deff[id(p)]
             p["source"] = "team_anchored"
+            p["anchor"] = anchor
 
     for p in unattached:
         # No team, so no share of anyone's surplus: he is credited with his own
@@ -614,6 +639,7 @@ def compute(players, league):
     for p in players:
         points = p["off_points"] + p["def_points"]
         impact = 100.0 * points / p["poss"] if p["poss"] else 0.0
+        p["impact"] = impact
         p["production"] = (impact - REPLACEMENT) * p["on_floor"] * (p["games"] / 82.0)
 
     # One row per player-season. A traded player's stints are added back up:
@@ -646,9 +672,60 @@ def compute(players, league):
                 bool(first["tracked"]),
                 round(sum(p["production"] for p in parts), 3),
                 first["source"] if len({p["source"] for p in parts}) == 1 else "team_anchored",
+                json.dumps(breakdown(parts, constants[season]), separators=(",", ":")),
             )
         )
     return rows
+
+
+def _r(value, digits=4):
+    """Rounded for storage; the breakdown is for reading, not for recomputing."""
+    return None if value is None else round(float(value), digits)
+
+
+def breakdown(parts, lg):
+    """Every intermediate figure behind one player-season, for the explainer.
+
+    One entry per stint (one for most players), each carrying the inputs, the
+    box credits before and after centering, the defensive-quality working and
+    the team anchor it was spread against. Nothing reads this back into the
+    model: it exists so the page can show a real season worked end to end.
+    """
+    league = {k: _r(v, 6) for k, v in lg.items()}
+    stints = []
+    for p in parts:
+        coefficients = (DEFENSE_TRACKING_COEFFICIENTS if p["tracked"]
+                        else DEFENSE_BOX_COEFFICIENTS)
+        stints.append({
+            "team": p["team"], "posGroup": p["pos_group"],
+            "box": {k: _r(f(p[k]), 1) for k in
+                    ("mp", "pts", "fga", "fta", "ast", "tov", "orb", "drb", "stl", "blk", "pf")},
+            "rosterMp": _r(p.get("roster_mp"), 1), "floorShare": _r(p["floor_share"], 6),
+            "onFloor": _r(p["on_floor"], 6), "poss": _r(p["poss"], 2), "slots": _r(p["slots"], 2),
+            "games": p["games"],
+            "off": {k: (v if isinstance(v, bool) else _r(v, 6 if k == "ts" else 4))
+                    for k, v in p["off_parts"].items()},
+            "offBefore": _r(p["off_raw_before"]), "offRate": _r(p["off_raw_rate"], 6),
+            "boxOff": _r(p["off_raw"]),
+            "def": {k: _r(v) for k, v in p["def_parts"].items()},
+            "defBefore": _r(p["def_raw_before"]), "defRate": _r(p["def_raw_rate"], 6),
+            "boxDef": _r(p["def_raw"]),
+            "quality": {
+                "tracked": bool(p["tracked"]),
+                "features": [
+                    {"key": k, "value": _r(p["features"].get(k)),
+                     "z": _r(p["z"].get(k)), "weight": w}
+                    for k, w in coefficients.items()
+                ],
+                "score": _r(p["raw_quality"]), "mean": _r(p["quality_mean"]),
+                "sd": _r(p["quality_sd"]), "quality": _r(p["quality"]),
+            },
+            "defWeight": _r(p.get("def_weight"), 2),
+            "anchor": {k: _r(v) for k, v in p["anchor"].items()} if p.get("anchor") else None,
+            "offPoints": _r(p["off_points"]), "defPoints": _r(p["def_points"]),
+            "impact": _r(p["impact"]), "value": _r(p["production"]),
+        })
+    return {"league": league, "stints": stints}
 
 
 def main():

@@ -87,7 +87,7 @@ function listWhere(
   return clauses.length === 1 ? clauses[0] : and(...clauses);
 }
 
-function orderByNullsLast(column: AnyColumn | SQL, dir: "asc" | "desc") {
+function orderByNullsLast(column: AnyColumn | SQL | SQL.Aliased, dir: "asc" | "desc") {
   return dir === "asc"
     ? sql`${column} asc nulls last`
     : sql`${column} desc nulls last`;
@@ -527,25 +527,50 @@ const pctOfLeagueCapSql = sql<
  * "deserving" a league-leading contract on the strength of being cheap.
  * Production alone asks the question the column is actually posing.
  *
- * A season nobody has played yet has no production and so no rung, which the
- * `production IS NOT NULL` filter drops rather than ranking every contract
- * equal-first.
+ * Both ladders are built from the same player-seasons: those with a
+ * production figure. A season nobody has played yet has none, and neither does
+ * a contract paid to someone who never took the floor; leaving those on the
+ * pay ladder only would make it longer than the production ladder, so the
+ * Nth most productive player would read a salary from lower down than the Nth
+ * rung of the people he is actually ranked among.
+ *
+ * Rungs are numbered one to one (row_number, not rank) so that no rung is
+ * skipped or read twice. Players tied on production share one figure: the
+ * average of the rungs their tie spans. That tie is not rare — production
+ * below zero is floored at zero, so around a third of every season sits level
+ * at the bottom. rank() gave all of them the salary at the top of that block
+ * (184 players in 2024-25 each "deserving" $2.49M); the average of the
+ * salaries they actually span is what the league paid for that much.
  */
-const productionRanked = db
+const productionLadder = db
   .select({
     playerId: netValues.playerId,
     season: netValues.season,
-    rank: sql<number>`rank() over (
-      partition by ${netValues.season} order by ${netValues.production} desc)`.as(
-      "production_rank",
+    production: netValues.production,
+    rung: sql<number>`row_number() over (
+      partition by ${netValues.season}
+      order by ${netValues.production} desc, ${netValues.playerId})`.as(
+      "production_rung",
     ),
   })
   .from(netValues)
   .where(isNotNull(netValues.production))
-  .as("production_ranked");
+  .as("production_ladder");
 
-/** The pay ladder the rank above is read against. */
-const payLadder = alias(netValues, "pay_ladder");
+const payRungs = alias(netValues, "pay_rungs");
+
+/** The pay ladder the production ladder is read against. */
+const payLadder = db
+  .select({
+    season: payRungs.season,
+    salary: payRungs.salary,
+    rung: sql<number>`row_number() over (
+      partition by ${payRungs.season}
+      order by ${payRungs.salary} desc, ${payRungs.playerId})`.as("pay_rung"),
+  })
+  .from(payRungs)
+  .where(isNotNull(payRungs.production))
+  .as("pay_ladder");
 
 /**
  * Deserved pay per player-season, ready to join onto anything.
@@ -555,23 +580,31 @@ const payLadder = alias(netValues, "pay_ladder");
  * season once per row: sorting /salaries by this across every season took 4.7
  * seconds, and still 1.7 with indexes to help it. Ranking every season once,
  * up front, and hash-joining the result is ~57ms for the same page.
+ *
+ * The figure is aliased "deserved_salary" rather than "salary": a field built
+ * from sql, not a column, renders unqualified wherever it is referenced, and a
+ * bare "salary" would collide with net_values.salary in the queries that join
+ * this.
  */
 const deservedPay = db
   .select({
-    playerId: productionRanked.playerId,
-    season: productionRanked.season,
-    salary: payLadder.salary,
+    playerId: productionLadder.playerId,
+    season: productionLadder.season,
+    salary: sql<number>`round(avg(${payLadder.salary}) over (
+      partition by ${productionLadder.season}, ${productionLadder.production}))::int`.as(
+      "deserved_salary",
+    ),
   })
-  .from(productionRanked)
+  .from(productionLadder)
   .innerJoin(
     payLadder,
     and(
-      eq(payLadder.season, productionRanked.season),
-      // Written out rather than as eq(..., productionRanked.rank). A subquery
-      // field that came from a window function, not a column, renders
-      // unqualified through the query builder — "production_rank" with no
+      eq(payLadder.season, productionLadder.season),
+      // Written out rather than as eq(payLadder.rung, productionLadder.rung).
+      // A subquery field that came from a window function, not a column,
+      // renders unqualified through the query builder — "pay_rung" with no
       // table on it — which Postgres rejects in a join condition.
-      sql`${payLadder.salaryRank} = "production_ranked"."production_rank"`,
+      sql`"pay_ladder"."pay_rung" = "production_ladder"."production_rung"`,
     ),
   )
   .as("deserved_pay");
@@ -774,6 +807,13 @@ export const getSalaries = cached("getSalaries", async function getSalaries(
   };
   const sortCol =
     sortColumns[params.sort as keyof typeof sortColumns] ?? salary;
+  // Deserved pay ties whenever the pay ladder repeats a salary, which max
+  // contracts do near the top: four players at $54.1M in 2025-26. Production
+  // is what the column is read from, so it orders them before name does.
+  const tiebreak =
+    params.sort === "deservedSalary"
+      ? [orderByNullsLast(nv.production, params.dir)]
+      : [];
 
   const clauses: SQL[] = [isNotNull(salary)];
   if (params.season !== "ALL") clauses.push(eq(nv.season, params.season));
@@ -840,7 +880,11 @@ export const getSalaries = cached("getSalaries", async function getSalaries(
   const [rows, countResult] = await Promise.all([
     joined
       .where(where)
-      .orderBy(orderByNullsLast(sortCol, params.dir), asc(players.name))
+      .orderBy(
+        orderByNullsLast(sortCol, params.dir),
+        ...tiebreak,
+        asc(players.name),
+      )
       .limit(PAGE_SIZE)
       .offset((page - 1) * PAGE_SIZE),
     counted.where(where),
@@ -1755,7 +1799,7 @@ export const getPlayerCareerSalaries = cached("getPlayerCareerSalaries", async f
            -- c.salary is the same figure; nv.salary is used so the two sides
            -- of the difference come off the same row the ladder ranks.
            nv.salary AS "seasonSalary",
-           deserved_pay.salary AS "deservedSalary",
+           deserved_pay.deserved_salary AS "deservedSalary",
            nv.production::float8 AS production,
            nv.expected_production::float8 AS "expectedProduction",
            nv.availability::float8 AS availability

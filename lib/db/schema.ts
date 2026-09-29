@@ -964,6 +964,10 @@ export interface ProductionStint {
   offRate: number;
   boxOff: number;
   def: { steals: number; blocks: number; rebounds: number; fouls: number };
+  /** Defensive rebounds per Slot at his position that season. */
+  drbPositionRate: number;
+  /** What his defensive rebounds are measured against, per Slot. */
+  drbBaseline: number;
   defBefore: number;
   defRate: number;
   boxDef: number;

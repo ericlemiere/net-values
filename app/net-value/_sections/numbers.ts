@@ -13,7 +13,7 @@ export type Pricing = NonNullable<
  * numbers, not something the page recomputes: each team-season's
  * player_production summed (player_team_splits for traded players) and
  * regressed on its wins, over the full 82-game seasons 1990-91 to 2025-26.
- * Checked 2026-09-28.
+ * Checked 2026-09-29.
  *
  * The sum keeps below-replacement seasons at their real, negative value. The
  * zero floor compute_net_values.py applies is for pricing; fitted against
@@ -45,6 +45,8 @@ export const PRODUCTION = {
   perSteal: 1.4,
   perBlock: 0.7,
   perDefRebound: 0.3,
+  /** How far the defensive-rebound baseline leans toward his position. */
+  drbPositionWeight: 0.75,
   perFoul: -0.4,
   gamma: 0.35,
 } as const;

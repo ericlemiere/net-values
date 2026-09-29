@@ -231,7 +231,7 @@ export const GLOSSARY: Record<string, Definition> = {
   deservedSalary: {
     name: "What his production was worth that season",
     detail:
-      "What the league paid for this much basketball that season: rank every player by production, then read off the salary sitting at the same rank on the pay ladder. The fourth most productive player is worth whatever the fourth highest-paid player earned.",
+      "What the league paid for this much basketball that season: rank every player by production, then read off the salary sitting at the same rank on the pay ladder. The fourth most productive player is worth whatever the fourth highest-paid player earned. Players tied on production split the difference: each gets the average salary of the rungs their tie covers.",
   },
   /** The salaries table, one row per contract rather than per season. */
   payDifferenceContract: {

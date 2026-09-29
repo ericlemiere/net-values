@@ -135,13 +135,13 @@ export function productionSteps({
       working={[
         `${P.perSteal} × (${fmt(b.stl, 0)} STL − ${fmt(lg.stl_rate, 4)} × ${fmt(s.slots, 1)} Slots) = ${fmt(d.steals)}`,
         `${P.perBlock} × (${fmt(b.blk, 0)} BLK − ${fmt(lg.blk_rate, 4)} × ${fmt(s.slots, 1)} Slots) = ${fmt(d.blocks)}`,
-        `${P.perDefRebound} × (${fmt(b.drb, 0)} DRB − ${fmt(lg.drb_rate, 4)} × ${fmt(s.slots, 1)} Slots) = ${fmt(d.rebounds)}`,
+        `${P.drbPositionWeight} × ${fmt(s.drbPositionRate, 4)} Position DRB Rate + ${1 - P.drbPositionWeight} × ${fmt(lg.drb_rate, 4)} League DRB Rate = ${fmt(s.drbBaseline, 4)} DRB Baseline`,
+        `${P.perDefRebound} × (${fmt(b.drb, 0)} DRB − ${fmt(s.drbBaseline, 4)} DRB Baseline × ${fmt(s.slots, 1)} Slots) = ${fmt(d.rebounds)}`,
         `−${Math.abs(P.perFoul)} × (${fmt(b.pf, 0)} PF − ${fmt(lg.pf_rate, 4)} × ${fmt(s.slots, 1)} Slots) = ${fmt(d.fouls)}`,
         `${sum(defParts)} = ${fmt(s.boxDef)} Box Defense`,
       ]}
     >
-      Steals, blocks, defensive rebounds and fouls, each against the league
-      rate over his Slots.
+      {`Steals, blocks and fouls, each against the league rate over his Slots. Defensive rebounds are measured against a baseline that leans toward other ${positionName(s.posGroup)}, since much of any player's rebounding comes from where his position puts him.`}
     </Step>,
 
     <Step

@@ -85,7 +85,7 @@ export function ProductionFormula() {
           />
           <Def
             name="Position"
-            note="His listed position: PG, SG, SF, PF or C. Used only to set the offensive baseline."
+            note="His listed position: PG, SG, SF, PF or C. Used to set the offensive baseline and most of the defensive-rebound one."
           />
           <Def
             name="Team Possessions, Team Games"
@@ -251,8 +251,29 @@ export function ProductionFormula() {
 
         <Stage label="Defense from the box score">
           <Def
+            name="Position DRB Rate"
+            note="Defensive rebounds per Slot across everyone at his position that season."
+          >
+            <Frac
+              num={<V>Σ DRB at his position</V>}
+              den={<V>Σ Slots at his position</V>}
+            />
+          </Def>
+          <Def
+            name="DRB Baseline"
+            note="The defensive rebounds he is expected to collect per Slot. It leans mostly on his position, because a center gathers many of his just by standing under the rim, but not entirely: boxing out is a real skill, so part of the gap is still his."
+          >
+            {P.drbPositionWeight}
+            <Op>×</Op>
+            <V>Position DRB Rate</V>
+            <Op>+</Op>
+            {1 - P.drbPositionWeight}
+            <Op>×</Op>
+            <V>League DRB Rate</V>
+          </Def>
+          <Def
             name="Box Defense"
-            note="The part of defense a box score can see, each stat against what an average player records in the same floor time. It is measured against the whole league, not his position: rim protection is scarcer and worth more."
+            note="The part of defense a box score can see, each stat against what an average player records in the same floor time. Steals, blocks and fouls are measured against the whole league, not his position: rim protection is scarcer and worth more. Defensive rebounds are measured against the DRB Baseline."
           >
             <span className="inline-flex flex-col gap-1">
               <span>
@@ -264,7 +285,12 @@ export function ProductionFormula() {
               </span>
               <span>
                 <Op>+</Op>
-                <Credit weight={P.perDefRebound} stat="DRB" />
+                {P.perDefRebound}
+                <Op>×</Op>(<V>DRB</V>
+                <Op>−</Op>
+                <V>DRB Baseline</V>
+                <Op>×</Op>
+                <V>Slots</V>)
               </span>
               <span>
                 <Op>−</Op>

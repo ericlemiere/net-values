@@ -53,7 +53,9 @@ function Detailed({ pricing }: { pricing: Pricing | null }) {
         a shot on. Defense is split by minutes, tilted by a defensive-quality
         model fitted to thirty-six seasons of All-Defensive voting, and from
         2013-14 on, by tracking data on shots defended and how badly the
-        shooters did.
+        shooters did. Rebounds on both ends are judged mostly against the
+        player&rsquo;s own position, so a center isn&rsquo;t paid for the ones
+        standing under the rim hands him.
       </p>
       <p className={PROSE}>
         Every figure that goes into it, from the box score up. The worked

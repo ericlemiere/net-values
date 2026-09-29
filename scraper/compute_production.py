@@ -69,6 +69,32 @@ REPLACEMENT = -2.0
 CENTER_OFFENSE_BY_POSITION = True
 CENTER_DEFENSE_BY_POSITION = False
 
+# How far a defensive rebound is judged against the player's own position
+# rather than the league. The rest of box defense is judged against the league
+# (see the centering step in compute()), but a defensive rebound is the same
+# case as an offensive one: a center collects most of his because he is
+# standing under the rim, and against a league baseline that included guards
+# the column alone gave centers 41% of all positive defensive credit on 18% of
+# the minutes. It was the whole of the center premium — baselining just this
+# stat by position did almost exactly what baselining all of defense did.
+#
+# Not all the way to position, because boxing out and finishing the
+# possession is a real skill and some of the gap is his. Swept over 1990-91
+# onward (500+ minutes; AUC for All-NBA and All-Defense, Spearman against MVP
+# share; the gap is minute-weighted impact per 100, centers minus guards):
+#
+#   weight   AllNBA  AllDef   MVP   C-minus-guard  C share of production
+#   0.00      0.984  0.898  0.662     +1.30          24.9%
+#   0.50      0.985  0.899  0.666     +0.55          21.7%
+#   0.75      0.985  0.899  0.664     +0.18          20.1%
+#   1.00      0.984  0.898  0.661     -0.19          18.6%
+#
+# The award tests cannot choose between them, so this is a judgment: 0.75
+# lands near BPM's own positional gap (+0.4) without going below it, and
+# leaves centers a small premium for the rim protection blocks and shots
+# saved still pay for. Centers play about 17.6% of minutes.
+DREB_POSITION_WEIGHT = 0.75
+
 # How much of the efficiency credit for an assisted basket belongs to the passer.
 #
 # Without this the model reads a lob finisher as an elite offensive player: a
@@ -429,11 +455,15 @@ def offense_credit(p, lg):
 
 
 def defense_credit(p, lg):
-    """The part of defense a box score can support, against the same baselines."""
+    """The part of defense a box score can support, against the same baselines.
+
+    Defensive rebounds are the exception: they are measured against
+    `drb_baseline`, which leans toward his position — see DREB_POSITION_WEIGHT.
+    """
     p["def_parts"] = {
         "steals": POINTS_PER_STEAL * (f(p["stl"]) - lg["stl_rate"] * p["slots"]),
         "blocks": POINTS_PER_BLOCK * (f(p["blk"]) - lg["blk_rate"] * p["slots"]),
-        "rebounds": POINTS_PER_DREB * (f(p["drb"]) - lg["drb_rate"] * p["slots"]),
+        "rebounds": POINTS_PER_DREB * (f(p["drb"]) - p["drb_baseline"] * p["slots"]),
         "fouls": POINTS_PER_FOUL * (f(p["pf"]) - lg["pf_rate"] * p["slots"]),
     }
     return sum(p["def_parts"].values())
@@ -544,6 +574,19 @@ def compute(players, league):
     constants = league_constants(players)
     defensive_quality(players)
 
+    # Defensive rebounds per slot at each position, for the rebound baseline.
+    position_drb = {}
+    for p in players:
+        key = (p["season"], p["pos_group"])
+        drb, slots = position_drb.get(key, (0.0, 0.0))
+        position_drb[key] = (drb + f(p["drb"]), slots + p["slots"])
+    for p in players:
+        lg = constants[p["season"]]
+        drb, slots = position_drb[(p["season"], p["pos_group"])]
+        p["drb_position_rate"] = drb / slots if slots else lg["drb_rate"]
+        p["drb_baseline"] = (DREB_POSITION_WEIGHT * p["drb_position_rate"]
+                             + (1 - DREB_POSITION_WEIGHT) * lg["drb_rate"])
+
     for p in players:
         lg = constants[p["season"]]
         p["off_raw"] = offense_credit(p, lg)
@@ -568,17 +611,13 @@ def compute(players, league):
     # DEFENSE is baselined against the league, because there the positional
     # difference is the point. Rim protection is worth more than perimeter
     # defense and is scarcer, and centering it away says a good defensive center
-    # is worth no more than a good defensive guard. Tried both ways: centering
-    # defense by position too sends Rudy Gobert's 2023-24 from 95th to 399th,
-    # which is the exact failure this model was built to fix.
-    #
-    # Measured over all 36 seasons, offense-only centering is the best of the
-    # three on the defensive test and close to the best on the offensive ones:
-    #
-    #                        AllNBA  AllDef   MVP   C-minus-guard  Gobert 23-24
-    #   league / league       0.968   0.844  0.440     +3.43          32nd
-    #   position / position   0.972   0.846  0.444     +0.18         399th
-    #   position / league     0.971   0.849  0.441     +1.68          95th
+    # is worth no more than a good defensive guard. The exception is defensive
+    # rebounding, which is position more than skill and is baselined mostly by
+    # position before it gets here — see DREB_POSITION_WEIGHT. Rebounds were
+    # nearly all of the positional gap: centering every defensive stat by
+    # position lands within a place of centering rebounds alone (Gobert's
+    # 2023-24 at 27th against 26th; 23rd at the 0.75 weight used). An earlier
+    # version of this model, before tracking data, sent him to 399th.
     #
     # The team adjustment below still sets the levels, so this only decides who
     # gets the credit, never how much there is to give.
@@ -708,6 +747,8 @@ def breakdown(parts, lg):
             "offBefore": _r(p["off_raw_before"]), "offRate": _r(p["off_raw_rate"], 6),
             "boxOff": _r(p["off_raw"]),
             "def": {k: _r(v) for k, v in p["def_parts"].items()},
+            "drbPositionRate": _r(p["drb_position_rate"], 6),
+            "drbBaseline": _r(p["drb_baseline"], 6),
             "defBefore": _r(p["def_raw_before"]), "defRate": _r(p["def_raw_rate"], 6),
             "boxDef": _r(p["def_raw"]),
             "quality": {

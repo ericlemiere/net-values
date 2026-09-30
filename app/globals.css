@@ -57,6 +57,17 @@ body {
 }
 
 /*
+ * Always reserve the page scrollbar's strip. The home page fits the screen and
+ * never scrolls, so without this every trip from it to a long page (and back)
+ * narrowed the layout by the scrollbar's width and shoved everything sideways.
+ * Overlay scrollbars (macOS default, phones) take no space, so this is a no-op
+ * there.
+ */
+html {
+  scrollbar-gutter: stable;
+}
+
+/*
  * Same-page anchor links glide rather than jump, so the reader sees which way
  * the page moved. Page-to-page navigation still lands instantly: the
  * `data-scroll-behavior="smooth"` on <html> in layout.tsx tells Next to switch

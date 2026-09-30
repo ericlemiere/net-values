@@ -76,13 +76,21 @@ export function HomeIntro() {
       >
         The Net Values
       </h1>
-      <p
-        className="home-in text-white/80 mb-4 md:mb-8 max-w-xl"
+      <div
+        className="home-in mb-4 md:mb-8 max-w-xl"
         style={{ "--i": 2 } as React.CSSProperties}
       >
-        A way to evaluate an NBA player&apos;s Net Value based on their
-        production on the court and salary.
-      </p>
+        <p className="text-xl md:text-2xl font-semibold leading-snug tracking-tight">
+          The &nbsp;
+          <span className="inline-block rounded-md border-2 border-accent px-1.5 leading-tight text-accent font-mono animate-pulse shadow-[0_0_20px_5px_#fff20060]">
+            AI
+          </span>&nbsp;
+          powered NBA player evaluator.
+        </p>
+        <p className="mt-2 text-white/70 md:text-lg">
+          Weigh production against paycheck. Find the Net Value.
+        </p>
+      </div>
       <nav className="grid grid-cols-2 gap-3 md:gap-4 max-w-xl md:mt-8">
         {HOME_LINKS.map((link, i) => (
           <Link

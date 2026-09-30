@@ -15,6 +15,9 @@ has to be refreshed before the numbers mean anything:
                     denominator. Without it, a player who has started every game
                     of a 20-game-old season looks 25% available against a full
                     82-game workload.
+  on/off            nba.com's on-court and off-court team ratings, one request
+                    per team (30 a day). Nothing in the model reads them yet;
+                    kept current so the table is complete when something does.
   awards            nothing is voted on until the season ends, so this is a
                     no-op for most of the year and then fills in by itself the
                     day bref publishes. Cheap either way: one cached page.
@@ -53,6 +56,7 @@ def main():
     import backfill_advanced
     import backfill_team_splits
     import backfill_teams
+    import backfill_on_off
     import backfill_awards
     import compute_net_values
 
@@ -71,6 +75,10 @@ def main():
     print(f"\n=== team records from bref: {end_year} ===")
     sys.argv = ["backfill_teams", str(end_year)]
     backfill_teams.main()
+
+    # After team records: which teams to request comes from team_seasons.
+    print(f"\n=== on/off from nba.com: {season} ===")
+    backfill_on_off.run([season])
 
     print(f"\n=== awards from bref: {end_year} ===")
     # bref only. The nba.com pass walks every ever-All-Star player one request

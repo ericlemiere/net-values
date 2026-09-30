@@ -901,6 +901,48 @@ export const playerTrackingDefense = pgTable(
 );
 
 /**
+ * How a team did with each player on the floor and with him off it, from
+ * nba.com's play-by-play (nba_api teamplayeronoffsummary), 2007-08 onward —
+ * the endpoint has nothing earlier.
+ *
+ * One row per player per team per season, so a traded player's stints stay
+ * apart: on/off only means anything against the one roster he was part of.
+ * Ratings are points per 100 possessions. Nothing reads this yet; it is the
+ * raw material for a possible on/off tilt to the production split.
+ */
+export const playerOnOff = pgTable(
+  "player_on_off",
+  {
+    id: serial("id").primaryKey(),
+    playerId: integer("player_id")
+      .notNull()
+      .references(() => players.id),
+    season: text("season").notNull(),
+    team: varchar("team", { length: 3 }).notNull(),
+    /** Games he appeared in for this team. */
+    gpOn: integer("gp_on"),
+    minOn: numeric("min_on", { precision: 7, scale: 1, mode: "number" }),
+    offRatingOn: numeric("off_rating_on", { precision: 6, scale: 1, mode: "number" }),
+    defRatingOn: numeric("def_rating_on", { precision: 6, scale: 1, mode: "number" }),
+    netRatingOn: numeric("net_rating_on", { precision: 6, scale: 1, mode: "number" }),
+    /** Team minutes with him on the bench, over the games he was on the roster. */
+    minOff: numeric("min_off", { precision: 7, scale: 1, mode: "number" }),
+    offRatingOff: numeric("off_rating_off", { precision: 6, scale: 1, mode: "number" }),
+    defRatingOff: numeric("def_rating_off", { precision: 6, scale: 1, mode: "number" }),
+    netRatingOff: numeric("net_rating_off", { precision: 6, scale: 1, mode: "number" }),
+    source: varchar("source", { length: 20 }).notNull(),
+  },
+  (t) => [
+    uniqueIndex("player_on_off_player_season_team_idx").on(
+      t.playerId,
+      t.season,
+      t.team,
+    ),
+    index("player_on_off_season_idx").on(t.season),
+  ],
+);
+
+/**
  * What a player produced, in points above a league-average player, split into
  * the offensive and defensive halves that produced it.
  *

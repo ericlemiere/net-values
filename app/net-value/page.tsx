@@ -1,4 +1,8 @@
-import { getAwardsForRows, getNetValueExamples } from "@/lib/db/queries";
+import {
+  getAwardsForRows,
+  getNetValueExamples,
+  getNetValueScale,
+} from "@/lib/db/queries";
 import { PAGE_COLUMN_PROSE } from "@/lib/layout";
 import { pageMetadata } from "@/lib/site";
 import { ExampleSection } from "./_sections/Example";
@@ -25,8 +29,10 @@ export const metadata = pageMetadata({
  * this file is only the order they come in.
  */
 export default async function NetValuePage() {
-  const { season, best, worst, overCap, latestTop, latestBottom, pricing } =
-    await getNetValueExamples();
+  const [
+    { season, best, worst, overCap, latestTop, latestBottom, pricing },
+    scale,
+  ] = await Promise.all([getNetValueExamples(), getNetValueScale()]);
 
   // Every example row on the page, so one lookup covers all four tables.
   const awards = await getAwardsForRows([
@@ -64,7 +70,7 @@ export default async function NetValuePage() {
       )}
       <ProductionSection pricing={pricing} />
       <WhySubtract />
-      <ReadingTheScale />
+      <ReadingTheScale scale={scale} />
       <Limits />
       <ExampleTables
         season={season}

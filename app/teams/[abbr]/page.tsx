@@ -16,6 +16,7 @@ import {
   formatStat,
   formatRank,
   formatScore,
+  netValueClass,
 } from "@/lib/format";
 import {
   getTeamByAbbr,
@@ -234,7 +235,11 @@ function rosterColumns(
       key: "netValueShare",
       label: "Net Value",
       align: "right",
-      render: (r) => formatScore(r.netValueShare),
+      render: (r) => (
+        <span className={netValueClass(r.netValueShare)}>
+          {formatScore(r.netValueShare)}
+        </span>
+      ),
     },
     {
       key: "gp",

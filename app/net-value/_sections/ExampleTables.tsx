@@ -8,6 +8,7 @@ import {
   formatPercent,
   formatRank,
   formatScore,
+  netValueClass,
   formatStat,
 } from "@/lib/format";
 import type { NetValueExample } from "@/lib/db/queries";
@@ -89,7 +90,11 @@ function exampleColumns(
       key: "netValueScore",
       label: "Net Value",
       align: "right",
-      render: (r) => formatScore(r.netValueScore),
+      render: (r) => (
+        <span className={netValueClass(r.netValueScore)}>
+          {formatScore(r.netValueScore)}
+        </span>
+      ),
     },
   ];
 }

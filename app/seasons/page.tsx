@@ -9,7 +9,7 @@ import { GlossaryButton } from "@/components/GlossaryButton";
 import { GLOSSARY, tooltip, type GlossaryEntry } from "@/lib/glossary";
 import { TableOverlay } from "@/components/TableNav";
 import type { ColumnDef } from "@/components/DataTable";
-import { formatCurrency, formatScore } from "@/lib/format";
+import { formatCurrency, formatScore, netValueClass } from "@/lib/format";
 import {
   AWARDS,
   AWARD_ORDER,
@@ -231,7 +231,11 @@ function netValueCells(score: number | null, rank: number | null) {
   return (
     <>
       <td className="px-3 py-1.5 text-right font-mono text-[0.8125rem] tabular-nums">
-        {score === null ? "—" : formatScore(score)}
+        {score === null ? (
+          "—"
+        ) : (
+          <span className={netValueClass(score)}>{formatScore(score)}</span>
+        )}
       </td>
       <td className="px-3 py-1.5 text-right font-mono text-[0.8125rem] tabular-nums text-black/50">
         {rank === null ? "—" : `#${rank}`}
@@ -401,7 +405,13 @@ function netValueColumns(): ColumnDef<SeasonNetValueRow>[] {
       label: "Net Value",
       align: "right",
       render: (r) =>
-        r.netValueScore === null ? "—" : formatScore(r.netValueScore),
+        r.netValueScore === null ? (
+          "—"
+        ) : (
+          <span className={netValueClass(r.netValueScore)}>
+            {formatScore(r.netValueScore)}
+          </span>
+        ),
     },
   ];
 }

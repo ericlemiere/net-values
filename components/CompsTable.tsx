@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { formatScore } from "@/lib/format";
+import { formatScore, netValueClass } from "@/lib/format";
 import { describe, glossaryFor, tooltip } from "@/lib/glossary";
 import { GlossaryButton } from "./GlossaryButton";
 import { PlayerLink } from "./PlayerLink";
@@ -263,7 +263,9 @@ export function CompsTable({
                     : `${row.pctOfLeagueCap.toFixed(2)}%`}
                 </td>
                 <td className="whitespace-nowrap px-3 py-1.5 text-right font-mono text-[0.8125rem] tabular-nums">
-                  {formatScore(row.netValueScore)}
+                  <span className={netValueClass(row.netValueScore)}>
+                    {formatScore(row.netValueScore)}
+                  </span>
                 </td>
               </tr>
             ))}

@@ -8,6 +8,7 @@ import {
   formatCurrency,
   formatPercent,
   formatScore,
+  netValueClass,
   formatSignedCurrency,
   payGapClass,
 } from "@/lib/format";
@@ -213,7 +214,11 @@ function getColumns(
       key: "netValueScore",
       label: "Net Value",
       align: "center",
-      render: (r) => formatScore(r.netValueScore),
+      render: (r) => (
+        <span className={netValueClass(r.netValueScore)}>
+          {formatScore(r.netValueScore)}
+        </span>
+      ),
     },
     {
       key: "deservedSalary",

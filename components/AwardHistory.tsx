@@ -5,7 +5,7 @@ import { TeamLink } from "@/components/TeamLink";
 import { SeasonLink } from "@/components/SeasonLink";
 import { SimpleTable } from "@/components/SimpleTable";
 import type { ColumnDef } from "@/components/DataTable";
-import { formatScore } from "@/lib/format";
+import { formatScore, netValueClass } from "@/lib/format";
 import { GLOSSARY } from "@/lib/glossary";
 import { AWARDS, AWARD_PAGES, type AwardCode } from "@/lib/awards";
 import { getAwardWinners, type AwardWinnerRow } from "@/lib/db/queries";
@@ -46,7 +46,13 @@ export async function AwardHistory({ award }: { award: AwardCode }) {
       align: "right",
       definition: GLOSSARY.netValueScore,
       render: (r) =>
-        r.netValueScore === null ? "—" : formatScore(r.netValueScore),
+        r.netValueScore === null ? (
+          "—"
+        ) : (
+          <span className={netValueClass(r.netValueScore)}>
+            {formatScore(r.netValueScore)}
+          </span>
+        ),
     },
     {
       key: "nvRank",

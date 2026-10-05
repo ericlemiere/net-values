@@ -103,3 +103,27 @@ export function payGapClass(
   if (difference <= -threshold) return "text-red-700";
   return "";
 }
+
+/**
+ * How far a player's Net Value has to sit from zero to be marked, in NVPs.
+ *
+ * Within half an NVP (about one team win) of what the salary bought is paid
+ * about right, and stays in plain text: roughly 63% of scored player-seasons,
+ * with 18% above and 19% below. Past 1.5 NVPs is a rare outlier, about 7% on
+ * the good side and 2% on the bad, and is set in bold as well.
+ */
+export const NET_VALUE_MARK = 0.5;
+export const NET_VALUE_STRONG = 1.5;
+
+/**
+ * The classes for a span around a player's Net Value score, in the same green
+ * and red as payGapClass. Only for a single player-season (or a team's share
+ * of one); a team's summed total runs on a much wider scale.
+ */
+export function netValueClass(score: number | null): string {
+  if (score === null || score === undefined) return "";
+  const strength = Math.abs(score) >= NET_VALUE_STRONG ? " font-bold" : "";
+  if (score >= NET_VALUE_MARK) return `text-green-700${strength}`;
+  if (score <= -NET_VALUE_MARK) return `text-red-700${strength}`;
+  return "";
+}

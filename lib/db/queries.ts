@@ -17,6 +17,7 @@ import { alias } from "drizzle-orm/pg-core";
 import { cached } from "./cached";
 import { db } from "./index";
 import { awardKey, type AwardCode } from "@/lib/awards";
+import { NET_VALUE_MARK, NET_VALUE_STRONG } from "@/lib/format";
 import type { PriceStat } from "@/lib/price-check";
 import {
   players,
@@ -1502,6 +1503,51 @@ export const getNetValueExamples = cached("getNetValueExamples", async function 
     pricing: priced[0] ?? null,
     heroBreakdown,
   };
+});
+
+/** How every scored player-season on record falls across the color bands. */
+export type NetValueScale = {
+  total: number;
+  min: number;
+  max: number;
+  /** Player-seasons in each band, best first, in the bands' own order. */
+  strongGood: number;
+  good: number;
+  fair: number;
+  bad: number;
+  strongBad: number;
+  /** Player-seasons of +5 or better, the players who had them, and their
+   *  average salary share of that season's cap. */
+  elite: number;
+  elitePlayers: number;
+  elitePctCap: number | null;
+};
+
+/**
+ * The counts behind the explainer's "Reading the scale" boxes, read live so
+ * the shares there keep up as seasons are added. Bands are cut at the same
+ * constants the tables color by, so the two can't disagree.
+ */
+export const getNetValueScale = cached("getNetValueScale", async function getNetValueScale(): Promise<NetValueScale> {
+  const score = netValues.netValueScore;
+  const [row] = await db
+    .select({
+      total: sql<number>`count(*)::int`,
+      min: sql<number>`min(${score})::float8`,
+      max: sql<number>`max(${score})::float8`,
+      strongGood: sql<number>`count(*) filter (where ${score} >= ${NET_VALUE_STRONG})::int`,
+      good: sql<number>`count(*) filter (where ${score} >= ${NET_VALUE_MARK} and ${score} < ${NET_VALUE_STRONG})::int`,
+      fair: sql<number>`count(*) filter (where ${score} > ${-NET_VALUE_MARK} and ${score} < ${NET_VALUE_MARK})::int`,
+      bad: sql<number>`count(*) filter (where ${score} <= ${-NET_VALUE_MARK} and ${score} > ${-NET_VALUE_STRONG})::int`,
+      strongBad: sql<number>`count(*) filter (where ${score} <= ${-NET_VALUE_STRONG})::int`,
+      elite: sql<number>`count(*) filter (where ${score} >= 5)::int`,
+      elitePlayers: sql<number>`count(distinct ${netValues.playerId}) filter (where ${score} >= 5)::int`,
+      elitePctCap: sql<number | null>`(avg(100.0 * ${netValues.salary} / ${seasons.leagueCap}) filter (where ${score} >= 5))::float8`,
+    })
+    .from(netValues)
+    .leftJoin(seasons, eq(seasons.season, netValues.season))
+    .where(isNotNull(score));
+  return row;
 });
 
 // ---- Player detail page: full career log, no filtering/pagination ----

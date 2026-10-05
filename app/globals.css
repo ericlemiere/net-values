@@ -831,3 +831,23 @@ body {
     transition-delay: 0ms !important;
   }
 }
+
+/*
+ * Equation numbers on /equation. Every <Def> that carries an equation renders
+ * an empty `.eq-num`; only inside `.eq-numbered` does it count and show, so
+ * the explainer's formula boxes stay unnumbered.
+ */
+.eq-numbered {
+  counter-reset: eq;
+}
+
+.eq-numbered .eq-num {
+  counter-increment: eq;
+  margin-left: auto;
+  padding-left: 1rem;
+  color: rgb(255 255 255 / 0.4);
+}
+
+.eq-numbered .eq-num::before {
+  content: "(" counter(eq) ")";
+}

@@ -118,6 +118,8 @@ export function Def({
           <>
             <Op>=</Op>
             {children}
+            {/* Numbered only on /equation; see `.eq-numbered` in globals.css. */}
+            <span className="eq-num" aria-hidden />
           </>
         )}
       </p>

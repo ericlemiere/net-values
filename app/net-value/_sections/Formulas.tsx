@@ -74,7 +74,7 @@ function SimpleFormula() {
  * that appears anywhere in the box has a line of its own; keep it that way
  * when adding to it.
  */
-function FullFormula() {
+export function FullFormula() {
   return (
     <FormulaBox>
       <div className={`mt-4 border-t border-white/15 pt-4 ${DEFS}`}>
@@ -86,9 +86,9 @@ function FullFormula() {
               The player&rsquo;s share of the points his team&rsquo;s offense
               and defense generated above league average that season, counted up
               from a replacement-level floor, in NVPs. A season below the floor
-              counts as zero. Every figure behind it is{" "}
+              counts as zero.{" "}
               <a href="#production" className="underline">
-                built out in full below
+                How it&rsquo;s built
               </a>
               .
             </>

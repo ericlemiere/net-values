@@ -1,7 +1,6 @@
 import { Def, Op, V, Working } from "@/components/Formula";
 import { formatStat } from "@/lib/format";
 import { DepthSection } from "./DepthSection";
-import { ProductionFormula } from "./ProductionFormula";
 import { PROSE } from "./Section";
 import { WIN_FIT, type Pricing } from "./numbers";
 
@@ -58,44 +57,15 @@ function Detailed({ pricing }: { pricing: Pricing | null }) {
         standing under the rim hands him.
       </p>
       <p className={PROSE}>
-        Every figure that goes into it, from the box score up. The worked
-        example above runs a real season through the same stages.
+        <a href="/equation" rel="nofollow" className="underline">
+          Every equation behind it
+        </a>
+        , line by line, is written out separately.
       </p>
-      <ProductionFormula />
       <p className={PROSE}>
         {`Value Produced isn't measured in wins, which is why League Production lands on a figure like ${leagueTotal} NVPs rather than the 1,230 games in a season. To find what an NVP is worth, every team's total was fitted against the games it actually won, across ${WIN_FIT.teamSeasons} full 82-game team-seasons:`}
       </p>
-      {/* Every number in the fit gets its own line, the same way the formula
-          box at the top defines its terms. */}
-      <div className="mt-3 w-fit max-w-full overflow-x-auto rounded-md border border-white/15 bg-background-box/90 px-4 py-3 font-mono text-xs sm:text-sm">
-        <p className="flex flex-wrap items-center gap-y-2 text-accent">
-          <V>Team Wins</V>
-          <Op>=</Op>
-          <V>{WIN_FIT.intercept} wins</V>
-          <Op>+</Op>
-          <V>{WIN_FIT.winsPerNvp} wins per NVP</V>
-          <Op>×</Op>
-          <V>Team Production</V>
-        </p>
-        <div className="mt-3 space-y-3 border-t border-white/15 pt-3 text-white/85">
-          <Def
-            name="Team Production"
-            note="Every Value Produced by the team's players that season, added up, in NVPs. Here a season below replacement counts at its real, negative value rather than zero."
-          />
-          <Def
-            name={`${WIN_FIT.intercept} wins`}
-            note="What a team producing zero NVPs, a roster of replacement players, is predicted to win."
-          />
-          <Def
-            name={`${WIN_FIT.winsPerNvp} wins per NVP`}
-            note="How many extra wins each NVP a team produces is worth."
-          />
-          <Def
-            name={`r = ${WIN_FIT.r}`}
-            note={`How closely predicted wins track actual wins across the ${WIN_FIT.teamSeasons} team-seasons. 1 would be a perfect match and 0 no relationship at all.`}
-          />
-        </div>
-      </div>
+      <WinFitBox />
       <p className={PROSE}>
         So one NVP is worth about two and a half wins, and a roster producing
         nothing lands on the 16 wins a roster of replacement players is worth.
@@ -115,5 +85,43 @@ export function ProductionSection({ pricing }: { pricing: Pricing | null }) {
       simple={<Simple />}
       detailed={<Detailed pricing={pricing} />}
     />
+  );
+}
+
+/**
+ * Team wins against team production. Every number in the fit gets its own
+ * line, the same way the formula box at the top defines its terms.
+ */
+export function WinFitBox() {
+  return (
+    <div className="mt-3 w-fit max-w-full overflow-x-auto rounded-md border border-white/15 bg-background-box/90 px-4 py-3 font-mono text-xs sm:text-sm">
+      <p className="flex flex-wrap items-center gap-y-2 text-accent">
+        <V>Team Wins</V>
+        <Op>=</Op>
+        <V>{WIN_FIT.intercept} wins</V>
+        <Op>+</Op>
+        <V>{WIN_FIT.winsPerNvp} wins per NVP</V>
+        <Op>×</Op>
+        <V>Team Production</V>
+      </p>
+      <div className="mt-3 space-y-3 border-t border-white/15 pt-3 text-white/85">
+        <Def
+          name="Team Production"
+          note="Every Value Produced by the team's players that season, added up, in NVPs. Here a season below replacement counts at its real, negative value rather than zero."
+        />
+        <Def
+          name={`${WIN_FIT.intercept} wins`}
+          note="What a team producing zero NVPs, a roster of replacement players, is predicted to win."
+        />
+        <Def
+          name={`${WIN_FIT.winsPerNvp} wins per NVP`}
+          note="How many extra wins each NVP a team produces is worth."
+        />
+        <Def
+          name={`r = ${WIN_FIT.r}`}
+          note={`How closely predicted wins track actual wins across the ${WIN_FIT.teamSeasons} team-seasons. 1 would be a perfect match and 0 no relationship at all.`}
+        />
+      </div>
+    </div>
   );
 }

@@ -21,6 +21,24 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+  /*
+   * /equation stays out of search and AI answers. The page's own metadata says
+   * noindex too, but a header also covers crawlers that never parse the HTML.
+   */
+  async headers() {
+    return [
+      {
+        source: "/equation",
+        headers: [
+          {
+            key: "X-Robots-Tag",
+            value:
+              "noindex, nofollow, noarchive, nosnippet, noimageindex, noai, noimageai",
+          },
+        ],
+      },
+    ];
+  },
   images: {
     // Player headshots come straight off NBA.com's CDN, keyed by the
     // nba_person_id we already store on each player.

@@ -10,21 +10,23 @@ import { dollars, nvp, workedExample, type Pricing } from "./numbers";
 /**
  * One step per line of the full formula, in the same order and under the same
  * names, so the two can be read against each other.
+ *
+ * The explainer quotes Value Produced as one figure. /equation passes the
+ * season's breakdown, and Value Produced is worked from his box score
+ * instead, with every later step numbered on from it.
  */
-function Steps({
+export function ExampleSteps({
   hero,
   pricing,
   season,
-  breakdown,
+  breakdown = null,
 }: {
   hero: NetValueExample;
   pricing: Pricing;
   season: string;
-  breakdown: ProductionBreakdown | null;
+  breakdown?: ProductionBreakdown | null;
 }) {
   const ex = workedExample(hero, pricing);
-  // Value Produced worked from his box score where the working is on file,
-  // else quoted as one figure. Every later step is numbered on from it.
   const producedSteps = productionSteps({ hero, breakdown, start: 1 });
   const at = (producedSteps?.length ?? 1) + 1;
   const availability = hero.availability.toFixed(2);
@@ -149,20 +151,16 @@ function Summary({
   );
 }
 
-export function ExampleSection({
-  breakdown,
-  ...props
-}: {
+export function ExampleSection(props: {
   hero: NetValueExample;
   pricing: Pricing;
   season: string;
-  breakdown: ProductionBreakdown | null;
 }) {
   return (
     <DepthSection
       title={`Example: ${props.hero.name}, ${props.hero.season}`}
       simple={<Summary {...props} />}
-      detailed={<Steps {...props} breakdown={breakdown} />}
+      detailed={<ExampleSteps {...props} />}
     />
   );
 }

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { GoogleAnalytics } from "@next/third-parties/google";
 import { Geist, Geist_Mono } from "next/font/google";
 import { LogoWatermark } from "@/components/LogoWatermark";
 import { SiteHeader } from "@/components/SiteHeader";
@@ -80,6 +81,7 @@ export default function RootLayout({
           <TableNavProvider>{children}</TableNavProvider>
         </main>
       </body>
+      <GoogleAnalytics gaId="G-RKMSDK78KX" />
     </html>
   );
 }

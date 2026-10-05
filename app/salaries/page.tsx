@@ -332,9 +332,6 @@ export default async function SalariesPage({
         totalCount={totalCount}
         pageSize={PAGE_SIZE}
       />
-      <p className="text-sm text-white/60 mt-8">
-        Salaries from Basketball-Reference, with gaps filled from HoopsHype.
-      </p>
     </div>
   );
 }

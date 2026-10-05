@@ -36,6 +36,7 @@ import {
   playerAwards,
   playerTeamSplits,
   playerProduction,
+  siteMeta,
 } from "./schema";
 
 export const PAGE_SIZE = 100;
@@ -1591,8 +1592,34 @@ export const getPlayerCareerAdvancedStats = cached("getPlayerCareerAdvancedStats
       dbpm: advancedStats.dbpm,
       bpm: advancedStats.bpm,
       vorp: advancedStats.vorp,
+      // nba.com's figures beside bref's, joined the way getAdvancedStats joins
+      // them: TS%/USG% travel separately so the page can prefer nba.com's.
+      nbaTsPct: nbaAdvanced.tsPct,
+      nbaUsgPct: nbaAdvanced.usgPct,
+      poss: nbaAdvanced.poss,
+      offRating: nbaAdvanced.offRating,
+      defRating: nbaAdvanced.defRating,
+      netRating: nbaAdvanced.netRating,
+      astPct: nbaAdvanced.astPct,
+      astTo: nbaAdvanced.astTo,
+      orebPct: nbaAdvanced.orebPct,
+      drebPct: nbaAdvanced.drebPct,
+      rebPct: nbaAdvanced.rebPct,
+      tovPct: nbaAdvanced.tovPct,
+      efgPct: nbaAdvanced.efgPct,
+      pace: nbaAdvanced.pace,
+      pie: nbaAdvanced.pie,
     })
     .from(advancedStats)
+    // LEFT: his seasons before 1996-97 have no nba.com row and keep their
+    // bref numbers, with dashes in the nba.com columns.
+    .leftJoin(
+      nbaAdvanced,
+      and(
+        eq(nbaAdvanced.playerId, advancedStats.playerId),
+        eq(nbaAdvanced.season, advancedStats.season),
+      ),
+    )
     .where(eq(advancedStats.playerId, playerId))
     .orderBy(asc(advancedStats.season));
 });
@@ -2601,4 +2628,17 @@ export const getPriceRank = cached("getPriceRank", async function getPriceRank(
     median: row.median === null ? null : Number(row.median),
     rank: row.rank === null ? null : Number(row.rank),
   };
+});
+
+/**
+ * When the data last changed, as an ISO string, or null before the first
+ * stamp. Cached under the data tag, so the revalidate that follows a run
+ * brings the new date in along with the new numbers.
+ */
+export const getDataUpdatedAt = cached("getDataUpdatedAt", async function getDataUpdatedAt() {
+  const [row] = await db
+    .select({ updatedAt: siteMeta.updatedAt })
+    .from(siteMeta)
+    .where(eq(siteMeta.key, "data"));
+  return row?.updatedAt ?? null;
 });

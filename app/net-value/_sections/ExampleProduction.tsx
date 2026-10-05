@@ -125,7 +125,7 @@ export function productionSteps({
         `${sum(offParts)} − ${fmt(s.offRate, 4)} Position Rate × ${fmt(s.slots, 1)} Slots = ${fmt(s.boxOff)} Box Offense`,
       ]}
     >
-      {`Shooting, turnovers, assists, offensive rebounds and shot creation, each against what an average player does with the same floor time.${o.assistedLeague ? " His own assisted share isn't on record for this season, so the league's stands in." : ""} The last line measures him against other ${positionName(s.posGroup)}: the average at his position is worth ${fmt(s.offRate * s.slots)} points over his Slots.`}
+      {`Shooting, turnovers, assists, offensive rebounds, and shot creation, each against what an average player does with the same floor time.${o.assistedLeague ? " His own assisted share isn't on record for this season, so the league's stands in." : ""} The last line measures him against other ${positionName(s.posGroup)}: the average at his position is worth ${fmt(s.offRate * s.slots)} points over his Slots.`}
     </Step>,
 
     <Step
@@ -141,7 +141,7 @@ export function productionSteps({
         `${sum(defParts)} = ${fmt(s.boxDef)} Box Defense`,
       ]}
     >
-      {`Steals, blocks and fouls, each against the league rate over his Slots. Defensive rebounds are measured against a baseline that leans toward other ${positionName(s.posGroup)}, since much of any player's rebounding comes from where his position puts him.`}
+      {`Steals, blocks, and fouls, each against the league rate over his Slots. Defensive rebounds are measured against a baseline that leans toward other ${positionName(s.posGroup)}, since much of any player's rebounding comes from where his position puts him.`}
     </Step>,
 
     <Step

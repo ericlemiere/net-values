@@ -25,6 +25,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     section("/net-value", 0.8, "weekly"),
     section("/seasons", 0.7, "weekly"),
     section("/price-check", 0.6, "monthly"),
+    section("/contact", 0.3, "yearly"),
+    section("/privacy", 0.2, "yearly"),
     ...["/mvp", "/dpoy", "/roy", "/6moy", "/mip"].map((p) =>
       section(p, 0.6, "monthly"),
     ),

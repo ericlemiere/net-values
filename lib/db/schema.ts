@@ -9,6 +9,7 @@ import {
   jsonb,
   uniqueIndex,
   index,
+  timestamp,
 } from "drizzle-orm/pg-core";
 
 // precision 8 comfortably holds both per-game decimals (e.g. 21.1) and
@@ -1131,3 +1132,15 @@ export const playerProduction = pgTable(
     index("player_production_season_idx").on(t.season),
   ],
 );
+
+/**
+ * Small facts about the data as a whole, one row per key. `data` is stamped by
+ * scraper/revalidate.py every time a run tells the site its data changed, and
+ * the footer reads it as the "Updated" date.
+ */
+export const siteMeta = pgTable("site_meta", {
+  key: text("key").primaryKey(),
+  updatedAt: timestamp("updated_at", { withTimezone: true, mode: "string" })
+    .notNull()
+    .defaultNow(),
+});

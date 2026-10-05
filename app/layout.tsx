@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { GoogleAnalytics } from "@next/third-parties/google";
 import { Geist, Geist_Mono } from "next/font/google";
 import { LogoWatermark } from "@/components/LogoWatermark";
+import { SiteFooter } from "@/components/SiteFooter";
 import { SiteHeader } from "@/components/SiteHeader";
 import { TableNavProvider } from "@/components/TableNav";
 import { SITE_DESCRIPTION, SITE_NAME, SITE_URL, jsonLd } from "@/lib/site";
@@ -80,6 +81,7 @@ export default function RootLayout({
         <main className="site-main relative z-10 flex min-w-0 flex-1 flex-col">
           <TableNavProvider>{children}</TableNavProvider>
         </main>
+        <SiteFooter />
       </body>
       <GoogleAnalytics gaId="G-RKMSDK78KX" />
     </html>

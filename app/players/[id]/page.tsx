@@ -8,6 +8,7 @@ import { SimpleTable } from "@/components/SimpleTable";
 import { SectionHeading } from "@/components/SectionHeading";
 import { CompsTable } from "@/components/CompsTable";
 import type { ColumnDef } from "@/components/DataTable";
+import { nbaAdvancedColumns } from "@/app/stats/columns";
 import {
   formatNumber,
   formatStat,
@@ -145,9 +146,128 @@ function groupSplits(splits: SplitRow[]) {
       dbpm: s.dbpm,
       bpm: s.bpm,
       vorp: s.vorp,
+      // nba.com keeps one row per season, not per team, so a stint has none
+      // of its numbers.
+      nbaTsPct: null,
+      nbaUsgPct: null,
+      poss: null,
+      offRating: null,
+      defRating: null,
+      netRating: null,
+      astPct: null,
+      astTo: null,
+      orebPct: null,
+      drebPct: null,
+      rebPct: null,
+      tovPct: null,
+      efgPct: null,
+      pace: null,
+      pie: null,
     });
   }
   return { perGame, totals, advanced };
+}
+
+/** The columns a career line adds up; its percentages are rebuilt from them. */
+const COUNTING = [
+  "gp",
+  "gs",
+  "mp",
+  "fgm",
+  "fga",
+  "fg3m",
+  "fg3a",
+  "fg2m",
+  "fg2a",
+  "ftm",
+  "fta",
+  "orb",
+  "drb",
+  "reb",
+  "ast",
+  "stl",
+  "blk",
+  "tov",
+  "pf",
+  "pts",
+] as const;
+type Counting = (typeof COUNTING)[number];
+
+/** Columns a career line leaves empty: it has no one team, position or age. */
+const CAREER_BLANK = ["team", "pos", "age"];
+
+/**
+ * The closing Career lines for both box-score tables, from the season totals
+ * (the per-game table holds the same seasons, one row each, so totals alone
+ * cover it).
+ *
+ * A stat missing from some seasons (GS before it was tracked) is totaled over
+ * the seasons that have it and averaged over their games only, rather than
+ * diluted by games it was never counted in. GP and GS are career sums in the
+ * totals line and per-season averages in the averages line. Percentages come
+ * from career makes and attempts, not an average of the seasons' percentages.
+ */
+function careerRows(totals: StatsRow[]) {
+  const sum = {} as Record<Counting, number | null>;
+  const games = {} as Record<Counting, number>;
+  const seasons = {} as Record<Counting, number>;
+  for (const k of COUNTING) {
+    sum[k] = null;
+    games[k] = 0;
+    seasons[k] = 0;
+  }
+  for (const r of totals) {
+    for (const k of COUNTING) {
+      const v = r[k];
+      if (v === null) continue;
+      sum[k] = (sum[k] ?? 0) + v;
+      games[k] += r.gp ?? 0;
+      seasons[k] += 1;
+    }
+  }
+  const pct = (made: number | null, att: number | null) =>
+    made === null || !att ? null : (100 * made) / att;
+  const base = {
+    id: -1,
+    season: "Career",
+    team: null,
+    teamLabel: null,
+    teams: null,
+    pos: null,
+    age: null,
+    fgPct: pct(sum.fgm, sum.fga),
+    fg3Pct: pct(sum.fg3m, sum.fg3a),
+    fg2Pct: pct(sum.fg2m, sum.fg2a),
+    efgPct:
+      sum.fgm === null ? null : pct(sum.fgm + 0.5 * (sum.fg3m ?? 0), sum.fga),
+    ftPct: pct(sum.ftm, sum.fta),
+  };
+  const perGame = Object.fromEntries(
+    COUNTING.map((k) => [
+      k,
+      sum[k] === null
+        ? null
+        : k === "gp" || k === "gs"
+          ? sum[k] / seasons[k]
+          : games[k]
+            ? sum[k] / games[k]
+            : null,
+    ]),
+  ) as Record<Counting, number | null>;
+  return {
+    totals: { ...base, ...sum } as StatsRow,
+    perGame: { ...base, ...perGame } as StatsRow,
+  };
+}
+
+/**
+ * GP and GS: whole on every season row, one decimal on the Career Averages
+ * line, where they are games per season.
+ */
+function formatGames(value: number | null) {
+  return value !== null && !Number.isInteger(value)
+    ? formatStat(value)
+    : formatNumber(value);
 }
 
 // Career Averages and Career Totals share this shape but not its precision:
@@ -179,13 +299,13 @@ function getStatsColumns(mode: "per_game" | "totals"): ColumnDef<StatsRow>[] {
       key: "gp",
       label: "GP",
       align: "right",
-      render: (r) => formatNumber(r.gp),
+      render: (r) => formatGames(r.gp),
     },
     {
       key: "gs",
       label: "GS",
       align: "right",
-      render: (r) => formatNumber(r.gs),
+      render: (r) => formatGames(r.gs),
     },
     // Minutes are the one counting stat that's fractional in a season total:
     // nba_api reports them to hundredths (3126.87) while the pre-96 bref rows are
@@ -382,13 +502,14 @@ const advancedColumns: ColumnDef<AdvRow>[] = [
     key: "tsPct",
     label: "TS%",
     align: "right",
-    render: (r) => formatStat(r.tsPct),
+    // nba.com's figure where there is one, bref's before 1996-97, as on /stats.
+    render: (r) => formatStat(r.nbaTsPct ?? r.tsPct),
   },
   {
     key: "usgPct",
     label: "USG%",
     align: "right",
-    render: (r) => formatStat(r.usgPct),
+    render: (r) => formatStat(r.nbaUsgPct ?? r.usgPct),
   },
   {
     key: "ows",
@@ -427,6 +548,7 @@ const advancedColumns: ColumnDef<AdvRow>[] = [
     align: "right",
     render: (r) => formatStat(r.vorp),
   },
+  ...nbaAdvancedColumns<AdvRow>(),
 ];
 
 /**
@@ -671,7 +793,7 @@ function HeaderBox({
   caption?: string;
 }) {
   return (
-    <div className="w-full rounded-lg border-2 border-accent bg-background-box px-3 py-2 md:w-auto md:px-4 md:text-right">
+    <div className="w-full rounded-lg border-2 border-accent bg-background-box px-3 py-2 md:w-auto md:whitespace-nowrap md:px-4 md:text-right">
       <div className="flex items-center md:items-start justify-between gap-3 md:block">
         <div className="text-sm text-white/60">
           {label}
@@ -712,7 +834,7 @@ function PriceCheckBox({
       // like one of them, and running the fill and the text through opposite
       // color changes at once passed through a muddy frame that read as a
       // flicker.
-      className="group w-full rounded-lg border-2 border-accent bg-accent px-3 py-2 text-accent-foreground transition-shadow duration-200 ease-out hover:shadow-[0_0_0_3px_var(--background),0_0_0_5px_var(--accent),0_0_24px_4px_color-mix(in_srgb,var(--accent)_45%,transparent)] focus-visible:shadow-[0_0_0_3px_var(--background),0_0_0_5px_var(--accent)] focus-visible:outline-none md:w-auto md:px-4 md:text-right"
+      className="group w-full rounded-lg border-2 border-accent bg-accent px-3 py-2 text-accent-foreground transition-shadow duration-200 ease-out hover:shadow-[0_0_0_3px_var(--background),0_0_0_5px_var(--accent),0_0_24px_4px_color-mix(in_srgb,var(--accent)_45%,transparent)] focus-visible:shadow-[0_0_0_3px_var(--background),0_0_0_5px_var(--accent)] focus-visible:outline-none md:w-auto md:whitespace-nowrap md:px-4 md:text-right"
     >
       <div className="flex items-center justify-between gap-3 md:block md:items-start">
         <div className="text-sm font-semibold">
@@ -810,6 +932,7 @@ export default async function PlayerPage({
     getPlayerTeamSplits(playerId),
   ]);
   const splits = groupSplits(teamSplits);
+  const career = careerRows(totals);
 
   const salaryId = Number(sp.salary);
   const anchor = pickAnchor(
@@ -948,7 +1071,11 @@ export default async function PlayerPage({
             )}
           </div>
         </div>
-        <div className="flex w-full flex-col items-stretch gap-3 md:w-auto md:flex-row">
+        {/* The boxes keep their text on one line and never give up width:
+            beside them, it's the name and award badges that narrow, and the
+            badges wrap onto more rows instead. Between md and lg, where the
+            boxes have a row of their own, they wrap as whole boxes. */}
+        <div className="flex w-full flex-col items-stretch gap-3 md:w-auto md:flex-row md:flex-wrap lg:shrink-0 lg:flex-nowrap">
           {paidSeasons.length > 0 && (
             <HeaderBox
               label="Career Earnings"
@@ -1109,6 +1236,11 @@ export default async function PlayerPage({
             rows={perGame}
             rowKey={(r) => r.id}
             splits={(r) => splits.perGame.get(r.season)}
+            summary={{
+              label: "Career",
+              row: career.perGame,
+              blank: CAREER_BLANK,
+            }}
           />
           {totals.length > 0 && (
             <SimpleTable
@@ -1117,6 +1249,11 @@ export default async function PlayerPage({
               rows={totals}
               rowKey={(r) => r.id}
               splits={(r) => splits.totals.get(r.season)}
+              summary={{
+                label: "Career",
+                row: career.totals,
+                blank: CAREER_BLANK,
+              }}
             />
           )}
           <SimpleTable

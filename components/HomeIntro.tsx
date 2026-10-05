@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useRef } from "react";
 import { NAV_LINKS } from "@/components/NavLinks";
@@ -55,21 +54,8 @@ export function HomeIntro() {
   return (
     <div
       ref={rootRef}
-      className="home-intro home-intro-wait flex flex-1 flex-col p-6 md:mt-12"
+      className="home-intro home-intro-wait flex flex-1 flex-col p-6 pb-0 md:mt-12"
     >
-      {/* A pre-sized copy (640px, 2x the largest display) served as-is:
-          Vercel's image optimizer answers 402 once the plan's quota runs out,
-          which left the logo blank, so it doesn't go through /_next/image. */}
-      {/* <Image
-        src="/tnv-transparent-640.png"
-        alt="The Net Values Logo"
-        width={640}
-        height={640}
-        unoptimized
-        fetchPriority="high"
-        className="home-in hidden md:block mb-4 h-auto w-[50vw] max-w-80"
-        style={{ "--i": 0 } as React.CSSProperties}
-      /> */}
       <h1
         className="home-in mb-3 text-4xl md:text-6xl font-semibold tracking-tight"
         style={{ "--i": 1 } as React.CSSProperties}
@@ -104,27 +90,6 @@ export function HomeIntro() {
           </Link>
         ))}
       </nav>
-      {/* In flow rather than pinned to the bottom, so it can never land on the
-          nav. The slot grows into whatever height the screen has left under
-          the links (up to 10rem of logo, `mt-auto` keeping it at the foot of
-          a tall screen) and shrinks to a 5rem floor on a short one, and the
-          logo is sized off the slot, so it fits the screen instead of making
-          the page scroll to reach it. */}
-      <div className="relative mt-auto -mb-2 -ml-2 min-h-24 max-h-44 flex-1">
-        <Image
-          src="/tnv-transparent-640.png"
-          alt="The Net Values Logo"
-          width={640}
-          height={640}
-          unoptimized
-          className="home-in absolute bottom-0 left-0 h-[calc(100%-1rem)] w-auto"
-          style={
-            {
-              "--i": Math.ceil(HOME_LINKS.length / 2) + 3,
-            } as React.CSSProperties
-          }
-        />
-      </div>
     </div>
   );
 }

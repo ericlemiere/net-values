@@ -9,15 +9,34 @@ Needs two settings, from the environment or .env.local:
   NEXT_PUBLIC_SITE_URL   the deployed site, e.g. https://example.com
   REVALIDATE_SECRET      the same value set on the deployment
 
-update_daily.py calls this at the end. Run it by hand after a backfill:
+Before posting, it stamps site_meta's 'data' row with the current time: this
+is called whenever the data changes, so that row is when it last did, and the
+site footer shows it as the "Updated" date.
+
+update_daily.py and update_season.py call this at the end. Run it by hand after
+a backfill:
   python revalidate.py
 """
 import requests
 
-from db import load_env
+from db import connect, load_env
+
+
+def stamp_updated() -> None:
+    """Records now as when the data last changed."""
+    conn = connect()
+    with conn, conn.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO site_meta (key, updated_at) VALUES ('data', now())
+            ON CONFLICT (key) DO UPDATE SET updated_at = excluded.updated_at
+            """
+        )
+    conn.close()
 
 
 def revalidate() -> None:
+    stamp_updated()
     site = load_env("NEXT_PUBLIC_SITE_URL")
     secret = load_env("REVALIDATE_SECRET")
     if not site or not secret:

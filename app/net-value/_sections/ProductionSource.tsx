@@ -48,7 +48,7 @@ function Detailed({ pricing }: { pricing: Pricing | null }) {
         Offense is split by box-score credit, which the box score is good at:
         shooting efficiency above league average on the player&rsquo;s own
         volume, weighted down by how much of it teammates created for him, plus
-        playmaking, turnovers, offensive rebounds and the plain value of taking
+        playmaking, turnovers, offensive rebounds, and the plain value of taking
         a shot on. Defense is split by minutes, tilted by a defensive-quality
         model fitted to thirty-six seasons of All-Defensive voting, and from
         2013-14 on, by tracking data on shots defended and how badly the

@@ -39,6 +39,7 @@ import sys
 
 import bref
 from backfill_stats import current_season
+from revalidate import revalidate
 
 # Long enough to avoid re-fetching on repeated runs, short enough that a job run
 # once a day always sees yesterday's games.
@@ -91,6 +92,9 @@ def main():
     print("\n=== net values ===")
     sys.argv = ["compute_net_values"]
     compute_net_values.main()
+
+    # update_daily revalidated back at the start; everything since needs it too.
+    revalidate()
 
 
 if __name__ == "__main__":

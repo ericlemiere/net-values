@@ -85,7 +85,7 @@ export function ProductionFormula() {
           />
           <Def
             name="Position"
-            note="His listed position: PG, SG, SF, PF or C. Used to set the offensive baseline and most of the defensive-rebound one."
+            note="His listed position: PG, SG, SF, PF, or C. Used to set the offensive baseline and most of the defensive-rebound one."
           />
           <Def
             name="Team Possessions, Team Games"
@@ -101,7 +101,7 @@ export function ProductionFormula() {
           />
           <Def
             name="Tracking stats"
-            note="From 2013-14: shots he defended, what those shooters made against him and against everyone else, deflections, contests, loose balls and charges drawn."
+            note="From 2013-14: shots he defended, what those shooters made against him and against everyone else, deflections, contests, loose balls, and charges drawn."
           />
         </Stage>
 
@@ -156,7 +156,7 @@ export function ProductionFormula() {
           </Def>
           <Def
             name="League [stat] Rate"
-            note="For Used, ORB, DRB, STL, BLK and PF: the league total of that stat divided by the league's total Slots."
+            note="For Used, ORB, DRB, STL, BLK, and PF: the league total of that stat divided by the league's total Slots."
           >
             <Frac num={<V>Σ stat</V>} den={<V>Σ Slots</V>} />
           </Def>
@@ -273,7 +273,7 @@ export function ProductionFormula() {
           </Def>
           <Def
             name="Box Defense"
-            note="The part of defense a box score can see, each stat against what an average player records in the same floor time. Steals, blocks and fouls are measured against the whole league, not his position: rim protection is scarcer and worth more. Defensive rebounds are measured against the DRB Baseline."
+            note="The part of defense a box score can see, each stat against what an average player records in the same floor time. Steals, blocks, and fouls are measured against the whole league, not his position: rim protection is scarcer and worth more. Defensive rebounds are measured against the DRB Baseline."
           >
             <span className="inline-flex flex-col gap-1">
               <span>

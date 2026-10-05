@@ -330,6 +330,35 @@ export function getAdvancedColumns(
       render: (r) => formatStat(r.vorp),
     },
 
+    ...nbaAdvancedColumns<AdvancedRow>(),
+  ];
+}
+
+/** nba.com's possession-based fields, as both advanced tables carry them. */
+export interface NbaAdvancedFields {
+  poss: number | null;
+  offRating: number | null;
+  defRating: number | null;
+  netRating: number | null;
+  astPct: number | null;
+  astTo: number | null;
+  orebPct: number | null;
+  drebPct: number | null;
+  rebPct: number | null;
+  tovPct: number | null;
+  efgPct: number | null;
+  pace: number | null;
+  pie: number | null;
+}
+
+/**
+ * nba.com's possession-based columns, 1996-97 on. Shared by /stats' advanced
+ * view and the player page, so the two can't drift apart.
+ */
+export function nbaAdvancedColumns<
+  Row extends NbaAdvancedFields,
+>(): ColumnDef<Row>[] {
+  return [
     // --- nba.com's possession-based numbers, 1996-97 on ---
     // Everything past this point reads "—" for the 2,771 earlier seasons that
     // predate play-by-play, which is why the block is kept contiguous rather

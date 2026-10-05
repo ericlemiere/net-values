@@ -2,6 +2,9 @@ import type { Metadata } from "next";
 
 export const SITE_NAME = "The Net Values";
 
+/** Where /contact sends people. */
+export const CONTACT_EMAIL = "support@thenetvalues.com";
+
 export const SITE_DESCRIPTION =
   "NBA player value measured against salary. Net Value compares what every player produced on the court with what his contract paid for, for every season since 1990-91.";
 

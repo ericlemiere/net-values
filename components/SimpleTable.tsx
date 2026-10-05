@@ -61,6 +61,12 @@ interface SimpleTableProps<Row> {
    * button — a waived contract under the season it was still being paid in.
    */
   attached?: (row: Row) => Row[] | undefined;
+  /**
+   * A closing row under the body, set off by a heavier rule — a career line
+   * under the seasons. `label` takes the first column's cell, and the columns
+   * named in `blank` stay empty (a career has no one team or position).
+   */
+  summary?: { label: string; row: Row; blank?: string[] };
 }
 
 export function SimpleTable<Row>({
@@ -80,6 +86,7 @@ export function SimpleTable<Row>({
   splitColumn = "team",
   splitsLabel = "stats by team",
   attached,
+  summary,
 }: SimpleTableProps<Row>) {
   const entries = glossary ? glossaryFor(columns) : [];
   // A row set under another: same stripe as its parent, set off by muted text
@@ -218,6 +225,26 @@ export function SimpleTable<Row>({
               </tr>
             )}
           </tbody>
+          {summary && rows.length > 0 && (
+            <tfoot>
+              <tr
+                className={`${stripeClass(rows.length)} border-t-2 border-black/25 font-semibold`}
+              >
+                {columns.map((col, c) => (
+                  <td
+                    key={col.key}
+                    className={`px-3 py-1.5 ${cellClass(col.align)}`}
+                  >
+                    {c === 0
+                      ? summary.label
+                      : summary.blank?.includes(col.key)
+                        ? null
+                        : col.render(summary.row)}
+                  </td>
+                ))}
+              </tr>
+            </tfoot>
+          )}
         </table>
       </div>
       {footer && <div className="mt-3 flex justify-end">{footer}</div>}

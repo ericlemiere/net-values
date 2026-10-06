@@ -41,7 +41,10 @@ export const GLOSSARY: Record<string, Definition> = {
   },
   teamPayroll: { name: "His team's total payroll that season" },
   pctOfTeamCap: { name: "His salary as a share of his team's payroll" },
-  leagueCap: { name: "The league's salary cap that season" },
+  leagueCap: {
+    name: "The league's salary cap that season",
+    detail: "A ~ marks a projection, for a season the league hasn't set yet.",
+  },
   pctOfLeagueCap: {
     name: "His salary as a share of the league cap",
     detail:

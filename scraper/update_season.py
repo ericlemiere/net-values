@@ -18,6 +18,10 @@ has to be refreshed before the numbers mean anything:
   on/off            nba.com's on-court and off-court team ratings, one request
                     per team (30 a day). Nothing in the model reads them yet;
                     kept current so the table is complete when something does.
+  future contracts  bref's team contracts pages, one request per team: every
+                    year a player is signed through past this one, with player
+                    and team options. Not part of the model; kept current
+                    because signings, trades, and waivers change it any day.
   awards            nothing is voted on until the season ends, so this is a
                     no-op for most of the year and then fills in by itself the
                     day bref publishes. Cheap either way: one cached page.
@@ -59,6 +63,7 @@ def main():
     import backfill_teams
     import backfill_on_off
     import backfill_awards
+    import backfill_future_salaries
     import compute_net_values
 
     print(f"=== stats from nba.com: {season} ===")
@@ -88,6 +93,9 @@ def main():
     # handful it misses get picked up next time the full backfill runs.
     sys.argv = ["backfill_awards", str(end_year), "--skip-nba"]
     backfill_awards.main()
+
+    print("\n=== future contracts from bref ===")
+    backfill_future_salaries.main()
 
     print("\n=== net values ===")
     sys.argv = ["compute_net_values"]

@@ -329,6 +329,60 @@ export const salaries = pgTable(
 );
 
 /**
+ * Salary cap projections for seasons not yet official. Kept apart from
+ * `seasons` on purpose: getCurrentCap reads the newest row there as "today's
+ * cap" for every cap-adjusted figure on the site, and a projection five years
+ * out must never become that. Entered by hand from league projections; see
+ * scraper/backfill_future_salaries.py.
+ */
+export const capProjections = pgTable("cap_projections", {
+  season: text("season").primaryKey(),
+  leagueCap: integer("league_cap").notNull(),
+  source: varchar("source", { length: 20 }).notNull(),
+});
+
+/**
+ * Contract years from basketball-reference's team contracts pages: the current
+ * season and every one after it that a player is signed through. The current
+ * season normally duplicates `salaries` and is only shown where `salaries` has
+ * nothing for it (see backfill_future_salaries.py).
+ * Separate from `salaries`, which holds money paid (or being paid) and feeds
+ * the model; these years haven't happened, can be declined, and get replaced
+ * wholesale on every refresh as players sign, get traded, or are waived.
+ */
+export const futureSalaries = pgTable(
+  "future_salaries",
+  {
+    id: serial("id").primaryKey(),
+    /**
+     * Null for a player bref lists but this database has no row for yet,
+     * almost always a rookie before his first game. He still counts toward
+     * his team's commitments, and links up on the first run after he plays.
+     */
+    playerId: integer("player_id").references(() => players.id),
+    /** bref's id for him: the row's identity, matched or not. */
+    brefSlug: varchar("bref_slug", { length: 20 }).notNull(),
+    name: text("name").notNull(),
+    season: text("season").notNull(),
+    team: varchar("team", { length: 3 }).notNull(),
+    salary: integer("salary").notNull(),
+    /** 'player' or 'team' when that year is an option, else null. */
+    option: varchar("option", { length: 10 }),
+    source: varchar("source", { length: 20 }).notNull().default("bref"),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("future_salaries_slug_season_team_idx").on(
+      t.brefSlug,
+      t.season,
+      t.team,
+    ),
+    index("future_salaries_player_idx").on(t.playerId),
+    index("future_salaries_season_idx").on(t.season),
+  ],
+);
+
+/**
  * NBA.com's own advanced numbers, kept separate from `advanced_stats` because
  * that table holds basketball-reference's box-score formulas (PER, WS, BPM,
  * VORP) and these come from a different source with different meaning: these

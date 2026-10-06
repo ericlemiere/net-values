@@ -4,6 +4,7 @@ import { SimpleTable } from "@/components/SimpleTable";
 import { InfoButton } from "@/components/InfoButton";
 import { TeamNetValueText } from "@/components/TeamNetValueText";
 import { PlayerLink } from "@/components/PlayerLink";
+import { OptionChip } from "@/components/OptionChip";
 import { SeasonLink } from "@/components/SeasonLink";
 import { awardKey, type Award } from "@/lib/awards";
 import { RosterSeasonFilter } from "@/components/RosterSeasonFilter";
@@ -26,6 +27,8 @@ import {
   getTeamRoster,
   getTeamRosterSeasons,
   getTeamIdentities,
+  getTeamContracts,
+  getTeamPayroll,
   type TeamRosterRow,
   type TeamNetValue,
 } from "@/lib/db/queries";
@@ -164,8 +167,28 @@ function historyColumnsFor(
       key: "madePlayoffs",
       label: "Playoffs",
       align: "center",
+      // A check or an x for a finished season; a dash for one still being
+      // played, which hasn't missed anything yet.
       render: (r) =>
-        r.madePlayoffs === null ? "—" : r.madePlayoffs ? "Yes" : "—",
+        r.madePlayoffs ? (
+          "Yes"
+        ) : r.decided && r.madePlayoffs === false ? (
+          <svg
+            viewBox="0 0 16 16"
+            className="inline-block size-2 align-middle text-black/35"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={2}
+            strokeLinecap="round"
+            role="img"
+            aria-label="Missed the playoffs"
+          >
+            <title>Missed the playoffs</title>
+            <path d="M3 3l10 10M13 3L3 13" />
+          </svg>
+        ) : (
+          "?"
+        ),
     },
   ];
 }
@@ -310,6 +333,111 @@ async function RosterTable({
   );
 }
 
+type ContractYear = { salary: number; option: "player" | "team" | null };
+
+/** One player's row of the contracts grid: his money in each season. */
+interface ContractRow {
+  slug: string;
+  playerId: number | null;
+  name: string;
+  years: Map<string, ContractYear>;
+  total: number;
+}
+
+/**
+ * The team's contracts as a grid, a player per row and a season per column,
+ * the way bref lays its contracts page out. Rows run biggest earner first in
+ * the earliest season, then by total.
+ */
+function contractsGrid(
+  contracts: Awaited<ReturnType<typeof getTeamContracts>>,
+) {
+  const seasons = [...new Set(contracts.map((c) => c.season))].sort();
+  const bySlug = new Map<string, ContractRow>();
+  for (const c of contracts) {
+    const row = bySlug.get(c.slug) ?? {
+      slug: c.slug,
+      playerId: c.playerId,
+      name: c.name,
+      years: new Map(),
+      total: 0,
+    };
+    row.years.set(c.season, { salary: c.salary, option: c.option });
+    row.total += c.salary;
+    bySlug.set(c.slug, row);
+  }
+  const first = seasons[0];
+  const rows = [...bySlug.values()].sort(
+    (a, b) =>
+      (b.years.get(first)?.salary ?? 0) - (a.years.get(first)?.salary ?? 0) ||
+      b.total - a.total ||
+      a.name.localeCompare(b.name),
+  );
+  // The committed line: every season's sum, and all of it together.
+  const committed: ContractRow = {
+    slug: "",
+    playerId: null,
+    name: "",
+    years: new Map(
+      seasons.map((s) => [
+        s,
+        {
+          salary: rows.reduce((n, r) => n + (r.years.get(s)?.salary ?? 0), 0),
+          option: null,
+        },
+      ]),
+    ),
+    total: rows.reduce((n, r) => n + r.total, 0),
+  };
+  return { seasons, rows, committed };
+}
+
+function contractColumns(seasons: string[]): ColumnDef<ContractRow>[] {
+  return [
+    {
+      key: "name",
+      label: "Player",
+      render: (r) =>
+        r.playerId ? (
+          <span className="whitespace-nowrap">
+            <PlayerLink id={r.playerId} name={r.name} />
+          </span>
+        ) : (
+          // No player page yet: almost always a rookie before his first game.
+          <span
+            className="whitespace-nowrap"
+            title="No games on file yet, so no player page."
+          >
+            {r.name}
+          </span>
+        ),
+    },
+    ...seasons.map(
+      (season): ColumnDef<ContractRow> => ({
+        key: season,
+        label: season,
+        align: "right",
+        render: (r) => {
+          const y = r.years.get(season);
+          if (!y) return "\u2014";
+          return (
+            <span className="inline-flex items-center justify-end gap-1.5 whitespace-nowrap">
+              {y.option && <OptionChip option={y.option} short />}
+              {formatCurrency(y.salary)}
+            </span>
+          );
+        },
+      }),
+    ),
+    {
+      key: "total",
+      label: "Total",
+      align: "right",
+      render: (r) => formatCurrency(r.total),
+    },
+  ];
+}
+
 /** Holds the roster's space on a cold load, before the query comes back. */
 function RosterFallback() {
   return (
@@ -388,13 +516,15 @@ export default async function TeamPage({
   const team = await getTeamByAbbr(abbr);
   if (!team) notFound();
 
-  const [rawHistory, rosterSeasons, teamNetValues, identities] =
+  const [rawHistory, rosterSeasons, teamNetValues, identities, contracts] =
     await Promise.all([
       getTeamHistory(team.id),
       getTeamRosterSeasons(team.abbr),
       getTeamNetValues(team.abbr),
       getTeamIdentities(team.id),
+      getTeamContracts(team.abbr),
     ]);
+  const grid = contractsGrid(contracts);
   // Only the names it no longer uses; the current one is the heading.
   const formerNames = identities.filter((i) => i.lastSeason !== null);
   const netValueBySeason = new Map(teamNetValues.map((n) => [n.season, n]));
@@ -415,11 +545,17 @@ export default async function TeamPage({
   // of holding up everything above it.
   const rosterPromise = getTeamRoster(team.abbr, rosterSeason);
 
+  // The payroll beside the Roster heading: that season's, the same
+  // team_payrolls figure as the history table. None for "ALL".
+  const rosterPayroll = await getTeamPayroll(team.abbr, rosterSeason);
+
   const titles = history.filter((h) => h.champion);
-  const playoffRuns = history.filter((h) => h.madePlayoffs).length;
+  // Only finished seasons: the one in progress has no playoff result yet.
+  const decided = history.filter((h) => h.decided);
+  const playoffRuns = decided.filter((h) => h.madePlayoffs).length;
   const totalWins = history.reduce((n, h) => n + (h.wins ?? 0), 0);
   const totalLosses = history.reduce((n, h) => n + (h.losses ?? 0), 0);
-  const seasonsCovered = history.length;
+  const seasonsCovered = decided.length;
 
   return (
     <div className={PAGE_COLUMN}>
@@ -504,7 +640,19 @@ export default async function TeamPage({
       />
 
       <div className="mb-2 flex min-w-0 flex-col items-stretch justify-between gap-4 md:flex-row md:items-center">
-        <h2 className="text-lg font-semibold text-white">Roster</h2>
+        <div className="flex flex-wrap items-center gap-3">
+          <h2 className="text-lg font-semibold text-white">Roster</h2>
+          {rosterPayroll !== null && (
+            <div className="inline-flex items-baseline gap-2 rounded-lg border-2 border-accent bg-background px-3 py-1">
+              <span className="text-sm text-white/60">
+                {rosterSeason} Payroll
+              </span>
+              <span className="font-mono font-semibold tabular-nums text-accent">
+                {formatCurrency(rosterPayroll)}
+              </span>
+            </div>
+          )}
+        </div>
         <RosterSeasonFilter
           abbr={team.abbr}
           seasons={rosterSeasons}
@@ -519,6 +667,34 @@ export default async function TeamPage({
           />
         </Suspense>
       </TableOverlay>
+
+      {grid.rows.length > 0 && (
+        <>
+          <h2 className="mb-2 text-lg font-semibold text-white">Contracts</h2>
+          <SimpleTable
+            subtitle={
+              <>
+                Everyone under contract for {grid.seasons[0]} and beyond. Option
+                years are marked{" "}
+                {/* On a light backing, as they appear in the table: the team
+                    option's dashed outline is black and would vanish here. */}
+                <span className="inline-flex rounded bg-white p-0.5 align-middle">
+                  <OptionChip option="player" short />
+                </span>{" "}
+                for a player option and{" "}
+                <span className="inline-flex rounded bg-white p-0.5 align-middle">
+                  <OptionChip option="team" short />
+                </span>{" "}
+                for a team option.
+              </>
+            }
+            columns={contractColumns(grid.seasons)}
+            rows={grid.rows}
+            rowKey={(r) => r.slug}
+            summary={{ label: "Committed", row: grid.committed }}
+          />
+        </>
+      )}
     </div>
   );
 }

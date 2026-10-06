@@ -4,6 +4,7 @@ import { PlayerLink } from "@/components/PlayerLink";
 import { awardKey, type Award } from "@/lib/awards";
 import { SeasonTeams } from "@/components/TeamLink";
 import { SeasonLink } from "@/components/SeasonLink";
+import { OptionChip } from "@/components/OptionChip";
 import {
   formatCurrency,
   formatPercent,
@@ -14,9 +15,12 @@ import {
 } from "@/lib/format";
 import {
   getCurrentCap,
-  getLeagueCap,
+  getCapForSeason,
   getSalaries,
   getSalariesSeasons,
+  getFutureSalaries,
+  getFutureSalarySeasons,
+  type FutureSalaryRow,
   getTeams,
   PAGE_SIZE,
   getAwardsForRows,
@@ -35,8 +39,51 @@ export const metadata = pageMetadata({
   path: "/salaries",
 });
 
-/** `part` is set on the rows set under a season: one team's piece of it. */
-type Row = SalaryRow & { part?: PlayerContract };
+/**
+ * `part` is set on the rows set under a season: one team's piece of it. The
+ * rest mark a contract year in a future season (see futureRow).
+ */
+type Row = Omit<SalaryRow, "playerId"> & {
+  /** Null for a player with no page yet, almost always a rookie. */
+  playerId: number | null;
+  part?: PlayerContract;
+  future?: boolean;
+  option?: "player" | "team" | null;
+};
+
+/**
+ * A future season's contract as a row of this table. Payroll and the shares
+ * are against what is committed so far and the projected cap; there is no Net
+ * Value or deserved pay for a season that hasn't been played.
+ */
+function futureRow(f: FutureSalaryRow & { pos: string | null }): Row {
+  return {
+    id: f.id,
+    playerId: f.playerId,
+    name: f.name,
+    season: f.season,
+    team: f.team,
+    teamLabel: f.teamLabel,
+    teams: null,
+    pos: f.pos,
+    salary: f.salary,
+    estimated: false,
+    playedHere: true,
+    teamPayroll: f.teamPayroll,
+    leagueCap: f.leagueCap,
+    pctOfTeamCap: f.pctOfTeamCap,
+    pctOfLeagueCap: f.pctOfLeagueCap,
+    netValueScore: null,
+    seasonSalary: null,
+    deservedSalary: null,
+    payDifference: null,
+    netValueRank: null,
+    salaryRank: f.salaryRank,
+    contracts: [],
+    future: true,
+    option: f.option,
+  };
+}
 
 /** One contract of a season as a row under it, like the player page's. */
 function contractRow(row: Row, c: PlayerContract): Row {
@@ -107,11 +154,21 @@ function getColumns(
       label: "Name",
       defaultDir: "asc",
       render: (r) => (
-        <PlayerLink
-          id={r.playerId}
-          name={r.name}
-          awards={awards.get(awardKey(r.playerId, r.season))}
-        />
+        <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+          {r.playerId === null ? (
+            // No player page yet: almost always a rookie before his first game.
+            <span title="No games on file yet, so no player page.">
+              {r.name}
+            </span>
+          ) : (
+            <PlayerLink
+              id={r.playerId}
+              name={r.name}
+              awards={awards.get(awardKey(r.playerId, r.season))}
+            />
+          )}
+          {r.option && <OptionChip option={r.option} />}
+        </span>
       ),
     },
     ...(showSeason
@@ -181,7 +238,19 @@ function getColumns(
       key: "teamPayroll",
       label: "Team Payroll",
       align: "center",
-      render: (r) => formatCurrency(r.teamPayroll),
+      // A future season only has the contracts signed so far, so its payroll
+      // is a floor, not what the team will end up spending.
+      render: (r) =>
+        r.future && r.teamPayroll !== null ? (
+          <span
+            className="cursor-help underline decoration-black/40 decoration-dotted underline-offset-2"
+            title="Committed so far: only the contracts already signed for this season."
+          >
+            {formatCurrency(r.teamPayroll)}
+          </span>
+        ) : (
+          formatCurrency(r.teamPayroll)
+        ),
     },
     {
       key: "pctOfTeamCap",
@@ -272,11 +341,18 @@ export default async function SalariesPage({
   }>;
 }) {
   const sp = await searchParams;
-  const [seasons, teams] = await Promise.all([
+  const [pastSeasons, futureSeasons, teams, currentCap] = await Promise.all([
     getSalariesSeasons(),
+    getFutureSalarySeasons(),
     getTeams(),
+    getCurrentCap(),
   ]);
-  const season = sp.season ?? seasons[0] ?? "ALL";
+  // Newest first, so seasons still to come head the dropdown. The landing
+  // view stays on the current season rather than the newest one listed.
+  const seasons = [...futureSeasons, ...pastSeasons];
+  const season =
+    sp.season ?? currentCap?.season ?? pastSeasons[0] ?? "ALL";
+  const isFuture = futureSeasons.includes(season);
   const team = sp.team ?? "ALL";
   const pos = parsePosition(sp.pos);
   // Highest paid first. Every sort link carries its own dir, so defaulting to
@@ -287,27 +363,35 @@ export default async function SalariesPage({
 
   // Null when season is "ALL" — a single cap figure would be meaningless
   // across seasons, so the banner is omitted entirely in that case.
-  const [{ rows, totalCount }, leagueCap, currentCap] = await Promise.all([
-    getSalaries({ season, team, pos, sort, dir, page }),
-    getLeagueCap(season),
-    getCurrentCap(),
+  const params = { season, team, pos, sort, dir, page };
+  const [{ rows, totalCount }, cap] = await Promise.all([
+    isFuture
+      ? getFutureSalaries(params).then((r) => ({
+          ...r,
+          rows: r.rows.map(futureRow),
+        }))
+      : (getSalaries(params) as Promise<{ rows: Row[]; totalCount: number }>),
+    getCapForSeason(season),
   ]);
 
-  // Badges for just the rows on this page.
-  const awards = await getAwardsForRows(rows);
+  // Badges for just the rows on this page. A future season has none to show.
+  const awards = isFuture
+    ? new Map<string, Award[]>()
+    : await getAwardsForRows(rows as SalaryRow[]);
 
   return (
     <div className={PAGE_COLUMN}>
       <PageHeader
         title="Salaries"
         meta={
-          leagueCap !== null && (
+          cap !== null && (
             <div className="inline-flex max-w-full flex-wrap items-baseline justify-center md:justify-start gap-x-3 gap-y-1 rounded-lg border-2 border-accent bg-background px-2 md:px-4 py-2">
               <span className="text-sm text-white/60">
-                {season} League Salary Cap
+                {season} {cap.projected ? "Projected " : ""}League Salary Cap
               </span>
               <span className="font-mono md:text-lg font-semibold tabular-nums text-accent">
-                {formatCurrency(leagueCap)}
+                {cap.projected ? "~" : ""}
+                {formatCurrency(cap.cap)}
               </span>
             </div>
           )
@@ -321,7 +405,7 @@ export default async function SalariesPage({
           currentCap,
           awards,
         )}
-        rows={rows as Row[]}
+        rows={rows}
         rowKey={(r) => `${r.id}-${r.part?.team ?? ""}`}
         splits={tradedSplits}
         splitsLabel="pay and Net Value by team"

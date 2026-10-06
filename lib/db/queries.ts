@@ -38,6 +38,8 @@ import {
   playerTeamSplits,
   playerProduction,
   siteMeta,
+  futureSalaries,
+  capProjections,
 } from "./schema";
 
 export const PAGE_SIZE = 100;
@@ -1101,6 +1103,14 @@ export const getTeamHistory = cached("getTeamHistory", async function getTeamHis
       srs: teamSeasons.srs,
       madePlayoffs: teamSeasons.madePlayoffs,
       champion: teamSeasons.champion,
+      /**
+       * True once the season has a champion. The season in progress gets a
+       * row as soon as bref posts its standings (0-0 before opening night),
+       * and until it is decided it can't count as a playoff miss.
+       */
+      decided: sql<boolean>`EXISTS (
+        SELECT 1 FROM ${teamSeasons} done
+        WHERE done.season = ${teamSeasons.season} AND done.champion)`,
       payroll: teamPayrolls.payroll,
       leagueCap: seasons.leagueCap,
       payrollPctOfCap: sql<number | null>`
@@ -1767,6 +1777,219 @@ export type PlayerCareerSalary = Awaited<
  * figure against each team the player passed through, and the model already
  * knows to count it once.
  */
+/**
+ * The CTEs every view of future contracts shares, ahead of its own SELECT.
+ *
+ * `pool` is every contract year in a season `salaries` has nothing for; team
+ * payroll and pay rank are taken over it, so the player page, /salaries, and
+ * the season comps all agree. That is only the money committed so far:
+ * payrolls run light until rosters fill, and a rank is among players already
+ * signed. A player is ranked on all his money that season (a waived contract
+ * plus his new one), identified by bref id, since a rookie may have no
+ * player row yet.
+ */
+const futurePoolSql = sql`
+  open_seasons AS (
+    SELECT DISTINCT f.season FROM ${futureSalaries} f
+    WHERE NOT EXISTS (
+      SELECT 1 FROM ${salaries} s WHERE s.season = f.season AND s.salary > 0)
+  ),
+  pool AS (
+    SELECT f.* FROM ${futureSalaries} f JOIN open_seasons USING (season)
+  ),
+  payrolls AS (
+    SELECT season, team, SUM(salary)::bigint AS payroll
+    FROM pool GROUP BY season, team
+  ),
+  ranks AS (
+    SELECT season, bref_slug,
+           RANK() OVER (PARTITION BY season ORDER BY SUM(salary) DESC) AS pay_rank
+    FROM pool GROUP BY season, bref_slug
+  )`;
+
+/** The SELECT list over `f` (future_salaries) joined as below. */
+const futureColumnsSql = sql`
+  f.id,
+  f.player_id AS "playerId",
+  f.name,
+  f.season,
+  f.team,
+  ${eraAbbrSql(sql`f.team`, sql`f.season`)} AS "teamLabel",
+  f.salary,
+  f.option,
+  pr.payroll::float8 AS "teamPayroll",
+  round(100.0 * f.salary / NULLIF(pr.payroll, 0), 2)::float8 AS "pctOfTeamCap",
+  rk.pay_rank::int AS "salaryRank",
+  COALESCE(se.league_cap, cp.league_cap) AS "leagueCap",
+  (se.league_cap IS NULL AND cp.league_cap IS NOT NULL) AS "capProjected",
+  round(100.0 * f.salary
+        / NULLIF(COALESCE(se.league_cap, cp.league_cap), 0), 2)::float8 AS "pctOfLeagueCap"`;
+
+const futureJoinsSql = sql`
+  LEFT JOIN payrolls pr ON pr.season = f.season AND pr.team = f.team
+  LEFT JOIN ranks rk ON rk.season = f.season AND rk.bref_slug = f.bref_slug
+  LEFT JOIN ${seasons} se ON se.season = f.season
+  LEFT JOIN ${capProjections} cp ON cp.season = f.season`;
+
+export interface FutureSalaryRow {
+  id: number;
+  /** Null for a player with no row here yet, almost always a rookie. */
+  playerId: number | null;
+  name: string;
+  season: string;
+  team: string;
+  teamLabel: string | null;
+  salary: number;
+  option: "player" | "team" | null;
+  /** Committed so far: the contracts on file for that team and season. */
+  teamPayroll: number | null;
+  pctOfTeamCap: number | null;
+  /** Among every player with a contract on file for that season. */
+  salaryRank: number | null;
+  leagueCap: number | null;
+  capProjected: boolean;
+  pctOfLeagueCap: number | null;
+}
+
+/**
+ * The contract years a player's salary log doesn't have yet, oldest first:
+ * every season he is signed through that `salaries` holds nothing for. A
+ * season's official cap is used once `seasons` has it, the projection until
+ * then. A player waived with money still owed can carry two rows for one
+ * season, one per team.
+ */
+export const getPlayerFutureSalaries = cached("getPlayerFutureSalaries", async function getPlayerFutureSalaries(playerId: number) {
+  const rows = await db.execute(sql`
+    WITH ${futurePoolSql}
+    SELECT ${futureColumnsSql}
+    -- Read from the whole table, not the pool: a player signed since salaries
+    -- was last backfilled still gets his year shown, just without a payroll
+    -- or rank, since his season's real figures are on file for everyone else.
+    FROM ${futureSalaries} f
+    ${futureJoinsSql}
+    WHERE f.player_id = ${playerId}
+      AND NOT EXISTS (
+        SELECT 1 FROM ${salaries} s
+        WHERE s.player_id = ${playerId} AND s.season = f.season AND s.salary > 0)
+    ORDER BY f.season ASC, f.salary DESC
+  `);
+  return rows.rows as unknown as FutureSalaryRow[];
+});
+
+/**
+ * Seasons with contracts on file but nothing in `salaries` yet, newest first:
+ * the future seasons /salaries offers. Read from the contracts themselves, so
+ * a season appears the day someone signs through it and leaves once the
+ * salary backfill covers it.
+ */
+export const getFutureSalarySeasons = cached("getFutureSalarySeasons", async function getFutureSalarySeasons() {
+  const rows = await db.execute(sql`
+    WITH ${futurePoolSql}
+    SELECT season FROM open_seasons ORDER BY season DESC`);
+  return (rows.rows as { season: string }[]).map((r) => r.season);
+});
+
+/**
+ * /salaries for a future season: everyone under contract for it, one row per
+ * contract (a waived player's old team and new team are two rows), filtered
+ * and sorted like the rest of the page.
+ */
+export const getFutureSalaries = cached("getFutureSalaries", async function getFutureSalaries(
+  params: ListParams,
+): Promise<{
+  rows: (FutureSalaryRow & { pos: string | null })[];
+  totalCount: number;
+  page: number;
+}> {
+  const page = clampPage(params.page);
+  const pos = nearestPosSql(sql`f.player_id`, sql`f.season`);
+  const sortColumns: Record<string, SQL> = {
+    name: sql`f.name`,
+    team: sql`f.team`,
+    pos,
+    salary: sql`f.salary`,
+    teamPayroll: sql`pr.payroll`,
+    pctOfTeamCap: sql`f.salary::float8 / NULLIF(pr.payroll, 0)`,
+    pctOfLeagueCap: sql`f.salary`,
+    salaryRank: sql`rk.pay_rank`,
+  };
+  const sortCol = sortColumns[params.sort] ?? sql`f.salary`;
+
+  const clauses: SQL[] = [sql`f.season = ${params.season}`];
+  if (params.team !== "ALL") clauses.push(sql`f.team = ${params.team}`);
+  if (params.pos !== "ALL")
+    clauses.push(sql`split_part(${pos}, '-', 1) = ${params.pos}`);
+  const where = sql.join(clauses, sql` AND `);
+
+  const rows = await db.execute(sql`
+    WITH ${futurePoolSql}
+    SELECT ${futureColumnsSql},
+           ${pos} AS pos,
+           COUNT(*) OVER ()::int AS "totalCount"
+    FROM pool f
+    ${futureJoinsSql}
+    WHERE ${where}
+    ORDER BY ${orderByNullsLast(sortCol, params.dir)}, f.name ASC
+    LIMIT ${PAGE_SIZE} OFFSET ${(page - 1) * PAGE_SIZE}
+  `);
+  const out = rows.rows as unknown as (FutureSalaryRow & {
+    pos: string | null;
+    totalCount: number;
+  })[];
+  return { rows: out, totalCount: out[0]?.totalCount ?? 0, page };
+});
+
+/**
+ * A team's contracts, this season and every one after it, as bref's contracts
+ * page has them: one row per player per season, rookies included. The current
+ * season comes from the contracts too rather than `salaries`, so the table
+ * reads as one consistent set of commitments.
+ */
+export const getTeamContracts = cached("getTeamContracts", async function getTeamContracts(abbr: string) {
+  const rows = await db.execute(sql`
+    SELECT f.player_id AS "playerId", f.bref_slug AS slug, f.name, f.season,
+           f.salary, f.option
+    FROM ${futureSalaries} f
+    WHERE f.team = ${abbr.toUpperCase()}
+    ORDER BY f.season ASC, f.salary DESC`);
+  return rows.rows as unknown as {
+    playerId: number | null;
+    slug: string;
+    name: string;
+    season: string;
+    salary: number;
+    option: "player" | "team" | null;
+  }[];
+});
+
+/**
+ * One team's payroll for one season, read straight from team_payrolls: the
+ * history table only has seasons with a record, so it has nothing for one
+ * that hasn't tipped off.
+ */
+export const getTeamPayroll = cached("getTeamPayroll", async function getTeamPayroll(abbr: string, season: string) {
+  if (season === "ALL") return null;
+  const rows = await db
+    .select({ payroll: teamPayrolls.payroll })
+    .from(teamPayrolls)
+    .innerJoin(teams, eq(teams.id, teamPayrolls.teamId))
+    .where(and(eq(teams.abbr, abbr.toUpperCase()), eq(teamPayrolls.season, season)));
+  return rows[0]?.payroll ?? null;
+});
+
+/** A season's cap, official if `seasons` has it, else the projection. */
+export const getCapForSeason = cached("getCapForSeason", async function getCapForSeason(season: string) {
+  if (season === "ALL") return null;
+  const rows = await db.execute(sql`
+    SELECT COALESCE(se.league_cap, cp.league_cap) AS cap,
+           (se.league_cap IS NULL) AS projected
+    FROM (SELECT ${season}::text AS season) q
+    LEFT JOIN ${seasons} se ON se.season = q.season
+    LEFT JOIN ${capProjections} cp ON cp.season = q.season`);
+  const r = rows.rows[0] as { cap: number | null; projected: boolean } | undefined;
+  return r?.cap ? { cap: Number(r.cap), projected: r.projected } : null;
+});
+
 export const getPlayerCareerSalaries = cached("getPlayerCareerSalaries", async function getPlayerCareerSalaries(playerId: number) {
   const rows = await db.execute(sql`
     WITH paid AS (
@@ -2024,15 +2247,39 @@ export const getSalaryComps = cached("getSalaryComps", async function getSalaryC
 
   // Rounded to two decimals before the comparison, so the window is measured
   // against the same figure the column prints.
-  const pct = sql`round(100.0 * s.salary / nullif(${seasons.leagueCap}, 0), 2)`;
+  const pct = sql`round(100.0 * s.salary / nullif(s.league_cap, 0), 2)`;
+
+  // A season still to come has nothing in `salaries`, so its season comps are
+  // everyone else signed for it, against the projected cap. Only the season
+  // scope reads these: the historical tables are seasons that were played.
+  // Negative ids keep them apart from real salary ids, as on the player page.
+  const futureSource =
+    scope === "season"
+      ? sql`UNION ALL
+        SELECT -f.id, f.player_id, f.season, f.team, f.salary,
+               COALESCE(fs.league_cap, cp.league_cap)
+        FROM ${futureSalaries} f
+        LEFT JOIN ${seasons} fs ON fs.season = f.season
+        LEFT JOIN ${capProjections} cp ON cp.season = f.season
+        WHERE f.player_id IS NOT NULL
+          AND NOT EXISTS (
+            SELECT 1 FROM ${salaries} fsal
+            WHERE fsal.season = f.season AND fsal.salary > 0)`
+      : sql``;
 
   const result = await db.execute(sql`
-    WITH cand AS MATERIALIZED (
+    WITH src AS (
+      SELECT s.id, s.player_id, s.season, s.team, s.salary,
+             ${seasons.leagueCap} AS league_cap
+      FROM ${salaries} s
+      JOIN ${seasons} ON ${seasons.season} = s.season
+      ${futureSource}
+    ),
+    cand AS MATERIALIZED (
       SELECT s.id, s.player_id, s.season, s.team,
              ${pct} AS pct,
              abs(${pct} - ${targetPct}) AS dist
-      FROM ${salaries} s
-      JOIN ${seasons} ON ${seasons.season} = s.season
+      FROM src s
       WHERE s.player_id <> ${playerId}
         AND s.salary > 0
         AND ${seasonFilter}

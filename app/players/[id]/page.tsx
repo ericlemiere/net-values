@@ -6,6 +6,7 @@ import { SeasonLink } from "@/components/SeasonLink";
 import { PlayerHeadshot } from "@/components/PlayerHeadshot";
 import { SimpleTable } from "@/components/SimpleTable";
 import { SectionHeading } from "@/components/SectionHeading";
+import { OptionChip } from "@/components/OptionChip";
 import { CompsTable } from "@/components/CompsTable";
 import type { ColumnDef } from "@/components/DataTable";
 import { nbaAdvancedColumns } from "@/app/stats/columns";
@@ -31,6 +32,7 @@ import {
   getPlayerCareerStatsPerGame,
   getPlayerCareerAdvancedStats,
   getPlayerCareerSalaries,
+  getPlayerFutureSalaries,
   getPlayerTeamSplits,
   getSalaryComps,
   type PlayerAward,
@@ -52,8 +54,14 @@ type AdvRow = Awaited<ReturnType<typeof getPlayerCareerAdvancedStats>>[number];
  */
 type SalRow = Awaited<ReturnType<typeof getPlayerCareerSalaries>>[number] & {
   part?: PlayerContract;
+  /** A contract year from future_salaries: one `salaries` has no figure for. */
+  future?: boolean;
+  /** The league cap is a projection, not yet official. */
+  capProjected?: boolean;
+  option?: "player" | "team" | null;
 };
 type SplitRow = Awaited<ReturnType<typeof getPlayerTeamSplits>>[number];
+type FutureRow = Awaited<ReturnType<typeof getPlayerFutureSalaries>>[number];
 
 /** Fields every table's split row takes straight from the stint. */
 function splitIdentity(s: SplitRow) {
@@ -659,8 +667,19 @@ function getSalariesColumns(
       render: (r) => (
         <span className="whitespace-nowrap">
           <span className={`${MONO_CELL} tabular-nums`}>
-            <SeasonLink season={r.season} />
+            {currentCap && r.season > currentCap.season ? (
+              // A season that hasn't started has no page of its own, so the
+              // season anchors the comps instead, like the rest of the row.
+              <Link href={`?salary=${r.id}`}>{r.season}</Link>
+            ) : (
+              <SeasonLink season={r.season} />
+            )}
           </span>
+          {r.option && (
+            <span className="ml-1.5 inline-flex align-middle">
+              <OptionChip option={r.option} />
+            </span>
+          )}
           <AwardBadges awards={awardsBySeason.get(r.season) ?? []} />
         </span>
       ),
@@ -696,13 +715,35 @@ function getSalariesColumns(
       key: "salaryRank",
       label: "Pay Rank",
       align: "right",
-      render: (r) => formatRank(r.salaryRank),
+      render: (r) =>
+        r.future && r.salaryRank !== null ? (
+          <span
+            className="cursor-help underline decoration-black/40 decoration-dotted underline-offset-2"
+            title="Among players already signed for this season."
+          >
+            {formatRank(r.salaryRank)}
+          </span>
+        ) : (
+          formatRank(r.salaryRank)
+        ),
     },
     {
       key: "teamPayroll",
       label: "Team Payroll",
       align: "right",
-      render: (r) => formatCurrency(r.teamPayroll),
+      // A season still to come only has the contracts signed so far, so its
+      // payroll is a floor, not what the team will end up spending.
+      render: (r) =>
+        r.future && r.teamPayroll !== null ? (
+          <span
+            className="cursor-help underline decoration-black/40 decoration-dotted underline-offset-2"
+            title="Committed so far: only the contracts already signed for this season."
+          >
+            {formatCurrency(r.teamPayroll)}
+          </span>
+        ) : (
+          formatCurrency(r.teamPayroll)
+        ),
     },
     {
       key: "pctOfTeamCap",
@@ -714,7 +755,18 @@ function getSalariesColumns(
       key: "leagueCap",
       label: "League Cap",
       align: "right",
-      render: (r) => formatCurrency(r.leagueCap),
+      // A projected cap is marked with a ~ and says so on hover.
+      render: (r) =>
+        r.capProjected ? (
+          <span
+            className="cursor-help"
+            title="Projected: the league hasn't set this season's cap yet."
+          >
+            ~{formatCurrency(r.leagueCap)}
+          </span>
+        ) : (
+          formatCurrency(r.leagueCap)
+        ),
     },
     {
       key: "pctOfLeagueCap",
@@ -782,6 +834,43 @@ function getSalariesColumns(
       },
     },
   ];
+}
+
+/**
+ * A contract year as a row of the salary log. Payroll and pay rank are taken
+ * over the contracts already signed for that season (see
+ * getPlayerFutureSalaries); there is no Net Value for a season that hasn't
+ * been played. The negative id keeps it clear of real
+ * salary ids, which ?salary= and the comps anchor key on; getSalaryComps gives
+ * other players' contract years the same negative ids.
+ */
+function futureSalRow(f: FutureRow): SalRow {
+  return {
+    id: -f.id,
+    season: f.season,
+    team: f.team,
+    teamLabel: f.teamLabel,
+    teams: null,
+    salary: f.salary,
+    paidTotal: null,
+    contracts: [],
+    teamPayroll: f.teamPayroll,
+    leagueCap: f.leagueCap,
+    capProjected: f.capProjected,
+    pctOfTeamCap: f.pctOfTeamCap,
+    pctOfLeagueCap: f.pctOfLeagueCap,
+    netValueScore: null,
+    netValue: null,
+    netValueRank: null,
+    salaryRank: f.salaryRank,
+    seasonSalary: null,
+    deservedSalary: null,
+    production: null,
+    expectedProduction: null,
+    availability: null,
+    future: true,
+    option: f.option,
+  };
 }
 
 // The salaries table anchors the comps beside it: the ?salary= row if it names
@@ -874,7 +963,13 @@ function pickAnchor(rows: SalRow[], salaryId: number | null) {
   // The newest salary row is often a season still to come, and anchoring there
   // gives comps with no net value and nothing to compare.
   const played = usable.filter((r) => r.netValueScore !== null);
-  return played[played.length - 1] ?? usable[usable.length - 1] ?? null;
+  const signed = usable.filter((r) => !r.future);
+  return (
+    played[played.length - 1] ??
+    signed[signed.length - 1] ??
+    usable[usable.length - 1] ??
+    null
+  );
 }
 
 function headshotUrl(nbaPersonId: number | null) {
@@ -927,6 +1022,7 @@ export default async function PlayerPage({
     currentCap,
     careerAwards,
     teamSplits,
+    futureSalaries,
   ] = await Promise.all([
     getPlayerCareerStatsPerGame(playerId),
     getPlayerCareerStatsTotals(playerId),
@@ -935,13 +1031,16 @@ export default async function PlayerPage({
     getCurrentCap(),
     getPlayerAwards(playerId),
     getPlayerTeamSplits(playerId),
+    getPlayerFutureSalaries(playerId),
   ]);
   const splits = groupSplits(teamSplits);
   const career = careerRows(totals);
 
   const salaryId = Number(sp.salary);
+  // The salary log with every contract year it has no figure for yet.
+  const salaryLog: SalRow[] = [...salaries, ...futureSalaries.map(futureSalRow)];
   const anchor = pickAnchor(
-    salaries,
+    salaryLog,
     Number.isInteger(salaryId) ? salaryId : null,
   );
   // Recomputed from the raw figures rather than read off pctOfLeagueCap, which
@@ -1002,7 +1101,7 @@ export default async function PlayerPage({
   const anchorLabel =
     anchorPct === null
       ? null
-      : `${anchorPct.toFixed(2)}% of the cap \u00b1 ${COMP_TOLERANCE}`;
+      : `${anchorPct.toFixed(2)}% of the${anchor?.capProjected ? " projected" : ""} cap \u00b1 ${COMP_TOLERANCE}`;
   // Summed from the career log already fetched above rather than a second
   // query. Seasons with no figure on record contribute nothing, so the box
   // says how many it covers instead of presenting a short total as complete.
@@ -1131,7 +1230,7 @@ export default async function PlayerPage({
         </SectionHeading>
         <SimpleTable<SalRow>
           columns={getSalariesColumns(currentCap, awardsBySeason)}
-          rows={salaries}
+          rows={salaryLog}
           rowKey={(r) => `${r.id}-${r.part?.team ?? ""}`}
           splits={salarySplits}
           splitsLabel="pay and Net Value by team"
@@ -1168,7 +1267,7 @@ export default async function PlayerPage({
             // heading above, so each panel only has to say how it is cut.
             subtitle={
               anchor
-                ? `The rest of the league${truncation(seasonComps)}`
+                ? `${anchor.future ? "Everyone else signed for that season" : "The rest of the league"}${truncation(seasonComps)}`
                 : undefined
             }
             rows={seasonComps?.rows ?? []}

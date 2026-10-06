@@ -5,17 +5,29 @@ import { useEffect, useRef } from "react";
 import { NAV_LINKS } from "@/components/NavLinks";
 
 /**
- * Whether the watermark has already drawn itself in this page load.
+ * Whether the hero has already mounted in this page load.
  *
  * The watermark lives in the persistent layout, so its draw-on runs once per
  * full load and never again as you navigate. Module scope is exactly that
  * lifetime: it resets on a hard load and survives every client-side
- * navigation, which is the distinction the hero needs to know about.
+ * navigation.
  *
  * It is only ever written from an effect, never during render, so the server
  * renders the same markup for every request and hydration matches.
  */
-let logoHasDrawn = false;
+let heroHasMounted = false;
+
+/**
+ * Whether the hard load that started this page session was the home page
+ * itself. If it was some other page, the watermark drew there, so by the time
+ * you navigate home there is nothing left to wait for. The navigation entry
+ * keeps the URL the browser actually loaded, whatever the client router has
+ * done since.
+ */
+function loadedOnHome() {
+  const [entry] = performance.getEntriesByType("navigation");
+  return !entry || new URL(entry.name).pathname === "/";
+}
 
 /*
  * The site nav plus a direct way into the advanced table, which the header
@@ -47,8 +59,11 @@ export function HomeIntro() {
     // would otherwise read back the value its own first pass just wrote.
     if (decided.current) return;
     decided.current = true;
-    if (logoHasDrawn) rootRef.current?.classList.remove("home-intro-wait");
-    logoHasDrawn = true;
+    // Only the first mount on a load that began here coincides with the draw.
+    if (heroHasMounted || !loadedOnHome()) {
+      rootRef.current?.classList.remove("home-intro-wait");
+    }
+    heroHasMounted = true;
   }, []);
 
   return (

@@ -781,19 +781,34 @@ body {
   }
 }
 
-.home-intro {
+/*
+ * Set on the body, not the hero, so the footer (which lives in the layout,
+ * outside the hero) can time itself off the same clock.
+ */
+body:has(.home-intro) {
   --home-base: 0ms;
   --home-step: 80ms;
 }
 
 /* The class the page carries only on the load that actually draws the logo. */
-.home-intro-wait {
+body:has(.home-intro-wait) {
   --home-base: calc(var(--logo-draw-duration) + 100ms);
 }
 
 .home-in {
   animation: home-rise 560ms cubic-bezier(0.22, 1, 0.36, 1) both;
   animation-delay: calc(var(--home-base) + var(--i, 0) * var(--home-step));
+}
+
+/*
+ * The footer's text (not the logo, which has its own fade) comes up once the
+ * hero has landed: the last card row is `--i: 6`, and this starts as it
+ * finishes settling. Only on the home page, and it replays whenever you
+ * navigate back there, the same as the hero.
+ */
+body:has(.home-intro) .footer-in {
+  animation: home-rise 560ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: calc(var(--home-base) + 6 * var(--home-step) + 440ms);
 }
 
 /*

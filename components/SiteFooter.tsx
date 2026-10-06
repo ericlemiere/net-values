@@ -52,7 +52,8 @@ export async function SiteFooter() {
           className="h-28 w-auto md:h-32 md:[@media(min-height:880px)]:h-40"
         />
       </Link>
-      <div className="flex min-w-0 flex-col items-start gap-1.5 pb-2 text-xs text-white/50 md:text-sm">
+      {/* footer-in: rises in after the home page's hero (see globals.css). */}
+      <div className="footer-in flex min-w-0 flex-col items-start gap-1.5 pb-2 text-xs text-white/50 md:text-sm">
         <nav className="mb-1 flex gap-4 text-sm font-semibold md:text-base">
           <Link href="/contact" className={linkClass}>
             Contact

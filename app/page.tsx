@@ -14,7 +14,9 @@ export const metadata: Metadata = {
   ...base,
   // The home page is the brand itself; "The Net Values - The Net Values"
   // would read as a mistake.
-  title: { absolute: `${SITE_NAME}: NBA Player Value vs. Salary` },
+  title: {
+    absolute: `${SITE_NAME}: NBA Player Value, based on Performance vs. Salary`,
+  },
 };
 
 export default function Home() {

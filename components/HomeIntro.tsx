@@ -67,7 +67,7 @@ export function HomeIntro() {
         style={{ "--i": 2 } as React.CSSProperties}
       >
         <p className="text-xl md:text-2xl font-semibold leading-snug tracking-tight">
-          The &nbsp;
+          An &nbsp;
           <span className="inline-block rounded-md border-2 border-accent px-1.5 leading-tight text-accent font-mono animate-pulse shadow-[0_0_20px_5px_#fff20060]">
             AI
           </span>&nbsp;

@@ -1105,8 +1105,8 @@ export const getTeamHistory = cached("getTeamHistory", async function getTeamHis
       champion: teamSeasons.champion,
       /**
        * True once the season has a champion. The season in progress gets a
-       * row as soon as bref posts its standings (0-0 before opening night),
-       * and until it is decided it can't count as a playoff miss.
+       * row with its first game, and until it is decided it can't count as a
+       * playoff miss.
        */
       decided: sql<boolean>`EXISTS (
         SELECT 1 FROM ${teamSeasons} done

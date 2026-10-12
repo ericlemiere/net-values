@@ -20,6 +20,12 @@ where both exist, this lands within 0.6 points per 100 on both ratings
 (r = 0.995 on each), which is well inside the noise of the model that consumes
 them.
 
+The log also gives each team's minutes, overtime included: 240 player-minutes
+for a regulation game, 25 more for every extra period. Stored as game minutes
+(48 a game, 5 more per overtime), which is what Net Value measures a player's
+availability against, so a team that played six overtimes isn't treated as
+having played the same season as one that played none.
+
 Idempotent: upserts on (team_id, season).
 
 Usage:
@@ -76,7 +82,7 @@ def possessions(row, opp):
 
 
 def team_season_rows(df):
-    """Game log -> one (abbr, gp, poss, pts, opp_pts) per team-season."""
+    """Game log -> one (abbr, gp, minutes, poss, pts, opp_pts) per team-season."""
     by_game = {}
     for row in df.to_dict("records"):
         by_game.setdefault(row["GAME_ID"], []).append(row)
@@ -91,9 +97,12 @@ def team_season_rows(df):
         for row, opp in ((rows[0], rows[1]), (rows[1], rows[0])):
             t = totals.setdefault(
                 row["TEAM_ABBREVIATION"],
-                {"gp": 0, "poss": 0.0, "pts": 0, "opp_pts": 0},
+                {"gp": 0, "minutes": 0.0, "poss": 0.0, "pts": 0, "opp_pts": 0},
             )
             t["gp"] += 1
+            # MIN is the five players on the floor added up, so a fifth of it
+            # is the length of the game.
+            t["minutes"] += float(row["MIN"]) / 5.0
             t["poss"] += possessions(row, opp)
             t["pts"] += int(row["PTS"])
             t["opp_pts"] += int(opp["PTS"])
@@ -141,17 +150,19 @@ def main():
             cur.execute(
                 """
                 INSERT INTO team_season_ratings
-                    (team_id, season, gp, poss, pts, opp_pts,
+                    (team_id, season, gp, minutes, poss, pts, opp_pts,
                      off_rating, def_rating, net_rating, source)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'nba_api')
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'nba_api')
                 ON CONFLICT (team_id, season) DO UPDATE SET
-                    gp = EXCLUDED.gp, poss = EXCLUDED.poss, pts = EXCLUDED.pts,
+                    gp = EXCLUDED.gp, minutes = EXCLUDED.minutes,
+                    poss = EXCLUDED.poss, pts = EXCLUDED.pts,
                     opp_pts = EXCLUDED.opp_pts, off_rating = EXCLUDED.off_rating,
                     def_rating = EXCLUDED.def_rating, net_rating = EXCLUDED.net_rating,
                     source = EXCLUDED.source
                 """,
                 (
-                    team_id, label, t["gp"], round(t["poss"], 1),
+                    team_id, label, t["gp"], round(t["minutes"], 1),
+                    round(t["poss"], 1),
                     t["pts"], t["opp_pts"],
                     round(off, 2), round(deff, 2), round(off - deff, 2),
                 ),

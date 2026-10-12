@@ -77,7 +77,7 @@ export function ExampleSteps({
           n={at + 2}
           title="Availability and Charged Share: how much of the contract counts"
           working={[
-            `30 minutes × ${ex.gamesInSeason} Games in the Season = ${fullMinutes} Full-Season Minutes`,
+            `${ex.teamMinutes.toLocaleString()} Team Minutes × 30 / 48 = ${fullMinutes} Full-Season Minutes`,
             `${Math.round(hero.minutes).toLocaleString()} Minutes Played / ${fullMinutes} Full-Season Minutes = ${availability} Availability`,
             `${AVAILABILITY_FLOOR} + ${1 - AVAILABILITY_FLOOR} × ${availability} Availability = ${charged} Charged Share`,
           ]}

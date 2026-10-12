@@ -4,17 +4,26 @@ Net Value is a function of things that all move during a season, so each one
 has to be refreshed before the numbers mean anything:
 
   box score stats   nba_api, via update_daily
-  VORP              basketball-reference's advanced page, which is where
-                    production comes from
+  nba.com advanced  nba_api: TS%, USG% and the rest of what nba.com publishes
+  bref advanced     basketball-reference's advanced page, for the figures only
+                    bref has: VORP, BPM, PER and Win Shares. The model no longer
+                    needs it; VORP is priced alongside for comparison only.
   team splits       a traded player's season, one row per team: nba.com's game
                     logs (one request) for the box score and bref's per-team
                     rows for the rest, so a trade shows up the day after the
                     player's first game with his new team
-  team records      basketball-reference standings — not just for the /teams
-                    page, but because GAMES PLAYED SO FAR sets the availability
-                    denominator. Without it, a player who has started every game
-                    of a 20-game-old season looks 25% available against a full
-                    82-game workload.
+  team ratings      nba_api's game log: each team's offensive and defensive
+                    rating, which production starts from, and its MINUTES
+                    PLAYED SO FAR, overtime included, which set the
+                    availability denominator. Without them, a player who has
+                    started every game of a 20-game-old season looks 25%
+                    available against a full 82-game workload.
+  team records      nba_api's game log again: wins, losses, SRS, and once the
+                    playoffs start, who is in them and who won.
+  scoring splits    nba_api: how much of each player's scoring was assisted
+  tracking defense  nba_api: shots defended, deflections, contests and the
+                    other hustle counts the defensive model reads
+  production        recomputed for this season from all of the above
   on/off            nba.com's on-court and off-court team ratings, one request
                     per team (30 a day). Nothing in the model reads them yet;
                     kept current so the table is complete when something does.
@@ -43,6 +52,7 @@ import sys
 
 import bref
 from backfill_stats import current_season
+from db import to_season_label
 from revalidate import revalidate
 
 # Long enough to avoid re-fetching on repeated runs, short enough that a job run
@@ -58,9 +68,14 @@ def main():
     bref.MAX_CACHE_AGE = CACHE_HOURS * 3600
 
     import update_daily
+    import backfill_nba_advanced
     import backfill_advanced
     import backfill_team_splits
-    import backfill_teams
+    import backfill_team_ratings
+    import update_team_records
+    import backfill_scoring_splits
+    import backfill_tracking_defense
+    import compute_production
     import backfill_on_off
     import backfill_awards
     import backfill_future_salaries
@@ -70,6 +85,9 @@ def main():
     sys.argv = ["update_daily", season]
     update_daily.main()
 
+    print(f"\n=== advanced stats from nba.com: {season} ===")
+    backfill_nba_advanced.run([season])
+
     print(f"\n=== advanced stats from bref: {end_year} ===")
     sys.argv = ["backfill_advanced", str(end_year)]
     backfill_advanced.main()
@@ -78,9 +96,27 @@ def main():
     sys.argv = ["backfill_team_splits", str(end_year)]
     backfill_team_splits.main()
 
-    print(f"\n=== team records from bref: {end_year} ===")
-    sys.argv = ["backfill_teams", str(end_year)]
-    backfill_teams.main()
+    print(f"\n=== team ratings from nba.com: {season} ===")
+    sys.argv = ["backfill_team_ratings", season]
+    backfill_team_ratings.main()
+
+    print(f"\n=== team records from nba.com: {season} ===")
+    sys.argv = ["update_team_records", season]
+    update_team_records.main()
+
+    print(f"\n=== scoring splits from nba.com: {season} ===")
+    sys.argv = ["backfill_scoring_splits", season]
+    backfill_scoring_splits.main()
+
+    print(f"\n=== tracking defense from nba.com: {season} ===")
+    sys.argv = ["backfill_tracking_defense", season]
+    backfill_tracking_defense.main()
+
+    # After the ratings, splits and tracking it is built from, and before net
+    # values, which price it.
+    print(f"\n=== production: {to_season_label(season)} ===")
+    sys.argv = ["compute_production", to_season_label(season)]
+    compute_production.main()
 
     # After team records: which teams to request comes from team_seasons.
     print(f"\n=== on/off from nba.com: {season} ===")

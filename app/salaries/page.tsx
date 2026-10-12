@@ -412,6 +412,7 @@ export default async function SalariesPage({
         attached={waivedContracts}
         seasons={seasons}
         currentSeason={season}
+        liveSeason={currentCap?.season}
         teams={teams}
         currentTeam={team}
         currentPos={pos}

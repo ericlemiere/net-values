@@ -798,6 +798,11 @@ export const teamSeasonRatings = pgTable(
       .references(() => teams.id),
     season: text("season").notNull(),
     gp: integer("gp"),
+    /**
+     * Game minutes played, overtime included: 48 a game and 5 more for every
+     * extra period. What a player's availability is measured against.
+     */
+    minutes: numeric("minutes", { precision: 8, scale: 1, mode: "number" }),
     /** Possessions, estimated per game and summed — not minutes. */
     poss: numeric("poss", { precision: 10, scale: 1, mode: "number" }),
     pts: integer("pts"),

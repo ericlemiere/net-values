@@ -82,8 +82,11 @@ from db import connect
 FLOOR = 0.0
 
 # A full season's workload, against which availability is measured: a starter's
-# minutes per night, times the games in the season.
+# share of the minutes his own team played. 30 of a regulation game's 48, and
+# the same share of any overtime, so the figure follows the team's schedule to
+# date rather than the league's.
 STARTER_MINUTES = 30
+GAME_MINUTES = 48
 DEFAULT_GAMES = 82
 
 # How much of a contract is charged no matter how little the player appeared.
@@ -166,7 +169,14 @@ SALARY_FOR_SEASON = """
 # multi-team summary row with a NULL team for anyone who genuinely split a
 # season, so a non-NULL team there means "played for exactly this team" and a
 # NULL means "played for several".
-PLAYED_TEAM = "MAX(adv.team)"
+#
+# A player with no advanced row at all takes the team on his nba.com totals, so
+# a season in progress is filed correctly whether or not bref's page has caught
+# up. That row names his last team, which is where a traded season is filed too.
+PLAYED_TEAM = """
+    COALESCE(MAX(adv.team),
+             CASE WHEN NOT BOOL_OR(adv.player_id IS NOT NULL) THEN MAX(tot.team) END)
+"""
 
 # Where the stat line names no team, which is either a player who split the
 # season or one who never took the floor at all. Paid-the-most is only a guess,
@@ -188,14 +198,18 @@ def load(cur, season_filter):
                {SALARY_FOR_SEASON} AS salary,
                MAX(adv.vorp) AS vorp,
                MAX(pp.production) AS produced,
-               MAX(adv.mp) AS minutes,
-               BOOL_OR(adv.player_id IS NOT NULL) AS has_stats,
+               -- nba.com's count where there is one; bref's only for the
+               -- seasons before nba.com's totals begin.
+               COALESCE(MAX(tot.mp), MAX(adv.mp)) AS minutes,
+               BOOL_OR(adv.player_id IS NOT NULL OR tot.player_id IS NOT NULL) AS has_stats,
                MAX(se.league_cap) AS league_cap,
                BOOL_OR(s.source = 'sqlite_migration') AS legacy_salary
         FROM salaries s
         JOIN seasons se ON se.season = s.season
         LEFT JOIN advanced_stats adv
                ON adv.player_id = s.player_id AND adv.season = s.season
+        LEFT JOIN player_stats_totals tot
+               ON tot.player_id = s.player_id AND tot.season = s.season
         LEFT JOIN player_production pp
                ON pp.player_id = s.player_id AND pp.season = s.season
         WHERE s.salary > 0
@@ -214,6 +228,29 @@ def load_games(cur):
     """Games in each season, from the longest schedule any team played."""
     cur.execute("SELECT season, MAX(wins + losses) FROM team_seasons GROUP BY season")
     return {season: games for season, games in cur.fetchall() if games}
+
+
+def load_team_minutes(cur):
+    """{(season, team): (games, minutes)}: what each team has played.
+
+    Minutes are game minutes, overtime included, from the game log behind
+    team_season_ratings. Keyed by every abbreviation a franchise has gone by,
+    since a stat line can carry any of them.
+    """
+    cur.execute(
+        """
+        SELECT r.season, k.abbr, r.gp, r.minutes
+        FROM team_season_ratings r
+        JOIN (SELECT abbr, id FROM teams
+              UNION ALL
+              SELECT alias, team_id FROM team_aliases) k ON k.id = r.team_id
+        WHERE r.gp > 0
+        """
+    )
+    return {
+        (season, abbr): (gp, float(minutes) if minutes else gp * GAME_MINUTES)
+        for season, abbr, gp, minutes in cur.fetchall()
+    }
 
 
 def load_salary_rows(cur, season_filter):
@@ -349,6 +386,50 @@ def signing_team(player_id, season, teams, teams_by_season):
     return new[0] if len(new) == 1 and carried else None
 
 
+def starter_minutes(game_minutes):
+    """A starter's share of this many minutes of basketball."""
+    return game_minutes * STARTER_MINUTES / GAME_MINUTES
+
+
+def set_workloads(p, stints, team_minutes, season_games):
+    """Set the player's `full_workload`, and each stint's `workload`.
+
+    The workload is a starter's share of what HIS team played, so ten games
+    into a season a player is measured against his own team's ten games and
+    any overtime in them, not against whichever team has played the most.
+
+    A stint's workload covers the games that team played while he was on its
+    roster, and is what traded_shares divides his charge by. His season's is
+    not their sum: a roster window opens at his first game, so that would
+    forgive every game he missed before it. It is his teams' full workloads
+    averaged by how long he spent on each.
+
+    Where the team has no game log on file, it falls back to the season's
+    longest schedule at 48 minutes a game.
+    """
+    def per_game(team):
+        games, minutes = team_minutes.get((p["season"], team), (0, 0.0))
+        return minutes / games if games else GAME_MINUTES
+
+    for s in stints:
+        s["workload"] = (
+            starter_minutes(s["team_games"] * per_game(s["team"]))
+            if s["team_games"] else None
+        )
+
+    def team_workload(team):
+        games, minutes = team_minutes.get((p["season"], team), (0, 0.0))
+        return starter_minutes(minutes if games else season_games * GAME_MINUTES)
+
+    spans = [s["roster_days"] or s["gp"] or 0 for s in stints]
+    if len(stints) > 1 and sum(spans) > 0:
+        p["full_workload"] = sum(
+            span * team_workload(s["team"]) for s, span in zip(stints, spans)
+        ) / sum(spans)
+    else:
+        p["full_workload"] = team_workload(p["team"])
+
+
 def charged(availability):
     """The share of a contract charged at this availability. See AVAILABILITY_FLOOR."""
     return AVAILABILITY_FLOOR + (1.0 - AVAILABILITY_FLOOR) * availability
@@ -459,7 +540,7 @@ def traded_shares(p, rows, stints, production, expected, prod_key):
 
     CHARGE. The season's expectation is not recomputed, only divided: each
     team's part is weighted by what it paid times how available he was to it —
-    his minutes there against a starter's minutes over the games that team
+    his minutes there against a starter's share of the minutes that team
     played while he was on its roster.
 
     PRODUCTION. Each team is credited what he produced for it, from
@@ -490,8 +571,8 @@ def traded_shares(p, rows, stints, production, expected, prod_key):
 
     weights = []
     for s, salary in zip(stints, stint_salary):
-        if s["team_games"]:
-            availability = min(s["minutes"] / (s["team_games"] * STARTER_MINUTES), 1.0)
+        if s.get("workload"):
+            availability = min(s["minutes"] / s["workload"], 1.0)
         else:
             availability = p["availability"]
         weights.append(salary * charged(availability))
@@ -565,7 +646,8 @@ def price_metric(players, pool, prod_key, prefix):
     return price
 
 
-def compute(rows, games_by_season, salary_rows, teams_by_season, stints, last_played):
+def compute(rows, games_by_season, salary_rows, teams_by_season, stints, last_played,
+            team_minutes):
     """rows -> ([net_values row], [net_value_shares row]).
 
     One net_values row per player-season, and one share row per team that paid
@@ -659,18 +741,22 @@ def compute(rows, games_by_season, salary_rows, teams_by_season, stints, last_pl
         for rank, p in enumerate(sorted(players, key=lambda p: -p["salary"]), start=1):
             p["salary_rank"] = rank
 
-        # A full season's work: a starter playing STARTER_MINUTES a night, every
-        # game. Taken from the season's actual game count, so lockout and
-        # suspended seasons (1998-99, 2011-12, 2019-20) size themselves.
+        # A full season's work: a starter's share of every minute his team
+        # played. Taken from the team's own game log, so lockout and suspended
+        # seasons (1998-99, 2011-12, 2019-20) size themselves, and so does a
+        # season in progress, team by team.
         #
         # This used to be the 95th percentile of the season's minutes, which was
         # worse in two ways: it moved with how many fringe players happened to
         # get paid that year rather than with anything about basketball, and
         # "the 25th busiest player in the league" is not a thing anyone can
         # picture. Rankings are almost identical either way.
-        full_workload = games_by_season.get(season, DEFAULT_GAMES) * STARTER_MINUTES
+        season_games = games_by_season.get(season, DEFAULT_GAMES)
         for p in players:
-            p["availability"] = min(p["minutes"] / full_workload, 1.0)
+            set_workloads(
+                p, stints.get((p["player_id"], season), []), team_minutes, season_games
+            )
+            p["availability"] = min(p["minutes"] / p["full_workload"], 1.0)
 
         price = price_metric(players, pool, "production", "")
         price_metric(players, pool, "production_vorp", "vorp_")
@@ -694,7 +780,7 @@ def compute(rows, games_by_season, salary_rows, teams_by_season, stints, last_pl
                     p["player_id"], season, p["team"], p["salary"],
                     figure(p, "production", 3) if price is not None else None,
                     round(p["minutes"], 1),
-                    round(full_workload, 1) if price is not None else None,
+                    round(p["full_workload"], 1) if price is not None else None,
                     round(p["availability"], 3) if price is not None else None,
                     figure(p, "expected", 3),
                     figure(p, "score", 2),
@@ -713,9 +799,11 @@ def compute(rows, games_by_season, salary_rows, teams_by_season, stints, last_pl
             emit_shares(p)
 
         if price is not None:
+            workloads = [p["full_workload"] for p in players]
             print(
                 f"  {season}: {len(players):4} players, "
-                f"${price:,.0f} per win, full workload {full_workload:,.0f} min"
+                f"${price:,.0f} per win, full workload "
+                f"{min(workloads):,.0f}-{max(workloads):,.0f} min"
             )
     return out, shares
 
@@ -732,6 +820,7 @@ def main():
         load_teams_by_season(cur),
         load_stints(cur, season_filter),
         load_last_played(cur),
+        load_team_minutes(cur),
     )
     # Cheap guard: a column added to COLUMNS without updating every branch that
     # builds a row would otherwise fail deep inside the insert.

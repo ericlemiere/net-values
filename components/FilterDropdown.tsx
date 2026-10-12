@@ -5,6 +5,17 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 interface DropdownOption {
   value: string;
   label: string;
+  /** Set after the label in muted text, e.g. "(current)". */
+  note?: string;
+}
+
+function OptionLabel({ option }: { option: DropdownOption }) {
+  return (
+    <>
+      {option.label}
+      {option.note && <span className="opacity-60"> {option.note}</span>}
+    </>
+  );
 }
 
 export function FilterDropdown({
@@ -63,7 +74,9 @@ export function FilterDropdown({
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
       >
-        <span className="truncate">{selected?.label ?? value}</span>
+        <span className="truncate">
+          {selected ? <OptionLabel option={selected} /> : value}
+        </span>
         <svg
           viewBox="0 0 20 20"
           aria-hidden="true"
@@ -103,7 +116,7 @@ export function FilterDropdown({
                     if (!active) onChange(option.value);
                   }}
                 >
-                  {option.label}
+                  <OptionLabel option={option} />
                 </button>
               </li>
             );

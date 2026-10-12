@@ -7,6 +7,7 @@ export function SeasonFilter({
   basePath,
   seasons,
   currentSeason,
+  liveSeason,
   currentTeam,
   currentPos,
   sort,
@@ -16,6 +17,8 @@ export function SeasonFilter({
   basePath: string;
   seasons: string[];
   currentSeason: string;
+  /** The season being played now, marked as such in the list. */
+  liveSeason?: string;
   currentTeam: string;
   currentPos: string;
   sort: string;
@@ -26,7 +29,11 @@ export function SeasonFilter({
 
   const options = [
     { value: "ALL", label: "All seasons" },
-    ...seasons.map((s) => ({ value: s, label: s })),
+    ...seasons.map((s) => ({
+      value: s,
+      label: s,
+      note: s === liveSeason ? "(current)" : undefined,
+    })),
   ];
 
   return (

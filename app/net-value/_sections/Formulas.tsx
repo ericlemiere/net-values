@@ -103,8 +103,8 @@ export function FullFormula() {
           note="His total minutes on the floor that season."
         />
         <Def
-          name="Games in the Season"
-          note="Games on each team's schedule that season: 82 normally, fewer in lockout and shortened seasons."
+          name="Team Minutes"
+          note="Every minute his team played that season: 48 a game, plus 5 for each overtime. For a season in progress, the minutes played so far."
         />
         <Def
           name="Number of Players"
@@ -130,10 +130,11 @@ export function FullFormula() {
         </Def>
         <Def
           name="Full-Season Minutes"
-          note="A starter playing 30 minutes a night in every game on that season's schedule."
+          note="A starter's share of his team's season: 30 of every 48 minutes it played."
         >
-          30<Op>×</Op>
-          <V>Games in the Season</V>
+          <V>Team Minutes</V>
+          <Op>×</Op>
+          <Frac num="30" den="48" />
         </Def>
         <Def
           name="Availability"

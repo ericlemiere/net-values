@@ -29,6 +29,10 @@ import {
   getTeamIdentities,
   getTeamContracts,
   getTeamPayroll,
+  getCurrentCap,
+  getFutureSalaries,
+  getFutureSalarySeasons,
+  type FutureSalaryRow,
   type TeamRosterRow,
   type TeamNetValue,
 } from "@/lib/db/queries";
@@ -193,21 +197,61 @@ function historyColumnsFor(
   ];
 }
 
+/** A roster row, or a contract year in a season still to come (see futureRow). */
+type RosterRow = Omit<TeamRosterRow, "playerId"> & {
+  /** Null for a player with no page yet, almost always a rookie. */
+  playerId: number | null;
+  option?: "player" | "team" | null;
+};
+
+/**
+ * A future season's contract as a row of the roster. There is no Net Value
+ * and no stat line for a season that hasn't been played.
+ */
+function futureRow(f: FutureSalaryRow): RosterRow {
+  return {
+    id: f.id,
+    playerId: f.playerId,
+    name: f.name,
+    season: f.season,
+    salary: f.salary,
+    pctOfTeamCap: f.pctOfTeamCap,
+    pctOfLeagueCap: f.pctOfLeagueCap,
+    netValueShare: null,
+    playedHere: null,
+    gp: null,
+    mp: null,
+    pts: null,
+    reb: null,
+    ast: null,
+    option: f.option,
+  };
+}
+
 function rosterColumns(
   showSeason: boolean,
   awards: Map<string, Award[]>,
-): ColumnDef<TeamRosterRow>[] {
+  future: boolean,
+): ColumnDef<RosterRow>[] {
   return [
     {
       key: "name",
       label: "Player",
       render: (r) => (
         <span className="flex items-center gap-2 whitespace-nowrap">
-          <PlayerLink
-            id={r.playerId}
-            name={r.name}
-            awards={awards.get(awardKey(r.playerId, r.season))}
-          />
+          {r.playerId === null ? (
+            // No player page yet: almost always a rookie before his first game.
+            <span title="No games on file yet, so no player page.">
+              {r.name}
+            </span>
+          ) : (
+            <PlayerLink
+              id={r.playerId}
+              name={r.name}
+              awards={awards.get(awardKey(r.playerId, r.season))}
+            />
+          )}
+          {r.option && <OptionChip option={r.option} />}
           {/* Money owed to somebody who played the season somewhere else. The
               stat columns on this row are his, but they were earned for
               another team, so the row says whose money it was rather than
@@ -228,7 +272,7 @@ function rosterColumns(
           {
             key: "season",
             label: "Season",
-            render: (r: TeamRosterRow) => (
+            render: (r: RosterRow) => (
               <span className="font-mono text-[0.8125rem] tabular-nums">
                 <SeasonLink season={r.season} />
               </span>
@@ -254,6 +298,14 @@ function rosterColumns(
       align: "right",
       render: (r) => formatPercent(r.pctOfLeagueCap),
     },
+    // Nothing has been played yet in a future season, so the columns that
+    // need games drop out rather than run as a wall of dashes.
+    ...(future ? [] : playedColumns()),
+  ];
+}
+
+function playedColumns(): ColumnDef<RosterRow>[] {
+  return [
     {
       key: "netValueShare",
       label: "Net Value",
@@ -312,20 +364,27 @@ function rosterColumns(
 async function RosterTable({
   rosterPromise,
   rosterSeason,
+  future,
 }: {
-  rosterPromise: Promise<TeamRosterRow[]>;
+  rosterPromise: Promise<RosterRow[]>;
   rosterSeason: string;
+  future: boolean;
 }) {
   const roster = await rosterPromise;
-  const rosterAwards = await getAwardsForRows(roster);
+  // Badges are for seasons played. A future season has none to show.
+  const rosterAwards = future
+    ? new Map<string, Award[]>()
+    : await getAwardsForRows(roster as TeamRosterRow[]);
   return (
     <SimpleTable
       subtitle={
-        rosterSeason === "ALL"
-          ? `Everyone this team paid, ${roster.length} player-seasons.`
-          : `${roster.length} players paid in ${rosterSeason}.`
+        future
+          ? `${roster.length} players under contract for ${rosterSeason}. Shares are of the payroll committed so far and the projected cap.`
+          : rosterSeason === "ALL"
+            ? `Everyone this team paid, ${roster.length} player-seasons.`
+            : `${roster.length} players paid in ${rosterSeason}.`
       }
-      columns={rosterColumns(rosterSeason === "ALL", rosterAwards)}
+      columns={rosterColumns(rosterSeason === "ALL", rosterAwards, future)}
       rows={roster}
       rowKey={(r) => r.id}
       emptyMessage="No salary data for this team and season."
@@ -516,15 +575,28 @@ export default async function TeamPage({
   const team = await getTeamByAbbr(abbr);
   if (!team) notFound();
 
-  const [rawHistory, rosterSeasons, teamNetValues, identities, contracts] =
-    await Promise.all([
-      getTeamHistory(team.id),
-      getTeamRosterSeasons(team.abbr),
-      getTeamNetValues(team.abbr),
-      getTeamIdentities(team.id),
-      getTeamContracts(team.abbr),
-    ]);
+  const [
+    rawHistory,
+    paidSeasons,
+    teamNetValues,
+    identities,
+    contracts,
+    openSeasons,
+    currentCap,
+  ] = await Promise.all([
+    getTeamHistory(team.id),
+    getTeamRosterSeasons(team.abbr),
+    getTeamNetValues(team.abbr),
+    getTeamIdentities(team.id),
+    getTeamContracts(team.abbr),
+    getFutureSalarySeasons(),
+    getCurrentCap(),
+  ]);
   const grid = contractsGrid(contracts);
+  // Seasons still to come that this team has somebody signed for. Newest
+  // first like the rest, so they head the dropdown.
+  const futureSeasons = openSeasons.filter((s) => grid.seasons.includes(s));
+  const rosterSeasons = [...futureSeasons, ...paidSeasons];
   // Only the names it no longer uses; the current one is the heading.
   const formerNames = identities.filter((i) => i.lastSeason !== null);
   const netValueBySeason = new Map(teamNetValues.map((n) => [n.season, n]));
@@ -538,16 +610,30 @@ export default async function TeamPage({
   const rosterSeason =
     sp.roster && (sp.roster === "ALL" || rosterSeasons.includes(sp.roster))
       ? sp.roster
-      : (rosterSeasons[0] ?? "ALL");
+      : // The landing view stays on the latest season paid, not the newest listed.
+        (paidSeasons[0] ?? "ALL");
+  const isFuture = futureSeasons.includes(rosterSeason);
   // Deliberately not awaited. Handing the promise to a child inside Suspense
   // lets the rest of the page render and reach the browser while this query is
   // still running, so changing the season restreams the roster alone instead
   // of holding up everything above it.
-  const rosterPromise = getTeamRoster(team.abbr, rosterSeason);
+  const rosterPromise: Promise<RosterRow[]> = isFuture
+    ? getFutureSalaries({
+        season: rosterSeason,
+        team: team.abbr,
+        pos: "ALL",
+        sort: "salary",
+        dir: "desc",
+        page: 1,
+      }).then((r) => r.rows.map(futureRow))
+    : getTeamRoster(team.abbr, rosterSeason);
 
   // The payroll beside the Roster heading: that season's, the same
-  // team_payrolls figure as the history table. None for "ALL".
-  const rosterPayroll = await getTeamPayroll(team.abbr, rosterSeason);
+  // team_payrolls figure as the history table. None for "ALL". A future
+  // season has only what is committed so far, the contracts grid's own sum.
+  const rosterPayroll = isFuture
+    ? (grid.committed.years.get(rosterSeason)?.salary ?? null)
+    : await getTeamPayroll(team.abbr, rosterSeason);
 
   const titles = history.filter((h) => h.champion);
   // Only finished seasons: the one in progress has no playoff result yet.
@@ -645,7 +731,7 @@ export default async function TeamPage({
           {rosterPayroll !== null && (
             <div className="inline-flex items-baseline gap-2 rounded-lg border-2 border-accent bg-background px-3 py-1">
               <span className="text-sm text-white/60">
-                {rosterSeason} Payroll
+                {rosterSeason} {isFuture ? "Committed" : "Payroll"}
               </span>
               <span className="font-mono font-semibold tabular-nums text-accent">
                 {formatCurrency(rosterPayroll)}
@@ -657,6 +743,7 @@ export default async function TeamPage({
           abbr={team.abbr}
           seasons={rosterSeasons}
           currentSeason={rosterSeason}
+          liveSeason={currentCap?.season}
         />
       </div>
       <TableOverlay>
@@ -664,6 +751,7 @@ export default async function TeamPage({
           <RosterTable
             rosterPromise={rosterPromise}
             rosterSeason={rosterSeason}
+            future={isFuture}
           />
         </Suspense>
       </TableOverlay>

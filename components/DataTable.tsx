@@ -59,7 +59,12 @@ export function alignClass(align?: ColumnAlign) {
  * behavior that was being reached for.
  */
 export const SHEET =
-  "sheet-scrollbar w-full max-w-full overflow-x-auto overscroll-x-contain rounded-lg border-2 border-accent bg-surface";
+  // `relative` is load-bearing: it makes the sheet the containing block for
+  // anything absolutely positioned inside it, such as the screen-reader text
+  // between a traded player's teams. Without it those escape the sheet's clipping and sit
+  // where their row would be if the sheet didn't scroll, which stretched the
+  // page thousands of pixels past the footer.
+  "sheet-scrollbar relative w-full max-w-full overflow-x-auto overscroll-x-contain rounded-lg border-2 border-accent bg-surface";
 
 /** Header cells sit on the sheet and are separated from it by an accent rule. */
 export const SHEET_HEAD = "bg-surface border-b-2 border-accent";
@@ -128,6 +133,8 @@ interface DataTableProps<Row> {
   rowKey: (row: Row) => string | number;
   seasons: string[];
   currentSeason: string;
+  /** The season being played now, as opposed to the one selected. Marked in the season filter. */
+  liveSeason?: string;
   teams: TeamOption[];
   currentTeam: string;
   currentPos: string;
@@ -166,6 +173,7 @@ export function DataTable<Row>({
   rowKey,
   seasons,
   currentSeason,
+  liveSeason,
   teams,
   currentTeam,
   currentPos,
@@ -211,6 +219,7 @@ export function DataTable<Row>({
             basePath={basePath}
             seasons={seasons}
             currentSeason={currentSeason}
+            liveSeason={liveSeason}
             currentTeam={currentTeam}
             currentPos={currentPos}
             sort={sort}

@@ -810,6 +810,10 @@ def main():
     conn.close()
 
     seasons = sorted({r[1] for r in rows})
+    if not seasons:
+        # A season with no games yet: nothing to rate, so nothing to write.
+        print("wrote 0 player-seasons (no games played yet)")
+        return
     print(f"wrote {len(rows)} player-seasons, {seasons[0]} .. {seasons[-1]}")
 
 

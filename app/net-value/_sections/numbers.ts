@@ -94,7 +94,8 @@ export function workedExample(hero: NetValueExample, pricing: Pricing) {
     fullSeasonClaim,
     baseBought,
     seasonAdjustment: hero.expectedProduction - baseBought,
-    gamesInSeason: Math.round(hero.fullWorkload / 30),
+    // Full-Season Minutes are stored; his team's minutes are that undone.
+    teamMinutes: Math.round((hero.fullWorkload * 48) / 30),
     winsAboveCost: Math.round(hero.netValueScore * WIN_FIT.winsPerNvp),
   };
 }

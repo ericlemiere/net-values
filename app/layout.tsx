@@ -37,6 +37,8 @@ export const metadata: Metadata = {
     "overpaid",
     "underpaid",
     "salary cap",
+    "NBA awards",
+    "NBA stats",
   ],
   openGraph: {
     siteName: SITE_NAME,

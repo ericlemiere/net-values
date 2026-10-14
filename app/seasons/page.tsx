@@ -74,14 +74,10 @@ const BALLOT_ORDER: AwardCode[] = [
   ...VOTED.filter((c) => c !== "mvp" && c !== "roy" && c !== "dpoy"),
 ];
 
-/** The squads. Ordered by standing rather than by the scarcity `rank` used for
- *  badges — All-Rookie belongs beside the other teams, and All-Star last. */
-const SQUADS: AwardCode[] = [
-  "all_nba",
-  "all_defense",
-  "all_rookie",
-  "all_star",
-];
+/** The selected teams. Ordered by standing rather than by the scarcity `rank`
+ *  used for badges — All-Rookie belongs beside the other teams. All-Star isn't
+ *  here: it's a roster rather than a team, and closes the page on its own. */
+const SQUADS: AwardCode[] = ["all_nba", "all_defense", "all_rookie"];
 
 /**
  * A band heading.
@@ -114,25 +110,17 @@ function Band({
     <section
       id={id}
       className={`min-w-0 scroll-mt-20 ${
-        rule ? "border-t-2 border-accent pt-5" : ""
+        rule ? "border-t border-accent/50 pt-8" : ""
       }`}
     >
-      <div className="mb-4">
-        <h2 className="text-lg font-semibold tracking-tight">
-          {href ? (
-            <Link
-              href={href}
-              className="transition-colors hover:text-accent underline underline-offset-2"
-            >
-              {title}
-            </Link>
-          ) : (
-            title
-          )}
+      <div className="mb-5">
+        {/* Louder than the table titles under it, so a long page reads as a
+            handful of parts: big, heavy, set in capitals, and keyed to the
+            rule above by a short accent bar. */}
+        <h2 className="flex items-center gap-3 text-2xl font-bold uppercase tracking-tight md:text-3xl">
+          {title}
         </h2>
-        {caption && (
-          <div className="mt-0.5 text-sm text-white/55">{caption}</div>
-        )}
+        {caption && <div className="mt-1 text-sm text-white/55">{caption}</div>}
       </div>
       {children}
     </section>
@@ -194,7 +182,7 @@ function SummaryPanel({
             <div key={code} className="min-w-0 mt-4 md:mt-1">
               <Link
                 href={AWARDS[code].path ?? `#${anchorId(code)}`}
-                className="text-xs font-medium uppercase tracking-wide text-accent/80 transition-colors hover:text-accent"
+                className="text-xs font-medium uppercase tracking-wide text-accent/80 underline underline-offset-2 transition-colors hover:text-accent"
               >
                 {AWARDS[code].full}
               </Link>
@@ -257,24 +245,56 @@ const BALLOT_NV_RANK: GlossaryEntry = {
   ...GLOSSARY.netValueRank,
 };
 
-/** A voted award's finishing order. The vote tallies live in the database but
- *  aren't shown — what the page is for is who won and what he was worth. */
-function Ballot({ rows }: { rows: AwardBallotRow[] }) {
+/**
+ * The table every award on the page is shown in: a voted award's finishing
+ * order, one tier of a selected team, or the All-Star roster. The vote tallies
+ * live in the database but aren't shown — what the page is for is who was
+ * honored and what he was worth.
+ *
+ * `ranked` adds the finishing-place column, which only a ballot has.
+ */
+function AwardTable({
+  rows,
+  ranked = false,
+  title,
+}: {
+  rows: AwardBallotRow[];
+  ranked?: boolean;
+  title?: React.ReactNode;
+}) {
   return (
     // Five columns don't need the whole page. Capped so the table reads as a
     // block of related numbers rather than a row of figures marooned at either
     // edge of a wide monitor.
     <div className="w-full max-w-2xl">
-      <div className="mb-2 flex justify-end">
+      <div className="mb-2 flex items-end justify-between gap-3">
+        {title ? (
+          <h3 className="font-semibold tracking-tight">{title}</h3>
+        ) : (
+          <span />
+        )}
         <GlossaryButton entries={[BALLOT_NET_VALUE, BALLOT_NV_RANK]} />
       </div>
-      <div className="sheet-scrollbar w-full overflow-x-auto overscroll-x-contain rounded-lg border-2 border-accent bg-surface">
+      {/* A ballot runs to twenty-odd names in a close year, so it stops at
+          eleven rows and scrolls under its header rather than pushing the
+          rest of the page down. 24.5rem is the header, eleven rows, and the
+          frame. */}
+      <div
+        className={`sheet-scrollbar w-full overflow-x-auto overscroll-x-contain rounded-lg border-2 border-accent bg-surface ${
+          ranked ? "max-h-98 overflow-y-auto overscroll-y-contain" : ""
+        }`}
+      >
         <table className="w-max min-w-full text-sm text-black">
-          <thead className="bg-surface border-b-2 border-accent">
+          {/* The rule is a shadow, not a border: in a collapsed table the
+              border belongs to the table and would scroll away from a sticky
+              header. */}
+          <thead className="sticky top-0 z-10 bg-surface shadow-[inset_0_-2px_0_var(--color-accent)]">
             <tr>
-              <th className="px-3 py-2 text-right font-medium text-black/40">
-                #
-              </th>
+              {ranked && (
+                <th className="px-3 py-2 text-right font-medium text-black/40">
+                  #
+                </th>
+              )}
               <th className="px-3 py-2 text-left font-medium">Player</th>
               <th className="px-3 py-2 text-left font-medium">Team</th>
               <th
@@ -297,13 +317,16 @@ function Ballot({ rows }: { rows: AwardBallotRow[] }) {
                 key={r.playerId}
                 className={`${i % 2 === 0 ? "bg-surface" : "bg-surface-alt"} hover:bg-surface-hover transition-colors`}
               >
-                <td className="px-3 py-1.5 text-right font-mono text-[0.8125rem] tabular-nums text-black/40">
-                  {r.rank ?? "—"}
-                </td>
+                {ranked && (
+                  <td className="px-3 py-1.5 text-right font-mono text-[0.8125rem] tabular-nums text-black/40">
+                    {r.rank ?? "—"}
+                  </td>
+                )}
                 <td className="whitespace-nowrap px-3 py-1.5">
-                  {/* The winner is named above the table already, so the weight
-                    here is what tells a shared award from a clear one. */}
-                  <span className={r.won ? "font-semibold" : ""}>
+                  {/* On a ballot the winner is named above the table already,
+                    so the weight is what tells a shared award from a clear
+                    one. Everyone on a selected team won, so none is bold. */}
+                  <span className={ranked && r.won ? "font-semibold" : ""}>
                     <PlayerLink id={r.playerId} name={r.name} />
                   </span>
                 </td>
@@ -324,54 +347,23 @@ function Ballot({ rows }: { rows: AwardBallotRow[] }) {
   );
 }
 
-/** One selected player, as a chip. `award-chip` is what lights the links up. */
-function PlayerChip({ row }: { row: AwardBallotRow }) {
-  return (
-    <span className="award-chip inline-flex items-center gap-2 rounded-md border border-white/15 bg-background-box px-3 py-1.5 text-sm">
-      <PlayerLink id={row.playerId} name={row.name} />
-      {row.team && (
-        <span className="font-mono text-xs text-white/40">
-          <TeamLink abbr={row.team} label={row.teamLabel} />
-        </span>
-      )}
-    </span>
-  );
-}
-
-/** A tiered award: three teams of five, or however many a tie produced. */
-function Teams({ rows }: { rows: AwardBallotRow[] }) {
+/** A tiered award: two or three teams of five, or however many a tie
+ *  produced, side by side so the drop from team to team reads across the row. */
+function Teams({ rows, columns }: { rows: AwardBallotRow[]; columns: 2 | 3 }) {
   const tiers = [...new Set(rows.map((r) => r.teamNumber))].sort(
     (a, b) => (a ?? 0) - (b ?? 0),
   );
   return (
-    <div className="flex flex-col gap-3">
+    <div
+      className={`grid min-w-0 gap-8 ${columns === 3 ? "lg:grid-cols-3" : "lg:grid-cols-2"}`}
+    >
       {tiers.map((tier) => (
-        <div key={tier ?? "none"}>
-          <div className="mb-1.5 text-xs font-medium uppercase tracking-wide text-white/40">
-            {teamOrdinal(tier) || "Selected"} Team
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {rows
-              .filter((r) => r.teamNumber === tier)
-              .map((r) => (
-                <PlayerChip key={r.playerId} row={r} />
-              ))}
-          </div>
-        </div>
+        <AwardTable
+          key={tier ?? "none"}
+          title={`${teamOrdinal(tier) || "Selected"} Team`}
+          rows={rows.filter((r) => r.teamNumber === tier)}
+        />
       ))}
-    </div>
-  );
-}
-
-/** All-Star: no tiers and no ballot, just who was selected. */
-function Selections({ rows }: { rows: AwardBallotRow[] }) {
-  return (
-    <div className="flex flex-wrap gap-2">
-      {[...rows]
-        .sort((a, b) => a.name.localeCompare(b.name))
-        .map((r) => (
-          <PlayerChip key={r.playerId} row={r} />
-        ))}
     </div>
   );
 }
@@ -416,7 +408,7 @@ function netValueColumns(): ColumnDef<SeasonNetValueRow>[] {
   ];
 }
 
-/** A squad's block: the numbered teams, or a flat list for All-Star. */
+/** A squad's block: a table per numbered team. */
 function SquadBand({
   code,
   rows,
@@ -424,23 +416,56 @@ function SquadBand({
   code: AwardCode;
   rows: AwardBallotRow[];
 }) {
-  const winners = rows.filter((r) => r.won);
-  const tiers = new Set(winners.map((r) => r.teamNumber)).size;
+  return (
+    <Band id={anchorId(code)} title={fullLabel(code, null)}>
+      {/* Only All-NBA has a third team; the others take the page in halves,
+          like the rest of its tables. */}
+      <Teams
+        rows={rows.filter((r) => r.won)}
+        columns={code === "all_nba" ? 3 : 2}
+      />
+    </Band>
+  );
+}
+
+/**
+ * All-Star, as two tables. Through 2017, and again in 2024, the game was East
+ * against West and so was the selection, so the tables are the two
+ * conferences. Every other year — captains' drafts, the four-team tournament —
+ * there's no side worth showing, so it's the roster alphabetically, split in
+ * half. A season where any one player's side is unknown is treated the same
+ * way rather than shown with a hole in it.
+ */
+function AllStarBand({ rows }: { rows: AwardBallotRow[] }) {
+  const sorted = rows
+    .filter((r) => r.won)
+    .sort((a, b) => a.name.localeCompare(b.name));
+  const byConference = sorted.every((r) => r.conference);
+  const half = Math.ceil(sorted.length / 2);
+  const tables: { title?: string; rows: AwardBallotRow[] }[] = byConference
+    ? [
+        { title: "East", rows: sorted.filter((r) => r.conference === "East") },
+        { title: "West", rows: sorted.filter((r) => r.conference === "West") },
+      ]
+    : [{ rows: sorted.slice(0, half) }, { rows: sorted.slice(half) }];
+
   return (
     <Band
-      id={anchorId(code)}
-      title={fullLabel(code, null)}
+      id={anchorId("all_star")}
+      title={fullLabel("all_star", null)}
       caption={
-        code === "all_star"
-          ? `${winners.length} selected`
-          : `${winners.length} selected across ${tiers} teams`
+        byConference
+          ? undefined
+          : sorted.some((r) => r.conference)
+            ? "Listed alphabetically, since not every player's conference is known for this season."
+            : "Listed alphabetically, since this season's game wasn't East vs. West."
       }
     >
-      {code === "all_star" ? (
-        <Selections rows={rows} />
-      ) : (
-        <Teams rows={winners} />
-      )}
+      <div className="grid min-w-0 gap-8 lg:grid-cols-2">
+        {tables.map((t, i) => (
+          <AwardTable key={t.title ?? i} title={t.title} rows={t.rows} />
+        ))}
+      </div>
     </Band>
   );
 }
@@ -514,21 +539,27 @@ export default async function SeasonsPage({
                     id={anchorId(code)}
                     className="min-w-0 scroll-mt-20"
                   >
-                    <h3 className="mb-4 font-semibold tracking-tight">
-                      <Link
-                        href={AWARDS[code].path!}
-                        className="transition-colors hover:text-accent underline underline-offset-3 underline-decoration-0.25 hover:underline-offset-4"
-                      >
-                        {fullLabel(code, null)}
-                      </Link>
-                    </h3>
-
-                    <Ballot rows={byAward.get(code)!} />
+                    <AwardTable
+                      rows={byAward.get(code)!}
+                      ranked
+                      title={
+                        <Link
+                          href={AWARDS[code].path!}
+                          className="transition-colors hover:text-accent underline underline-offset-3 underline-decoration-0.25 hover:underline-offset-4"
+                        >
+                          {fullLabel(code, null)}
+                        </Link>
+                      }
+                    />
                   </section>
                 ))}
               </div>
             </Band>
           )}
+
+          {byAward.get("all_star")?.length ? (
+            <AllStarBand rows={byAward.get("all_star")!} />
+          ) : null}
         </div>
       </TableOverlay>
     </div>

@@ -756,6 +756,12 @@ export const playerAwards = pgTable(
       mode: "number",
     }),
     votesFirst: integer("votes_first"),
+    /**
+     * All-Star only: "East" or "West", the side he was picked for. Null in the
+     * years the game wasn't East against West (captains' drafts since 2018,
+     * except 2024) and on every other award.
+     */
+    conference: varchar("conference", { length: 4 }),
     source: varchar("source", { length: 20 }).notNull(),
   },
   (t) => [

@@ -2614,6 +2614,8 @@ export interface AwardBallotRow {
   /** His Net Value that season, and where it placed him in the league. */
   netValueScore: number | null;
   seasonRank: number | null;
+  /** All-Star only: "East" or "West" in the years the game was played that way. */
+  conference: string | null;
 }
 
 /**
@@ -2643,6 +2645,7 @@ const seasonAwardEntries = cached("seasonAwardEntries", async function seasonAwa
       rank: playerAwards.rank,
       netValueScore: sql<number | null>`${netValues.netValueScore}::float8`,
       seasonRank: netValues.seasonRank,
+      conference: playerAwards.conference,
     })
     .from(playerAwards)
     .innerJoin(players, eq(players.id, playerAwards.playerId))
@@ -2682,6 +2685,7 @@ const seasonAwardEntries = cached("seasonAwardEntries", async function seasonAwa
       rank: r.rank,
       netValueScore: r.netValueScore,
       seasonRank: r.seasonRank,
+      conference: r.conference,
     });
     byAward.set(code, list);
   }

@@ -16,6 +16,10 @@ Two sources, because neither has all of it:
       join is exact too. It is also right about 1998-99, when the lockout meant
       there was no game and so no selections.
 
+All-Star conference comes from bref's box score too, in the years its rosters
+are named East and West. A player scratched from the game takes the side of an
+All-Star teammate from the same team, the only way he'd have been picked.
+
 Runners-up are kept, with `won` false. A losing ballot line is what lets the
 awards page show a result instead of a name, and it is nearly free — a whole
 season of ballots is a few dozen rows.
@@ -247,6 +251,7 @@ def backfill_allstar_bref(cur, start, end, index, unmatched, methods):
 
         n = 0
         for roster in rosters:
+            conference = roster if roster in ("East", "West") else None
             for row in bref.parse_table(html, roster):
                 pid = resolve(row, season, index, unmatched, methods, "all_star")
                 if pid is None:
@@ -256,10 +261,82 @@ def backfill_allstar_bref(cur, start, end, index, unmatched, methods):
                     "share": None, "points_won": None, "points_max": None,
                     "votes_first": None, "source": "bref",
                 })
+                # Not one of COLUMNS, so the nba.com pass, which knows nothing
+                # of sides, can't blank it when it upserts the same row.
+                cur.execute(
+                    "UPDATE player_awards SET conference = %s "
+                    "WHERE player_id = %s AND season = %s AND award = 'all_star'",
+                    (conference, pid, season),
+                )
                 n += 1
         print(f"=== All-Star {season}: {n} played")
         written += n
     return written
+
+
+def fill_allstar_conferences(cur, start, end):
+    """Give a scratched All-Star the side of a teammate who played.
+
+    Only in seasons the box score split East and West, which is when any of
+    that season's All-Stars already has a conference. Team is the season's
+    team from advanced_stats; a traded player has none there and stays null,
+    which leaves his season unsplit on the page.
+    """
+    first, last = bref.season_label(start), bref.season_label(end)
+    cur.execute(
+        """
+        UPDATE player_awards pa SET conference = src.conference
+        FROM advanced_stats a,
+          LATERAL (
+            SELECT max(o.conference) AS conference
+            FROM player_awards o
+            JOIN advanced_stats oa
+              ON oa.player_id = o.player_id AND oa.season = o.season
+            WHERE o.award = 'all_star' AND o.season = a.season
+              AND o.conference IS NOT NULL AND oa.team = a.team
+          ) src
+        WHERE pa.award = 'all_star' AND pa.conference IS NULL
+          AND pa.season BETWEEN %s AND %s
+          AND a.player_id = pa.player_id AND a.season = pa.season
+          AND a.team IS NOT NULL AND src.conference IS NOT NULL
+        """,
+        (first, last),
+    )
+    n = cur.rowcount
+
+    # Scratched with no teammate in the game: the side his team took in the
+    # nearest season that had one, within three years. Conferences hardly
+    # move, and the window keeps a realignment (New Orleans, 2004) from
+    # reaching across.
+    cur.execute(
+        """
+        UPDATE player_awards pa SET conference = src.conference
+        FROM advanced_stats a,
+          LATERAL (
+            SELECT o.conference
+            FROM player_awards o
+            JOIN advanced_stats oa
+              ON oa.player_id = o.player_id AND oa.season = o.season
+            WHERE o.award = 'all_star' AND o.conference IS NOT NULL
+              AND oa.team = a.team
+              AND abs(left(o.season, 4)::int - left(a.season, 4)::int) <= 3
+            ORDER BY abs(left(o.season, 4)::int - left(a.season, 4)::int)
+            LIMIT 1
+          ) src
+        WHERE pa.award = 'all_star' AND pa.conference IS NULL
+          AND pa.season BETWEEN %s AND %s
+          AND a.player_id = pa.player_id AND a.season = pa.season
+          AND a.team IS NOT NULL
+          AND EXISTS (
+            SELECT 1 FROM player_awards s
+            WHERE s.award = 'all_star' AND s.season = pa.season
+              AND s.conference IS NOT NULL
+          )
+        """,
+        (first, last),
+    )
+    n += cur.rowcount
+    print(f"=== All-Star: {n} scratched players given a conference")
 
 
 def backfill_allstar(cur, start, end, index):
@@ -354,6 +431,8 @@ def main():
         if not skip_nba:
             total += backfill_allstar(cur, start, end, index)
             conn.commit()
+        fill_allstar_conferences(cur, start, end)
+        conn.commit()
 
     cur.close()
     conn.close()

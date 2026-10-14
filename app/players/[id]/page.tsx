@@ -8,6 +8,7 @@ import { SimpleTable } from "@/components/SimpleTable";
 import { SectionHeading } from "@/components/SectionHeading";
 import { OptionChip } from "@/components/OptionChip";
 import { CompsTable } from "@/components/CompsTable";
+import { SalaryAnchorFilter } from "@/components/SalaryAnchorFilter";
 import type { ColumnDef } from "@/components/DataTable";
 import { nbaAdvancedColumns } from "@/app/stats/columns";
 import {
@@ -670,7 +671,15 @@ function getSalariesColumns(
             {currentCap && r.season > currentCap.season ? (
               // A season that hasn't started has no page of its own, so the
               // season anchors the comps instead, like the rest of the row.
-              <Link href={`?salary=${r.id}`}>{r.season}</Link>
+              <Link
+                href={`?salary=${r.id}`}
+                scroll={false}
+                // Off on a phone, like the rest of the row: the dropdown
+                // under Comparisons picks the season there.
+                className="pointer-events-none md:pointer-events-auto"
+              >
+                {r.season}
+              </Link>
             ) : (
               <SeasonLink season={r.season} />
             )}
@@ -1222,8 +1231,17 @@ export default async function PlayerPage({
       <div className="flex min-w-0 flex-col items-start gap-4">
         <SectionHeading
           subtitle={
-            salaries.length > 0 &&
-            "Select a season to compare it against the league."
+            salaries.length > 0 && (
+              <>
+                <span className="md:hidden">
+                  Pick a season under Comparisons to compare it against the
+                  league.
+                </span>
+                <span className="hidden md:inline">
+                  Select a season to compare it against the league.
+                </span>
+              </>
+            )
           }
         >
           Salaries
@@ -1238,6 +1256,7 @@ export default async function PlayerPage({
           fit
           breakout
           rowHref={(r) => `/players/${playerId}?salary=${r.id}`}
+          rowLinksFromMd
           isActive={(r) => r.id === anchor?.id}
         />
         <SectionHeading
@@ -1249,6 +1268,18 @@ export default async function PlayerPage({
         >
           Comparisons
         </SectionHeading>
+        {anchor && (
+          <div className="w-full md:hidden">
+            <SalaryAnchorFilter
+              playerId={playerId}
+              salaries={salaryLog
+                .filter((r) => r.salary !== null && r.leagueCap)
+                .map((r) => ({ id: r.id, season: r.season }))}
+              currentId={anchor.id}
+              liveSeason={currentCap?.season}
+            />
+          </div>
+        )}
         {/* Four panels, each a narrower cut of the same cap window: two up on
             a laptop, one above the other on a phone. A grid rather than a
             wrapping flex row so the two in a row keep the same width whatever

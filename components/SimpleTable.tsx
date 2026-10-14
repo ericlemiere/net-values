@@ -37,6 +37,12 @@ interface SimpleTableProps<Row> {
   breakout?: boolean;
   /** Turns every row into a link to this href. */
   rowHref?: (row: Row) => string;
+  /**
+   * Keep the row links off a phone, where the page offers another way to pick
+   * a row (the player page's salary dropdown) and a row too wide for the screen
+   * is mostly cells that link somewhere else.
+   */
+  rowLinksFromMd?: boolean;
   /** Marks the row the rest of the page is currently anchored to. */
   isActive?: (row: Row) => boolean;
   emptyMessage?: string;
@@ -78,6 +84,7 @@ export function SimpleTable<Row>({
   fit,
   breakout,
   rowHref,
+  rowLinksFromMd,
   isActive,
   emptyMessage = "No data.",
   glossary = true,
@@ -180,7 +187,19 @@ export function SimpleTable<Row>({
                       className={`${linked(col) ? "p-0" : "px-3 py-1.5"} ${cellClass(col.align)}`}
                     >
                       {linked(col) ? (
-                        <Link href={href!} className="block px-3 py-1.5">
+                        // `scroll={false}`: a row link is a view of the same
+                        // page (the player page's ?salary= comps anchor), and
+                        // Next's default jump to the top lost the reader's
+                        // place — on a phone, so far up the row looked dead.
+                        <Link
+                          href={href!}
+                          scroll={false}
+                          className={`block px-3 py-1.5 ${
+                            rowLinksFromMd
+                              ? "pointer-events-none md:pointer-events-auto"
+                              : ""
+                          }`}
+                        >
                           {col.render(row)}
                         </Link>
                       ) : children.length > 0 && col.key === splitColumn ? (

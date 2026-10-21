@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { PageHeader } from "@/components/PageHeader";
+import { SectionHeading } from "@/components/SectionHeading";
 import { PlayerLink } from "@/components/PlayerLink";
 import { TeamLink } from "@/components/TeamLink";
 import { SeasonSnapshotFilter } from "@/components/SeasonSnapshotFilter";
@@ -80,47 +81,26 @@ const BALLOT_ORDER: AwardCode[] = [
 const SQUADS: AwardCode[] = ["all_nba", "all_defense", "all_rookie"];
 
 /**
- * A band heading.
- *
- * The accent rule above it is what separates the page's parts. A hairline
- * would have done the job, but yellow is the site's one structural color and
- * these are the only divisions on a long page — it earns its place here in a
- * way another gray line would not.
- *
- * The band straight under the recap panel passes `rule={false}`: that panel is
- * already bounded by an accent border of its own, and a second yellow line a
- * few pixels below it read as a double rule rather than a division.
+ * A band heading: the same accent title and hairline that divides a player's
+ * page (SectionHeading), so the two long pages are broken up the same way.
  */
 function Band({
   title,
   caption,
   href,
   id,
-  rule = true,
   children,
 }: {
   title: string;
   caption?: string;
   href?: string | null;
   id?: string;
-  rule?: boolean;
   children: React.ReactNode;
 }) {
   return (
-    <section
-      id={id}
-      className={`min-w-0 scroll-mt-20 ${
-        rule ? "border-t border-accent/50 pt-8" : ""
-      }`}
-    >
-      <div className="mb-5">
-        {/* Louder than the table titles under it, so a long page reads as a
-            handful of parts: big, heavy, set in capitals, and keyed to the
-            rule above by a short accent bar. */}
-        <h2 className="flex items-center gap-3 text-2xl font-bold uppercase tracking-tight md:text-3xl">
-          {title}
-        </h2>
-        {caption && <div className="mt-1 text-sm text-white/55">{caption}</div>}
+    <section id={id} className="min-w-0 scroll-mt-20">
+      <div className="mb-4">
+        <SectionHeading subtitle={caption}>{title}</SectionHeading>
       </div>
       {children}
     </section>
@@ -496,13 +476,12 @@ export default async function SeasonsPage({
       />
 
       <TableOverlay>
-        <div className="flex flex-col gap-10">
+        <div className="flex flex-col gap-12">
           <SummaryPanel season={season} champion={champion} byAward={byAward} />
 
           {netValue.top.length > 0 && (
             <Band
               id="net-value"
-              rule={false}
               href="/net-value"
               title="Net Value"
               caption={`The best and worst returns on a contract in ${season}.`}

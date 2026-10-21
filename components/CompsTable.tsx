@@ -86,13 +86,14 @@ interface CompsTableProps {
   /** Badges for these rows, keyed by `awardKey(playerId, season)`. */
   awards?: Map<string, Award[]>;
   /**
-   * A panel that sizes to its rows, up to a low ceiling, instead of reserving
-   * the full height.
+   * A panel that sizes to its rows, up to the full height, instead of
+   * reserving it.
    *
    * For the two cuts that are normally a handful of names — one season of the
    * league, one franchise's whole history. A fixed panel under a one-row table
    * is two hundred pixels of white, and two of them side by side are most of
-   * a screen. They still scroll on the rare anchor that fills them.
+   * a screen. One with enough rows to fill it stops at the same height as the
+   * full panels, so a row of them still lines up, and scrolls from there.
    */
   short?: boolean;
 }
@@ -189,7 +190,7 @@ export function CompsTable({
           squeezing the content into a horizontal scroll of its own. */}
       <div
         ref={scrollRef}
-        className={`${short ? "max-h-56" : "h-80"} ${SHEET}`}
+        className={`${short ? "max-h-80" : "h-80"} ${SHEET}`}
         style={{ scrollbarGutter: overflows ? "stable" : "auto" }}
       >
         <table className="w-max min-w-full text-sm text-black">

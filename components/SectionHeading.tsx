@@ -26,7 +26,7 @@ export function SectionHeading({
   return (
     <div className="w-full min-w-0">
       <div className="flex items-center gap-4">
-        <h2 className="shrink-0 text-lg font-semibold tracking-[0.2em] text-accent uppercase">
+        <h2 className="shrink-0 text-2xl font-semibold tracking-[0.2em] text-accent uppercase">
           {children}
         </h2>
         <div className="h-px min-w-0 flex-1 bg-accent/25" />

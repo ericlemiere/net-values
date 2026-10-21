@@ -1170,7 +1170,7 @@ export default async function PlayerPage({
           ...(headshot && { image: headshot }),
         })}
       />
-      <div className="mb-6 flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
+      <div className="mb-10 flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
         <div className="flex min-w-0 items-center gap-4">
           <PlayerHeadshot nbaPersonId={player.nbaPersonId} name={player.name} />
           <div className="min-w-0">
@@ -1229,7 +1229,8 @@ export default async function PlayerPage({
           default stretch, so the salary log keeps its fitted width instead of
           being pulled out to the page. */}
       <div className="flex min-w-0 flex-col items-start gap-4">
-        <SectionHeading
+        <SectionHeading>Salaries</SectionHeading>
+        <SimpleTable<SalRow>
           subtitle={
             salaries.length > 0 && (
               <>
@@ -1243,10 +1244,6 @@ export default async function PlayerPage({
               </>
             )
           }
-        >
-          Salaries
-        </SectionHeading>
-        <SimpleTable<SalRow>
           columns={getSalariesColumns(currentCap, awardsBySeason)}
           rows={salaryLog}
           rowKey={(r) => `${r.id}-${r.part?.team ?? ""}`}

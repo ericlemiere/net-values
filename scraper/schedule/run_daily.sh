@@ -29,6 +29,11 @@ main() {
         sleep 10
     done
 
+    # Every run rewrites the scraper's unmatched/collision reports, which are
+    # tracked, so this copy always has them modified, and a pull that touches
+    # one refuses to run. They're regenerated below either way.
+    git -C "$repo_dir" checkout -- 'scraper/*.csv'
+
     # A failed pull isn't fatal: yesterday's code still produces today's numbers.
     git -C "$repo_dir" pull --ff-only || echo "git pull failed; running the code already here"
 

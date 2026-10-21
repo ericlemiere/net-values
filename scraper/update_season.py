@@ -4,6 +4,9 @@ Net Value is a function of things that all move during a season, so each one
 has to be refreshed before the numbers mean anything:
 
   box score stats   nba_api, via update_daily
+  position, GS      bref's totals page: nba_api has neither, and production
+                    baselines each player against his position, so without
+                    this every player of the season is position-less
   nba.com advanced  nba_api: TS%, USG% and the rest of what nba.com publishes
   bref advanced     basketball-reference's advanced page, for the figures only
                     bref has: VORP, BPM, PER and Win Shares. The model no longer
@@ -68,6 +71,7 @@ def main():
     bref.MAX_CACHE_AGE = CACHE_HOURS * 3600
 
     import update_daily
+    import backfill_bref_stats
     import backfill_nba_advanced
     import backfill_advanced
     import backfill_team_splits
@@ -84,6 +88,10 @@ def main():
     print(f"=== stats from nba.com: {season} ===")
     sys.argv = ["update_daily", season]
     update_daily.main()
+
+    print(f"\n=== positions and games started from bref: {end_year} ===")
+    sys.argv = ["backfill_bref_stats", str(end_year)]
+    backfill_bref_stats.main()
 
     print(f"\n=== advanced stats from nba.com: {season} ===")
     backfill_nba_advanced.run([season])

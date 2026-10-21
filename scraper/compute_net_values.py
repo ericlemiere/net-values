@@ -71,6 +71,7 @@ Usage:
   python compute_net_values.py 2024-2025      # one season
 """
 import sys
+from datetime import date
 
 from psycopg2.extras import execute_values
 
@@ -182,6 +183,29 @@ PLAYED_TEAM = """
 # season or one who never took the floor at all. Paid-the-most is only a guess,
 # and `signing_team` gets first refusal on it.
 PAID_TEAM = "(ARRAY_AGG(s.team ORDER BY s.salary DESC NULLS LAST, s.team))[1]"
+
+
+# The last day of the regular season, near enough: it ends in mid-April. Until
+# then the season is still being played, and is priced among the players who
+# have played in it (see compute). lib/season.ts holds the same date for the
+# note the site shows over a season in progress.
+REGULAR_SEASON_END = (4, 15)
+
+
+def season_in_progress():
+    """The season whose regular season is under way, or None between seasons.
+
+    October through mid-April. A season that hasn't tipped off yet counts: it
+    has no stats, so it prices nobody either way.
+    """
+    today = date.today()
+    if today.month >= 10:
+        start = today.year
+    elif (today.month, today.day) <= REGULAR_SEASON_END:
+        start = today.year - 1
+    else:
+        return None
+    return f"{start}-{start + 1}"
 
 
 def load(cur, season_filter):
@@ -731,8 +755,9 @@ def compute(rows, games_by_season, salary_rows, teams_by_season, stints, last_pl
         value = p.get(key)
         return None if value is None else round(value, digits)
 
+    in_progress = season_in_progress()
+
     for season, players in sorted(by_season.items()):
-        pool = sum(p["salary"] for p in players)
 
         # Pay rank is league-wide within the season: 1 is the highest-paid
         # player in the NBA that year, regardless of team. It depends on
@@ -758,8 +783,25 @@ def compute(rows, games_by_season, salary_rows, teams_by_season, stints, last_pl
             )
             p["availability"] = min(p["minutes"] / p["full_workload"], 1.0)
 
-        price = price_metric(players, pool, "production", "")
-        price_metric(players, pool, "production_vorp", "vorp_")
+        # A season still being played is priced among the players who have
+        # played in it. Someone paid who hasn't taken the floor yet has nothing
+        # to judge, and charging him at the availability floor a week into the
+        # season says more about the calendar than about him, so his figures
+        # stay blank. Once the regular season is over he is priced like anyone
+        # else who missed it.
+        priced = players
+        if season == in_progress:
+            priced = [p for p in players if p["has_stats"]]
+            for p in players:
+                if not p["has_stats"]:
+                    for prefix in ("", "vorp_"):
+                        for suffix in ("expected", "score", "value", "net_value", "rank"):
+                            p[f"{prefix}{suffix}"] = None
+        pool = sum(p["salary"] for p in priced)
+
+        price = price_metric(priced, pool, "production", "") if priced else None
+        if priced:
+            price_metric(priced, pool, "production_vorp", "vorp_")
 
         if price is None:
             # Salaries are signed long before the games are played. There is no
@@ -775,13 +817,17 @@ def compute(rows, games_by_season, salary_rows, teams_by_season, stints, last_pl
         players.sort(key=lambda p: (p["score"] is None, -(p["score"] or 0.0)))
         for p in players:
             net_value = p.get("net_value")
+            # Unpriced: a season nobody has played, or a player who hasn't
+            # played in the one under way. Production stays null for him too,
+            # which keeps him off the ladders deserved pay is read from.
+            has_price = p.get("expected") is not None
             out.append(
                 (
                     p["player_id"], season, p["team"], p["salary"],
-                    figure(p, "production", 3) if price is not None else None,
+                    figure(p, "production", 3) if has_price else None,
                     round(p["minutes"], 1),
-                    round(p["full_workload"], 1) if price is not None else None,
-                    round(p["availability"], 3) if price is not None else None,
+                    round(p["full_workload"], 1) if has_price else None,
+                    round(p["availability"], 3) if has_price else None,
                     figure(p, "expected", 3),
                     figure(p, "score", 2),
                     figure(p, "value", 2),

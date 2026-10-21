@@ -2,6 +2,7 @@ import { DataTable, type ColumnDef } from "@/components/DataTable";
 import { PageHeader } from "@/components/PageHeader";
 import { PlayerLink } from "@/components/PlayerLink";
 import { awardKey, type Award } from "@/lib/awards";
+import { inRegularSeason } from "@/lib/season";
 import { SeasonTeams } from "@/components/TeamLink";
 import { SeasonLink } from "@/components/SeasonLink";
 import { OptionChip } from "@/components/OptionChip";
@@ -397,6 +398,18 @@ export default async function SalariesPage({
           )
         }
       />
+      {/* While the season is being played, its Net Values rest on however
+          many games there have been so far. Said once, above the table,
+          rather than left for someone to wonder why a star is at +0.1. */}
+      {season === currentCap?.season && inRegularSeason(season) && (
+        <p className="mb-4 max-w-3xl border-l-2 border-accent pl-3 text-sm text-white/70">
+          {season}{" "}is still being played, so its Net Values update every
+          morning with the previous night&apos;s games. Early on they rest on just a
+          handful of games, so expect them to swing; they settle and become more
+          accurate as the season goes on. Players who haven&apos;t played yet
+          show no Net Value until their first game.
+        </p>
+      )}
       <DataTable
         basePath="/salaries"
         columns={getColumns(

@@ -18,6 +18,7 @@ import { cached } from "./cached";
 import { db } from "./index";
 import { awardKey, type AwardCode } from "@/lib/awards";
 import { NET_VALUE_MARK, NET_VALUE_STRONG } from "@/lib/format";
+import { inRegularSeason } from "@/lib/season";
 import type { PriceStat } from "@/lib/price-check";
 import {
   players,
@@ -1407,14 +1408,21 @@ export const getNetValueExamples = cached("getNetValueExamples", async function 
    * explainer page ranks players within the season, both of which come out as
    * nonsense (a division by zero, and an arbitrary player at the top of an
    * unranked list) if the season hasn't been played yet.
+   *
+   * A season still in its regular season is scored too, from partial box
+   * scores, so it's skipped as well: the examples use the last finished one.
    */
-  const latest = await db
-    .select({ season: netValues.season })
+  const scored = await db
+    .selectDistinct({ season: netValues.season })
     .from(netValues)
     .where(isNotNull(netValues.netValueScore))
     .orderBy(desc(netValues.season))
-    .limit(1);
-  const season = latest[0]?.season ?? "";
+    .limit(2);
+  const season =
+    scored.find((row) => !inRegularSeason(row.season))?.season ?? "";
+  // The all-time lists stop at the same season, so an in-progress one's
+  // partial numbers can't land in them either.
+  const finished = sql`${netValues.season} <= ${season}`;
 
   const [best, worst, latestTop, latestBottom, priced] = await Promise.all([
     db
@@ -1425,7 +1433,7 @@ export const getNetValueExamples = cached("getNetValueExamples", async function 
       // Next season's rows carry a salary and no score yet, and Postgres sorts
       // NULLs to the top of a descending order, so without this the all-time
       // best list is ten unplayed contracts.
-      .where(isNotNull(netValues.netValueScore))
+      .where(and(isNotNull(netValues.netValueScore), finished))
       .orderBy(desc(netValues.netValueScore))
       .limit(10),
     // Worst list excludes contracts paid above the whole league cap — see
@@ -1439,6 +1447,7 @@ export const getNetValueExamples = cached("getNetValueExamples", async function 
         and(
           sql`${netValues.salary} <= ${seasons.leagueCap}`,
           isNotNull(netValues.netValueScore),
+          finished,
         ),
       )
       .orderBy(asc(netValues.netValueScore))

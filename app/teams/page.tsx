@@ -5,7 +5,11 @@ import { TeamNetValueText } from "@/components/TeamNetValueText";
 import { SimpleTable } from "@/components/SimpleTable";
 import { TeamSeasonFilter } from "@/components/TeamSeasonFilter";
 import { TableOverlay } from "@/components/TableNav";
-import { COUNT_CHIP, type ColumnDef } from "@/components/DataTable";
+import {
+  COUNT_CHIP,
+  type ColumnDef,
+  type SortDir,
+} from "@/components/DataTable";
 import { GlossaryButton } from "@/components/GlossaryButton";
 import {
   formatCompactCurrency,
@@ -37,6 +41,8 @@ const columns: ColumnDef<TeamSeasonRow>[] = [
   {
     key: "name",
     label: "Team",
+    defaultDir: "asc",
+    sortValue: (r) => r.eraName ?? r.name,
     // Named as it was that season, linked as it is now. Without this the
     // 1995-96 table lists the Oklahoma City Thunder going 64-18 in a city that
     // had no franchise for another twelve years.
@@ -67,24 +73,31 @@ const columns: ColumnDef<TeamSeasonRow>[] = [
     key: "abbr",
     label: "Abbr",
     align: "center",
+    defaultDir: "asc",
+    sortValue: (r) => r.eraAbbr ?? r.abbr,
     render: (r) => r.eraAbbr ?? r.abbr,
   },
   {
     key: "wins",
     label: "W",
     align: "center",
+    sortValue: (r) => r.wins,
     render: (r) => r.wins ?? "—",
   },
   {
     key: "losses",
     label: "L",
     align: "center",
+    // Fewest first, so #1 is still the best record.
+    defaultDir: "asc",
+    sortValue: (r) => r.losses,
     render: (r) => r.losses ?? "—",
   },
   {
     key: "winPct",
     label: "Win%",
     align: "center",
+    sortValue: (r) => r.winPct,
     // .683 rather than 68.3% — the convention every standings page uses.
     render: (r) =>
       r.winPct === null ? "—" : r.winPct.toFixed(3).replace(/^0/, ""),
@@ -106,12 +119,14 @@ const columns: ColumnDef<TeamSeasonRow>[] = [
     key: "payroll",
     label: "Payroll",
     align: "right",
+    sortValue: (r) => r.payroll,
     render: (r) => formatCurrency(r.payroll),
   },
   {
     key: "payrollPctOfCap",
     label: "% of League Cap",
     align: "center",
+    sortValue: (r) => r.payrollPctOfCap,
     render: (r) =>
       r.payrollPctOfCap === null ? "—" : `${formatStat(r.payrollPctOfCap)}%`,
   },
@@ -120,31 +135,67 @@ const columns: ColumnDef<TeamSeasonRow>[] = [
     key: "teamNetValue",
     label: "Team NV",
     align: "center",
+    sortValue: (r) => r.netValue,
     render: (r) => formatScore(r.netValue),
   },
   {
     key: "madePlayoffs",
     label: "Playoffs",
     align: "center",
+    sortValue: (r) => (r.madePlayoffs === null ? null : Number(r.madePlayoffs)),
     render: (r) =>
       r.madePlayoffs === null ? "—" : r.madePlayoffs ? "Yes" : "—",
   },
 ];
 
+/**
+ * Thirty rows, so sorted here rather than in SQL. Ties (and the rest of a
+ * column with gaps) fall back to the query's own order, most wins first.
+ */
+function sortRows(rows: TeamSeasonRow[], sort: string, dir: SortDir) {
+  const value = columns.find((c) => c.key === sort)?.sortValue;
+  if (!value) return rows;
+  const sign = dir === "asc" ? 1 : -1;
+  return [...rows].sort((a, b) => {
+    const x = value(a);
+    const y = value(b);
+    if (x === y) return 0;
+    if (x === null) return 1;
+    if (y === null) return -1;
+    return (
+      sign *
+      (typeof x === "string" ? x.localeCompare(y as string) : x - (y as number))
+    );
+  });
+}
+
+function teamsHref(season: string, sort: string, dir: SortDir) {
+  return `/teams?${new URLSearchParams({ season, sort, dir })}`;
+}
+
 export default async function TeamsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ season?: string }>;
+  searchParams: Promise<{ season?: string; sort?: string; dir?: string }>;
 }) {
   const sp = await searchParams;
   const seasons = await getTeamSeasons();
   const season =
     sp.season && seasons.includes(sp.season) ? sp.season : seasons[0];
+  const sortCol =
+    columns.find((c) => c.key === sp.sort && c.sortValue) ??
+    columns.find((c) => c.key === "wins")!;
+  const sort = sortCol.key;
+  const dir: SortDir =
+    sp.dir === "asc" || sp.dir === "desc"
+      ? sp.dir
+      : (sortCol.defaultDir ?? "desc");
 
-  const [rows, leagueCap] = await Promise.all([
+  const [unsorted, leagueCap] = await Promise.all([
     getTeamsForSeason(season),
     getLeagueCap(season),
   ]);
+  const rows = sortRows(unsorted, sort, dir);
 
   // Only meaningful once payrolls are on file for the season.
   const withPayroll = rows.filter((r) => r.payroll !== null);
@@ -219,7 +270,12 @@ export default async function TeamsPage({
       {/* The glossary shares the filter's row rather than taking one of its
           own above the table, the way the salaries and stats pages do it. */}
       <div className="mb-3 flex min-w-0 items-end justify-between gap-4">
-        <TeamSeasonFilter seasons={seasons} currentSeason={season} />
+        <TeamSeasonFilter
+          seasons={seasons}
+          currentSeason={season}
+          sort={sort}
+          dir={dir}
+        />
         <GlossaryButton entries={glossaryFor(columns)} />
       </div>
       <TableOverlay>
@@ -229,6 +285,11 @@ export default async function TeamsPage({
           rowKey={(r) => r.teamId}
           emptyMessage="No team records for this season."
           glossary={false}
+          sorting={{
+            sort,
+            dir,
+            hrefFor: (sort, dir) => teamsHref(season, sort, dir),
+          }}
           footer={<div className={COUNT_CHIP}>{rows.length} teams</div>}
         />
       </TableOverlay>

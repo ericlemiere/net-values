@@ -5,13 +5,17 @@ import { GlossaryButton } from "./GlossaryButton";
 import { SplitGroup, SplitToggle } from "./SplitRows";
 import { TABLE_BREAKOUT, TABLE_BREAKOUT_FIT } from "@/lib/layout";
 import {
+  RANK_CELL,
+  RankHeader,
   SHEET,
   SHEET_HEAD,
   SHEET_ROW_HOVER,
+  SortHeader,
   alignClass,
   cellClass,
   stripeClass,
   type ColumnDef,
+  type SortDir,
 } from "./DataTable";
 
 interface SimpleTableProps<Row> {
@@ -73,6 +77,15 @@ interface SimpleTableProps<Row> {
    * named in `blank` stay empty (a career has no one team or position).
    */
   summary?: { label: string; row: Row; blank?: string[] };
+  /**
+   * Makes every header a link that re-sorts the table, and adds the # column
+   * the stats page has. The rows arrive already sorted; this only draws it.
+   */
+  sorting?: {
+    sort: string;
+    dir: SortDir;
+    hrefFor: (sort: string, dir: SortDir) => string;
+  };
 }
 
 export function SimpleTable<Row>({
@@ -94,13 +107,20 @@ export function SimpleTable<Row>({
   splitsLabel = "stats by team",
   attached,
   summary,
+  sorting,
 }: SimpleTableProps<Row>) {
   const entries = glossary ? glossaryFor(columns) : [];
+  // Counted in the sorted column's natural order, as on the stats page.
+  const sortedCol = columns.find((c) => c.key === sorting?.sort);
+  const reversed = sorting?.dir !== (sortedCol?.defaultDir ?? "desc");
+  const rankOf = (i: number) => (reversed ? rows.length - i : i + 1);
+  const lead = sorting ? <td /> : null;
   // A row set under another: same stripe as its parent, set off by muted text
   // and an empty lead cell, so the group reads as one block and the striping
   // below it doesn't shift.
   const subRow = (child: Row, i: number) => (
     <tr key={rowKey(child)} className={`${stripeClass(i)} text-black/60`}>
+      {lead}
       {columns.map((col, c) => (
         <td key={col.key} className={`px-3 py-1 ${cellClass(col.align)}`}>
           {c === 0 ? null : col.render(child)}
@@ -146,15 +166,20 @@ export function SimpleTable<Row>({
         <table className="w-max min-w-full text-sm text-black">
           <thead className={SHEET_HEAD}>
             <tr>
-              {columns.map((col) => (
-                <th
-                  key={col.key}
-                  title={tooltip(describe(col.key, col.definition))}
-                  className={`whitespace-nowrap px-2 py-2 font-medium ${alignClass(col.align)}`}
-                >
-                  {col.label}
-                </th>
-              ))}
+              {sorting && <RankHeader />}
+              {columns.map((col) =>
+                sorting ? (
+                  <SortHeader key={col.key} col={col} {...sorting} />
+                ) : (
+                  <th
+                    key={col.key}
+                    title={tooltip(describe(col.key, col.definition))}
+                    className={`whitespace-nowrap px-2 py-2 font-medium ${alignClass(col.align)}`}
+                  >
+                    {col.label}
+                  </th>
+                ),
+              )}
             </tr>
           </thead>
           <tbody>
@@ -179,6 +204,7 @@ export function SimpleTable<Row>({
                       : `${stripeClass(i)} ${SHEET_ROW_HOVER}`
                   }
                 >
+                  {sorting && <td className={RANK_CELL}>{rankOf(i)}</td>}
                   {columns.map((col) => (
                     <td
                       key={col.key}
@@ -236,7 +262,7 @@ export function SimpleTable<Row>({
             {rows.length === 0 && (
               <tr>
                 <td
-                  colSpan={columns.length}
+                  colSpan={columns.length + (sorting ? 1 : 0)}
                   className="px-3 py-8 text-center text-black/40"
                 >
                   {emptyMessage}
@@ -249,6 +275,7 @@ export function SimpleTable<Row>({
               <tr
                 className={`${stripeClass(rows.length)} border-t-2 border-black/25 font-semibold`}
               >
+                {lead}
                 {columns.map((col, c) => (
                   <td
                     key={col.key}

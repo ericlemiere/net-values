@@ -32,6 +32,11 @@ export interface ColumnDef<Row> {
   noRowLink?: boolean;
   align?: ColumnAlign;
   defaultDir?: "asc" | "desc";
+  /**
+   * What the column sorts by, for a table sorted in the page rather than in
+   * SQL. Null always sorts last, whichever way the column runs.
+   */
+  sortValue?: (row: Row) => number | string | null;
   render: (row: Row) => ReactNode;
 }
 
@@ -126,6 +131,73 @@ function justifyClass(align?: ColumnAlign) {
   return "justify-start";
 }
 
+export type SortDir = "asc" | "desc";
+
+/**
+ * The # column's header, shared by every table that ranks its rows. `w-px`
+ * keeps it to its digits: a table stretched to fill the page shares the spare
+ * width out among its columns, and the # column doesn't need any.
+ */
+export function RankHeader() {
+  return (
+    <th
+      className="w-px px-3 py-2 text-right font-medium text-black/40"
+      title="Position by the sorted column in its usual order. Reversing the sort counts down."
+    >
+      #
+    </th>
+  );
+}
+
+export const RANK_CELL =
+  "px-3 py-1.5 text-right font-mono text-[0.8125rem] tabular-nums text-black/40";
+
+/**
+ * A column header that re-sorts the table by its column: the first click goes
+ * the column's natural way, the next one reverses it.
+ */
+export function SortHeader<Row>({
+  col,
+  sort,
+  dir,
+  hrefFor,
+}: {
+  col: ColumnDef<Row>;
+  sort: string;
+  dir: SortDir;
+  hrefFor: (sort: string, dir: SortDir) => string;
+}) {
+  const isActive = sort === col.key;
+  const nextDir = isActive
+    ? dir === "asc"
+      ? "desc"
+      : "asc"
+    : (col.defaultDir ?? "desc");
+  return (
+    <th
+      title={tooltip(describe(col.key, col.definition))}
+      aria-sort={
+        isActive ? (dir === "asc" ? "ascending" : "descending") : "none"
+      }
+      className={`p-0 font-medium whitespace-nowrap ${alignClass(col.align)} ${
+        isActive ? "bg-accent" : ""
+      }`}
+    >
+      <NavLink
+        href={hrefFor(col.key, nextDir)}
+        className={`flex items-center gap-1 px-3 py-2 transition-colors ${justifyClass(
+          col.align,
+        )} ${isActive ? "hover:bg-accent/80" : "hover:bg-black/5"}`}
+      >
+        {col.label}
+        {isActive && (
+          <span className="text-black/50">{dir === "asc" ? "▲" : "▼"}</span>
+        )}
+      </NavLink>
+    </th>
+  );
+}
+
 interface DataTableProps<Row> {
   basePath: string;
   columns: ColumnDef<Row>[];
@@ -139,7 +211,7 @@ interface DataTableProps<Row> {
   currentTeam: string;
   currentPos: string;
   sort: string;
-  dir: "asc" | "desc";
+  dir: SortDir;
   page: number;
   totalCount: number;
   pageSize: number;
@@ -253,62 +325,29 @@ export function DataTable<Row>({
           <table className="w-max min-w-full text-sm text-black">
             <thead className={SHEET_HEAD_STICKY}>
               <tr>
-                <th
-                  className="px-3 py-2 text-right font-medium text-black/40"
-                  title="Position by the sorted column in its usual order. Reversing the sort counts down."
-                >
-                  #
-                </th>
-                {columns.map((col) => {
-                  const isActive = sort === col.key;
-                  const nextDir = isActive
-                    ? dir === "asc"
-                      ? "desc"
-                      : "asc"
-                    : (col.defaultDir ?? "desc");
-                  const href = buildHref(
-                    basePath,
-                    {
-                      season: currentSeason,
-                      team: currentTeam,
-                      pos: currentPos,
-                      sort: col.key,
-                      dir: nextDir,
-                      page: 1,
-                    },
-                    extraParams,
-                  );
-                  return (
-                    <th
-                      key={col.key}
-                      title={tooltip(describe(col.key, col.definition))}
-                      aria-sort={
-                        isActive
-                          ? dir === "asc"
-                            ? "ascending"
-                            : "descending"
-                          : "none"
-                      }
-                      className={`p-0 font-medium whitespace-nowrap ${alignClass(col.align)} ${
-                        isActive ? "bg-accent" : ""
-                      }`}
-                    >
-                      <NavLink
-                        href={href}
-                        className={`flex items-center gap-1 px-3 py-2 transition-colors ${justifyClass(
-                          col.align,
-                        )} ${isActive ? "hover:bg-accent/80" : "hover:bg-black/5"}`}
-                      >
-                        {col.label}
-                        {isActive && (
-                          <span className="text-black/50">
-                            {dir === "asc" ? "▲" : "▼"}
-                          </span>
-                        )}
-                      </NavLink>
-                    </th>
-                  );
-                })}
+                <RankHeader />
+                {columns.map((col) => (
+                  <SortHeader
+                    key={col.key}
+                    col={col}
+                    sort={sort}
+                    dir={dir}
+                    hrefFor={(sort, dir) =>
+                      buildHref(
+                        basePath,
+                        {
+                          season: currentSeason,
+                          team: currentTeam,
+                          pos: currentPos,
+                          sort,
+                          dir,
+                          page: 1,
+                        },
+                        extraParams,
+                      )
+                    }
+                  />
+                ))}
               </tr>
             </thead>
             <tbody>
@@ -319,9 +358,7 @@ export function DataTable<Row>({
                     key={rowKey(row)}
                     className={`${stripeClass(i)} ${SHEET_ROW_HOVER}`}
                   >
-                    <td className="px-3 py-1.5 text-right font-mono text-[0.8125rem] tabular-nums text-black/40">
-                      {rankOf(i)}
-                    </td>
+                    <td className={RANK_CELL}>{rankOf(i)}</td>
                     {columns.map((col) => (
                       <td
                         key={col.key}

@@ -37,7 +37,24 @@ has to be refreshed before the numbers mean anything:
   awards            nothing is voted on until the season ends, so this is a
                     no-op for most of the year and then fills in by itself the
                     day bref publishes. Cheap either way: one cached page.
-  net values        recomputed from scratch, which takes a few seconds
+  rosters           nba.com's current-season player list, one request: adds
+                    anyone on a roster who isn't on file yet, chiefly rookies
+                    before their debut, so their contracts have someone to
+                    match to and they're on the salaries pages from day one
+  salary caps       bref's cap history, one page: picks up next season's cap
+                    the day bref publishes it, usually in early summer
+  salaries          bref's team pages, one request per team: this season's,
+                    and next season's too once bref has a page for it. Quiet
+                    for most of the year; it's how signings, extensions, and
+                    trades reach the salaries table, most of them in summer,
+                    and how a season has salaries on file before it tips off.
+  net values        recomputed for this season only. Each season is priced
+                    against itself, so nothing that happens now can move an
+                    older one; rebuilding all of them every morning rewrote
+                    17,000 unchanged rows. Run compute_net_values.py with no
+                    season after a change to the model. Next season's
+                    contracts get rows of their own (pay, no Net Value)
+                    once its salaries are in.
 
 bref pages are cached on disk forever by default, which is right for finished
 seasons and useless for this one, so the cache is given a few hours' life here.
@@ -55,7 +72,7 @@ import sys
 
 import bref
 from backfill_stats import current_season
-from db import to_season_label
+from db import connect, to_season_label
 from revalidate import revalidate
 
 # Long enough to avoid re-fetching on repeated runs, short enough that a job run
@@ -83,6 +100,9 @@ def main():
     import backfill_on_off
     import backfill_awards
     import backfill_future_salaries
+    import backfill_salaries
+    import seed_rosters
+    import seed_seasons
     import compute_net_values
 
     print(f"=== stats from nba.com: {season} ===")
@@ -141,9 +161,37 @@ def main():
     print("\n=== future contracts from bref ===")
     backfill_future_salaries.main()
 
-    print("\n=== net values ===")
-    sys.argv = ["compute_net_values"]
-    compute_net_values.main()
+    # Before salaries, so a contract signed by someone who hasn't played yet
+    # has a player to match to.
+    print(f"\n=== rosters from nba.com: {season} ===")
+    sys.argv = ["seed_rosters", season]
+    seed_rosters.main()
+
+    # Before salaries: a season's salaries count for nothing without its cap.
+    print("\n=== salary caps from bref ===")
+    conn = connect()
+    with conn, conn.cursor() as cur:
+        print(f"upserted {seed_seasons.seed_caps(cur)} league caps")
+    conn.close()
+
+    # Next season's league page doesn't exist until bref sets the season up,
+    # around the draft; until then it 404s and is skipped.
+    priced = [to_season_label(season)]
+    for year in (end_year, end_year + 1):
+        print(f"\n=== salaries from bref: {year} ===")
+        sys.argv = ["backfill_salaries", str(year)]
+        try:
+            backfill_salaries.main()
+        except FileNotFoundError:
+            print(f"no bref season page for {year} yet")
+            continue
+        if year != end_year:
+            priced.append(bref.season_label(year))
+
+    for label in priced:
+        print(f"\n=== net values: {label} ===")
+        sys.argv = ["compute_net_values", label]
+        compute_net_values.main()
 
     # update_daily revalidated back at the start; everything since needs it too.
     revalidate()

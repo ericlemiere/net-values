@@ -1,47 +1,41 @@
 season,team,name,slug,salary,best_score
-1991-1992,PHI,Andrew Toney,toneyan01,450000,75.0
-1992-1993,HOU,Curtis Blair,,25000,58.3
-1992-1993,MIN,Reggie Fox,,11000,66.7
-1994-1995,CHI,Kevin Rankin,,11404,66.7
-1994-1995,CHI,Kenny Harris,,5000,78.3
-1994-1995,IND,Damon Baily,,150000,60.9
-1995-1996,DET,Rodney Zimmerman,,200000,62.1
-1996-1997,CHA,Carlos Strong,,220000,76.9
-1996-1997,MIN,Virginius Praskevicius,,220000,45.7
-1997-1998,DAL,Ace Custis,,242000,63.6
-1997-1998,HOU,Serge Zwikker,,242000,64.0
-1997-1998,IND,Ron Riley,,50000,73.7
-1997-1998,IND,Todd Lindeman,,15000,66.7
-1997-1998,MIA,Patrick Savoy,,25000,61.5
-1998-1999,IND,Mate Skelin,,287500,57.1
-1998-1999,POR,Nikita Morgunov,,287500,55.2
-1998-1999,TOR,Paul Rogers,,287500,75.0
-1999-2000,CHI,Brett Robisch,,20000,66.7
-1999-2000,MIA,Jermaine Walker,,100000,75.9
-1999-2000,ORL,Louis Bullock,,10000,64.3
-1999-2000,PHX,LaMarcus Golden,,25000,66.7
-1999-2000,POR,Nikita Morgunov,,385000,55.2
-1999-2000,UTA,Bakari Hendrix,,31706,60.0
-2000-2001,NYK,Pete Mickeal,,316969,52.2
-2000-2001,PHI,Mark Karcher,,50000,60.9
-2002-2003,HOU,Pete Mickeal,,136374,50.0
-2002-2003,PHI,Sam Clancy,,349458,60.0
-2003-2004,DAL,Jon Stefansson,,366931,61.5
-2003-2004,LAC,Josh Moore,,366931,66.7
-2004-2005,DEN,Arthur Johnson,,385277,75.9
-2004-2005,NOP,Tim Pickett,,32890,50.0
-2004-2005,SAS,Romain Sato,,385277,59.3
-2005-2006,NOP,Sean Banks,,150751,80.0
-2005-2006,PHX,Lucas Tischer,,4863,57.1
-2006-2007,BOS,Kevin Pittsnogle,,50000,66.7
-2006-2007,DEN,Jefferson Sobral,,75000,64.3
-2006-2007,IND,Jimmie Hunter,,100000,66.7
-2006-2007,MIA,Mike Gansey,,150000,66.7
-2006-2007,MIA,Daniel Horton,,75000,69.2
-2006-2007,MIA,Vincent Grier,,70000,72.0
-2006-2007,NYK,Paul Miller,,100000,78.3
-2007-2008,BOS,Brandon Wallace,,130819,76.9
-2007-2008,PHI,Herbert Hill,,427163,63.6
-2008-2009,GSW,Richard Hendrix,,57215,64.5
-2010-2011,DET,Terrico White,,473604,57.1
-2010-2011,PHX,Matt Janning,,58504,60.9
+2026-2027,ATL,Kingston Flemings,flemiki01,7348680,48.3
+2026-2027,ATL,Zuby Ejiofor,ejiofzu01,3453360,43.5
+2026-2027,ATL,Henri Veesaar,veesahe01,1357763,46.2
+2026-2027,BOS,Chris Cenac Jr.,cenacch01,2988120,46.2
+2026-2027,BKN,Mikel Brown Jr.,brownmi02,8787000,72.7
+2026-2027,BKN,Joshua Jefferson,jeffejo01,2969520,51.6
+2026-2027,CHI,Caleb Wilson,wilsoca01,10683720,61.5
+2026-2027,CHI,Dailyn Swain,swainda01,4965480,50.0
+2026-2027,CHA,Hannes Steinbach,steinha02,5227200,51.6
+2026-2027,CHA,Christian Anderson Jr.,anderch02,4257480,60.6
+2026-2027,CLE,Meleek Thomas,thomame01,1357763,44.4
+2026-2027,CLE,Khalifa Diop,diopkh01,1357763,45.5
+2026-2027,DAL,Morez Johnson Jr.,johnsmo01,6754800,66.7
+2026-2027,DAL,Sergio de Larrea,delarse01,3182280,48.3
+2026-2027,DAL,Tarik Biberovic,biberta01,3000000,46.2
+2026-2027,DEN,Trevon Brazile,brazitr01,1357763,57.1
+2026-2027,DET,Ebuka Okorie,okorieb01,4481280,60.9
+2026-2027,GSW,Yaxel Lendeborg,lendeya01,6096240,53.8
+2026-2027,HOU,Bruce Thornton,thornbr01,1357763,56.0
+2026-2027,LAC,Keaton Wagler,wagleke01,9674760,61.5
+2026-2027,LAC,Baba Miller,milleba01,1705630,58.3
+2026-2027,LAL,Cameron Carr,carrca01,3315360,52.2
+2026-2027,MEM,Cameron Boozer,boozeca02,11849760,51.9
+2026-2027,MEM,Karim López,lopezka01,3746760,50.0
+2026-2027,MIA,Ryan Conwell,conwery01,1357763,51.9
+2026-2027,MIL,Brayden Burries,burribr01,6417360,53.8
+2026-2027,MIL,Nate Ament,amentna01,5502000,60.9
+2026-2027,MIL,Bogoljub Markovic,markobo01,1357763,42.4
+2026-2027,MIN,Isaiah Evans,evansis01,1357763,72.7
+2026-2027,OKC,Thomas Sorber,sorbeth01,4887720,50.0
+2026-2027,PHI,Labaron Philon Jr.,philola01,3597120,56.0
+2026-2027,PHX,Koa Peat,peatko01,2926800,47.1
+2026-2027,SAC,Darius Acuff Jr.,acuffda01,8021640,46.7
+2026-2027,SAC,Alex Karaban,karabal01,2948280,60.9
+2026-2027,SAC,Emanuel Sharp,sharpem01,1357763,56.0
+2026-2027,SAS,Jayden Quaintance,quainja01,3902760,53.3
+2026-2027,TOR,Allen Graves,graveal01,4065720,60.9
+2026-2027,TOR,Jaden Bradley,bradlja02,1357763,58.3
+2026-2027,UTA,Darryn Peterson,peterda02,13195320,53.3
+2026-2027,WAS,AJ Dybantsa,dybanaj01,14748000,50.0

@@ -3,6 +3,11 @@
 # last pushed to main, sync the venv with requirements.txt, then run
 # update_season.py. Everything it prints goes to scraper/logs/YYYY-MM-DD.log.
 #
+# With HEALTHCHECK_URL set (in .env.local, or the environment), each run
+# reports to that healthchecks.io check: started, then succeeded or failed with
+# the end of the log attached. The check's own schedule catches the run that
+# never happens at all, which nothing in here can. Unset, it reports nothing.
+#
 # The body is one function called on the last line, so bash has read all of it
 # before git pull can rewrite this file underneath it.
 #
@@ -12,12 +17,13 @@
 main() {
     set -uo pipefail
 
-    local scraper_dir repo_dir log_dir
+    local scraper_dir repo_dir log_dir log
     scraper_dir="$(cd "$(dirname "$0")/.." && pwd)"
     repo_dir="$(dirname "$scraper_dir")"
     log_dir="$scraper_dir/logs"
+    log="$log_dir/$(date +%F).log"
     mkdir -p "$log_dir"
-    exec >>"$log_dir/$(date +%F).log" 2>&1
+    exec >>"$log" 2>&1
 
     echo "=== $(date) ==="
 
@@ -28,6 +34,17 @@ main() {
         curl -s --head --max-time 5 https://www.basketball-reference.com >/dev/null && break
         sleep 10
     done
+
+    local hc_url="${HEALTHCHECK_URL:-}"
+    if [[ -z "$hc_url" ]]; then
+        hc_url="$(sed -n 's/^HEALTHCHECK_URL=//p' "$repo_dir/.env.local" 2>/dev/null | tr -d '"' | tail -n 1)"
+    fi
+    # Never lets a reporting problem stop or fail the job itself.
+    hc_ping() {
+        [[ -n "$hc_url" ]] || return 0
+        curl -fsS -m 10 --retry 3 -o /dev/null "$@" || echo "healthcheck ping failed"
+    }
+    hc_ping "$hc_url/start"
 
     # Every run rewrites the scraper's unmatched/collision reports, which are
     # tracked, so this copy always has them modified, and a pull that touches
@@ -42,10 +59,16 @@ main() {
 
     find "$log_dir" -name '*.log' -mtime +30 -delete
 
-    cd "$scraper_dir" || exit 1
-    "$scraper_dir/.venv/bin/python" update_season.py
+    cd "$scraper_dir" && "$scraper_dir/.venv/bin/python" update_season.py
     local status=$?
     echo "=== finished $(date), exit $status ==="
+
+    if [[ $status -eq 0 ]]; then
+        hc_ping "$hc_url"
+    else
+        # The traceback is at the end; this lands in the alert email.
+        tail -n 80 "$log" | hc_ping --data-binary @- "$hc_url/fail"
+    fi
     exit $status
 }
 

@@ -59,7 +59,10 @@ main() {
 
     find "$log_dir" -name '*.log' -mtime +30 -delete
 
-    cd "$scraper_dir" && "$scraper_dir/.venv/bin/python" update_season.py
+    # Unbuffered (-u): Python otherwise holds file output back in blocks, so a
+    # run that's killed loses its last few steps from the log, and the log
+    # stops short of where the run actually got to.
+    cd "$scraper_dir" && "$scraper_dir/.venv/bin/python" -u update_season.py
     local status=$?
     echo "=== finished $(date), exit $status ==="
 

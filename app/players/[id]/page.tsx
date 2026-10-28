@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { LinkArrow } from "@/components/LinkArrow";
 import { notFound } from "next/navigation";
 import { SeasonTeams, TeamLink } from "@/components/TeamLink";
 import { AwardBadges, CareerAwardBadges } from "@/components/AwardBadges";
@@ -913,13 +914,7 @@ function PriceCheckBox({
     >
       <div className="flex items-center justify-between gap-3 md:block md:items-start">
         <div className="text-sm font-semibold">
-          Price Check{" "}
-          <span
-            aria-hidden="true"
-            className="inline-block transition-transform duration-200 ease-out group-hover:translate-x-1"
-          >
-            &rarr;
-          </span>
+          Price Check <LinkArrow />
           <div className="text-xs font-normal opacity-60 md:hidden">
             {caption}
           </div>

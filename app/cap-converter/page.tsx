@@ -5,6 +5,7 @@ import {
   type CapInputMode,
 } from "@/components/CapConverterForm";
 import { HeaderBox } from "@/components/HeaderBox";
+import { LinkArrow } from "@/components/LinkArrow";
 import { PageHeader } from "@/components/PageHeader";
 import { PlayerLink } from "@/components/PlayerLink";
 import { SeasonLink } from "@/components/SeasonLink";
@@ -456,7 +457,7 @@ function PlayerRow({
     <section className="min-w-0">
       {/* The ladder scrolls, so this keeps a scrollbar's width spare on the
           right too, or its columns sit that far off the ladder's. */}
-      <div className={`${SHEET} [scrollbar-gutter:stable]`}>
+      <div className={`${SHEET} scrollbar-gutter-stable`}>
         <table className={LADDER_TABLE}>
           <LadderCols />
           <thead className={SHEET_HEAD}>
@@ -511,9 +512,9 @@ function PlayerRow({
           stat2: null,
           view: "dollars",
         })}
-        className="mt-2 inline-block text-sm text-accent decoration-accent underline-offset-4 hover:underline"
+        className="group mt-2 inline-block text-sm text-accent decoration-accent underline-offset-4 hover:underline"
       >
-        Price check this season &rarr;
+        Price check this season <LinkArrow />
       </Link>
     </section>
   );

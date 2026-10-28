@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { LinkArrow } from "@/components/LinkArrow";
 import { PageHeader } from "@/components/PageHeader";
 import { PlayerHeadshot } from "@/components/PlayerHeadshot";
 import {
@@ -292,9 +293,9 @@ function PlayerCard({
                 {salary && capped.has(season) && (
                   <Link
                     href={`/cap-converter?player=${player.id}&season=${season}`}
-                    className="mt-1 inline-block text-xs text-accent decoration-accent underline-offset-4 hover:underline"
+                    className="group mt-1 inline-block text-xs text-accent decoration-accent underline-offset-4 hover:underline"
                   >
-                    What&rsquo;s this salary worth today? &rarr;
+                    What&rsquo;s this salary worth today? <LinkArrow />
                   </Link>
                 )}
               </div>

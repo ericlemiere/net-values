@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { HomeIntro } from "@/components/HomeIntro";
+import { LinkArrow } from "@/components/LinkArrow";
 import { PlayerHeadshot } from "@/components/PlayerHeadshot";
 import { SiteSearch } from "@/components/SiteSearch";
 import {
@@ -35,7 +36,7 @@ export const metadata: Metadata = {
   },
 };
 
-const boxClass = "rounded-md border border-white/15 bg-background-box/90";
+const boxClass = "rounded-md border border-white/15 bg-background-box/95";
 
 /** "Rises in" step for each block; see `.home-in` in globals.css. */
 function step(i: number) {
@@ -59,43 +60,30 @@ function LeaderList({
           <li key={r.playerId}>
             <Link
               href={`/players/${r.playerId}`}
-              className="flex items-center gap-3 pr-3 transition-colors hover:bg-white/5 sm:px-3 sm:py-2"
+              className="flex items-center gap-3 pr-3 transition-colors hover:bg-white/5"
             >
-              <span className="hidden w-7 shrink-0 text-right font-mono text-sm tabular-nums text-white/50 sm:block">
-                #{r.seasonRank}
-              </span>
-              {/* On a phone the headshot fills the row's left end, top to
-                  bottom and flush to the edge, with the rank over its corner,
-                  where it reads as the player's and costs no width. */}
-              <span className="relative shrink-0 sm:hidden">
+              {/* The headshot fills the row's left end, top to bottom and
+                  flush to the edge. */}
+              <span className="shrink-0 pt-2">
                 <PlayerHeadshot
                   nbaPersonId={r.nbaPersonId}
                   name={r.name}
                   height={76}
                   frame={false}
                 />
-                <span className="absolute bottom-0 left-0 rounded-tr-md bg-black/80 px-1.5 py-0.5 font-mono text-base font-semibold leading-tight tabular-nums text-white">
-                  #{r.seasonRank}
-                </span>
-              </span>
-              <span className="hidden sm:block">
-                <PlayerHeadshot
-                  nbaPersonId={r.nbaPersonId}
-                  name={r.name}
-                  height={40}
-                />
               </span>
               <span className="min-w-0 flex-1">
-                <span className="block font-semibold leading-tight sm:truncate">
+                <span className="block font-semibold leading-tight md:text-lg">
                   {r.name}
                 </span>
-                <span className="mt-0.5 block truncate text-xs text-white/50">
+                <span className="mt-0.5 block truncate text-sm text-white/50">
                   {r.teamLabel ?? r.team ?? "—"} &middot;{" "}
                   {formatCompactCurrency(r.salary)}
                 </span>
               </span>
+              {/* No rank: the title says how many, and the order says the rest. */}
               <span
-                className={`shrink-0 font-mono text-lg tabular-nums sm:text-base ${netValueClass(r.netValueScore)}`}
+                className={`shrink-0 font-mono text-lg tabular-nums ${netValueClass(r.netValueScore)}`}
               >
                 {formatScore(r.netValueScore)}
               </span>
@@ -105,9 +93,9 @@ function LeaderList({
       </ol>
       <Link
         href={href}
-        className="mt-2 inline-block text-sm text-white/60 transition-colors hover:text-accent"
+        className="group mt-2 inline-block text-sm text-white/60 transition-colors hover:text-accent"
       >
-        Full list &rarr;
+        Full list <LinkArrow />
       </Link>
     </section>
   );
@@ -135,11 +123,11 @@ function SeasonLeaders({
       {/* The site's chapter marker (see SectionHeading), with the note beside
           the title on a wide screen and dropped under it on a phone. */}
       <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-1">
-        <h2 className="min-w-0 text-xl font-semibold tracking-[0.15em] text-accent uppercase sm:shrink-0 sm:text-2xl sm:tracking-[0.2em] md:text-3xl">
+        <h2 className="min-w-0 text-2xl font-semibold tracking-[0.2em] text-accent uppercase sm:shrink-0">
           {title}
         </h2>
         {note && (
-          <p className="order-last w-full text-sm text-white/50 sm:order-none sm:w-auto">
+          <p className="order-last w-full text-sm text-white/50 sm:order-0 sm:w-auto">
             {note}
           </p>
         )}
@@ -147,12 +135,12 @@ function SeasonLeaders({
       </div>
       <div className="grid gap-6 md:grid-cols-2">
         <LeaderList
-          title={`Best Values of ${data.season}`}
+          title={`${data.top.length} Best Values of ${data.season}`}
           rows={data.top}
           href={salariesBy(data.season, "desc")}
         />
         <LeaderList
-          title={`Worst Values of ${data.season}`}
+          title={`${data.bottom.length} Worst Values of ${data.season}`}
           rows={data.bottom}
           href={salariesBy(data.season, "asc")}
         />
@@ -202,13 +190,13 @@ export default async function Home() {
         style={step(3)}
       >
         <span className="font-semibold text-white">Net Value</span> is
-        production minus pay. Zero is the going rate, above it is a bargain, and
-        below it is an overpay.{" "}
+        production minus pay. Zero is the going rate, above zero is a bargain, and
+        below zero is an overpay.{" "}
         <Link
           href="/net-value"
-          className="whitespace-nowrap text-white underline decoration-accent underline-offset-4 transition-colors hover:text-accent"
+          className="group whitespace-nowrap text-white underline decoration-accent underline-offset-4 transition-colors hover:text-accent"
         >
-          How it works &rarr;
+          How it works <LinkArrow />
         </Link>
       </p>
 

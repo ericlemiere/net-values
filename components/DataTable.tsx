@@ -7,6 +7,7 @@ import {
   type Definition,
 } from "@/lib/glossary";
 import { GlossaryButton } from "./GlossaryButton";
+import { LinkArrow } from "./LinkArrow";
 import { SplitGroup, SplitToggle } from "./SplitRows";
 import { TABLE_BREAKOUT } from "@/lib/layout";
 import { SeasonFilter } from "./SeasonFilter";
@@ -457,13 +458,13 @@ export function DataTable<Row>({
               },
               extraParams,
             )}
-            className={`rounded border border-white/20 px-3 py-1.5 transition-colors ${
+            className={`group rounded border border-white/20 px-3 py-1.5 transition-colors ${
               page >= totalPages
                 ? "pointer-events-none opacity-30"
                 : "hover:border-accent hover:bg-accent hover:text-black"
             }`}
           >
-            Next →
+            Next <LinkArrow />
           </NavLink>
         </div>
       </div>

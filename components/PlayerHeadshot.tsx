@@ -32,7 +32,7 @@ export function PlayerHeadshot({
 
   return (
     <div
-      className={`shrink-0 overflow-hidden bg-background-box ${
+      className={`shrink-0 overflow-hidden ${
         frame ? "rounded-lg border border-white/15" : ""
       }`.trim()}
       style={{ width, height }}

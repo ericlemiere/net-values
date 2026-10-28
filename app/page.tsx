@@ -159,7 +159,7 @@ export default async function Home() {
   // scored it becomes the current one, and in the offseason before that the
   // latest season is already the last one.
   const [latestTitle, priorTitle] = latest?.inProgress
-    ? ["Current Season So Far", "Last Season"]
+    ? ["Current Season", "Last Season"]
     : ["Last Season", "Two Seasons Ago"];
 
   return (

@@ -2948,3 +2948,189 @@ export const getDataUpdatedAt = cached("getDataUpdatedAt", async function getDat
     .where(eq(siteMeta.key, "data"));
   return row?.updatedAt ?? null;
 });
+
+// ---- Cap converter ----
+
+/**
+ * One player's pay for a season, from his rows in `salaries` grouped by player
+ * and season. The same rule compute_net_values.py prices him by: a legacy row
+ * is a full-season figure repeated against every team he was on, so it takes
+ * the largest; bref rows are what each team paid, so they add up. Summing the
+ * legacy rows counted a traded player's season once per team.
+ */
+const seasonSalarySql = sql`
+  CASE WHEN BOOL_OR(source = 'sqlite_migration') THEN MAX(salary)
+       ELSE SUM(salary) END`;
+
+export interface CapSeason {
+  season: string;
+  leagueCap: number;
+  /** The smallest and largest pay any one player drew that season. */
+  minSalary: number;
+  maxSalary: number;
+}
+
+/**
+ * Every season with an official cap and salaries to compare against, oldest
+ * first. The caps go back to 1984-85 but the salaries only to 1990-91, and a
+ * season with nobody in it has nothing to convert to.
+ *
+ * The salary range is per player, the same whole-season figure the ladder and
+ * Net Value use (see seasonSalarySql), so the bounds on the salary input are figures someone was
+ * actually paid.
+ */
+export const getCapSeasons = cached("getCapSeasons", async function getCapSeasons(): Promise<
+  CapSeason[]
+> {
+  const result = await db.execute(sql`
+    SELECT se.season,
+           se.league_cap AS "leagueCap",
+           min(p.salary)::float8 AS "minSalary",
+           max(p.salary)::float8 AS "maxSalary"
+    FROM ${seasons} se
+    JOIN (
+      SELECT season, player_id, ${seasonSalarySql} AS salary
+      FROM ${salaries}
+      WHERE salary > 0
+      GROUP BY season, player_id
+    ) p ON p.season = se.season
+    WHERE se.league_cap IS NOT NULL
+    GROUP BY se.season, se.league_cap
+    ORDER BY se.season`);
+  return result.rows as unknown as CapSeason[];
+});
+
+export interface CapLadderRow {
+  season: string;
+  playerId: number;
+  name: string;
+  team: string | null;
+  teamLabel: string | null;
+  pctOfLeagueCap: number;
+  netValueScore: number | null;
+}
+
+/**
+ * One contract per season: whoever was paid nearest `targetPct` of that
+ * season's cap, within `tolerance` points either side. A season with nobody
+ * inside the window has no row, which the page reads as "no one was paid this".
+ *
+ * A player with a Net Value on file wins a tie over one without, so the ladder
+ * shows what the money bought wherever it can.
+ */
+export const getCapLadder = cached("getCapLadder", async function getCapLadder(
+  targetPct: number,
+  tolerance = 1,
+): Promise<CapLadderRow[]> {
+  const pct = sql`round(100.0 * s.salary / nullif(se.league_cap, 0), 2)`;
+  const result = await db.execute(sql`
+    SELECT DISTINCT ON (s.season)
+           s.season,
+           s.player_id AS "playerId",
+           p.name,
+           s.team,
+           (SELECT ti.abbr FROM ${teamIdentities} ti
+              JOIN ${teams} era_team ON era_team.id = ti.team_id
+             WHERE era_team.abbr = s.team
+               AND s.season >= ti.first_season
+               AND (ti.last_season IS NULL OR s.season <= ti.last_season)
+             LIMIT 1) AS "teamLabel",
+           ${pct}::float8 AS "pctOfLeagueCap",
+           s.score::float8 AS "netValueScore"
+    -- A player's season as Net Value prices it, so the ladder and the outcomes
+    -- beside it measure the same money and every score shown is judged on the
+    -- salary it is matched on. That leaves out what a waiving team still owed
+    -- (see compute_net_values.py) and files the season under the team he
+    -- played for. A season the model hasn't priced falls back to the
+    -- salaries rule, filed under the team that paid the most of it.
+    FROM (
+      SELECT pay.player_id, pay.season,
+             COALESCE(nv.salary, pay.salary) AS salary,
+             COALESCE(nv.team, pay.team) AS team,
+             nv.net_value_score AS score
+      FROM (
+        SELECT player_id, season, ${seasonSalarySql} AS salary,
+               (array_agg(team ORDER BY salary DESC, team))[1] AS team
+        FROM ${salaries}
+        WHERE salary > 0
+        GROUP BY player_id, season
+      ) pay
+      LEFT JOIN ${netValues} nv
+             ON nv.player_id = pay.player_id AND nv.season = pay.season
+    ) s
+    JOIN ${seasons} se ON se.season = s.season
+    JOIN ${players} p ON p.id = s.player_id
+    WHERE s.salary > 0
+      AND abs(${pct} - ${targetPct}) <= ${tolerance}
+    ORDER BY s.season DESC,
+             (s.score IS NULL),
+             abs(${pct} - ${targetPct}),
+             p.name
+  `);
+  return result.rows as unknown as CapLadderRow[];
+});
+
+export interface CapShareOutcomes {
+  count: number;
+  median: number | null;
+  /** Share of these seasons that came out above zero, 0-1. */
+  shareAbove: number | null;
+  best: CapLadderRow[];
+  worst: CapLadderRow[];
+}
+
+/**
+ * What a given share of the cap has bought across every season with a Net
+ * Value: the spread of outcomes, and the best and worst seasons inside the
+ * window. The window is the same one the ladder uses.
+ */
+export const getCapShareOutcomes = cached("getCapShareOutcomes", async function getCapShareOutcomes(
+  targetPct: number,
+  tolerance = 1,
+  limit = 5,
+): Promise<CapShareOutcomes> {
+  const pool = sql`
+    SELECT nv.player_id, nv.season, nv.team,
+           nv.net_value_score::float8 AS score,
+           round(100.0 * nv.salary / nullif(se.league_cap, 0), 2)::float8 AS pct
+    FROM ${netValues} nv
+    JOIN ${seasons} se ON se.season = nv.season
+    WHERE nv.net_value_score IS NOT NULL
+      AND nv.salary > 0
+      AND abs(round(100.0 * nv.salary / nullif(se.league_cap, 0), 2) - ${targetPct}) <= ${tolerance}`;
+
+  const ranked = (dir: SQL) => sql`
+    SELECT pool.season,
+           pool.player_id AS "playerId",
+           p.name,
+           pool.team,
+           (SELECT ti.abbr FROM ${teamIdentities} ti
+              JOIN ${teams} era_team ON era_team.id = ti.team_id
+             WHERE era_team.abbr = pool.team
+               AND pool.season >= ti.first_season
+               AND (ti.last_season IS NULL OR pool.season <= ti.last_season)
+             LIMIT 1) AS "teamLabel",
+           pool.pct AS "pctOfLeagueCap",
+           pool.score AS "netValueScore"
+    FROM (${pool}) pool
+    JOIN ${players} p ON p.id = pool.player_id
+    ORDER BY pool.score ${dir}, pool.season DESC
+    LIMIT ${limit}`;
+
+  const [summary, best, worst] = await Promise.all([
+    db.execute(sql`
+      SELECT count(*)::int AS count,
+             percentile_cont(0.5) WITHIN GROUP (ORDER BY score)::float8 AS median,
+             avg((score > 0)::int)::float8 AS "shareAbove"
+      FROM (${pool}) pool`),
+    db.execute(ranked(sql`DESC`)),
+    db.execute(ranked(sql`ASC`)),
+  ]);
+
+  const s = summary.rows[0] as Omit<CapShareOutcomes, "best" | "worst">;
+  return {
+    ...s,
+    best: best.rows as unknown as CapLadderRow[],
+    worst: worst.rows as unknown as CapLadderRow[],
+  };
+});

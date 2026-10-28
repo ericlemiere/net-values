@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { SeasonTeams, TeamLink } from "@/components/TeamLink";
 import { AwardBadges, CareerAwardBadges } from "@/components/AwardBadges";
 import { SeasonLink } from "@/components/SeasonLink";
+import { HeaderBox } from "@/components/HeaderBox";
 import { PlayerHeadshot } from "@/components/PlayerHeadshot";
 import { SimpleTable } from "@/components/SimpleTable";
 import { SectionHeading } from "@/components/SectionHeading";
@@ -885,35 +886,6 @@ function futureSalRow(f: FutureRow): SalRow {
 // The salaries table anchors the comps beside it: the ?salary= row if it names
 // one, otherwise the player's most recent season that has both a salary and a
 // league cap to divide it by.
-/** One figure in the header strip: a label, the number, and a caption. */
-function HeaderBox({
-  label,
-  value,
-  caption,
-}: {
-  label: string;
-  value: string;
-  caption?: string;
-}) {
-  return (
-    <div className="w-full rounded-lg border-2 border-accent bg-background-box px-3 py-2 md:w-auto md:whitespace-nowrap md:px-4 md:text-right">
-      <div className="flex items-center md:items-start justify-between gap-3 md:block">
-        <div className="text-sm text-white/60">
-          {label}
-          <div className="text-xs text-white/40 md:hidden">{caption}</div>
-        </div>
-        <div className="shrink-0 text-right font-mono text-lg font-semibold tabular-nums text-accent md:text-2xl">
-          {value}
-        </div>
-      </div>
-      {/* Reserved even when empty so boxes beside each other stay level. */}
-      <div className="hidden min-h-4 text-xs text-white/40 md:block">
-        {caption}
-      </div>
-    </div>
-  );
-}
-
 /**
  * The way into /price-check. A header box like its neighbors, but filled in
  * the accent and linked, so it reads as the one thing up here you can press —

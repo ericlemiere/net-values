@@ -81,9 +81,9 @@ export function SiteHeader() {
       <div className="relative z-50 flex h-full w-full items-center gap-2 px-2 sm:px-6 md:hidden">
         <Link
           href="/"
-          className="rounded border-2 border-accent px-2 py-1 font-semibold text-white"
+          className="rounded border-2 border-accent px-2 py-1 font-semibold font-mono tracking-tighter text-white"
         >
-          The Net Values
+          THE NET VALUE$
         </Link>
         <SearchTrigger className="ml-auto h-10 w-10" onOpen={openSearch} />
         <button

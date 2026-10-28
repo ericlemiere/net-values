@@ -61,12 +61,12 @@ export function SiteHeader() {
         <LogoWatermark />
       </div>
 
-      {/* From 56rem: brand, links, and the search button beside the last link.
+      {/* From 48rem: brand, links, and the search button beside the last link.
           The width is what the whole row needs on one line, with room to spare
           for a scrollbar and wider fonts; any narrower and the links would
           wrap, so the compact bar and its drawer take over instead. Adding a
           link means checking this still holds. */}
-      <div className="relative z-1 hidden h-full w-full items-center gap-6 px-6 min-[56rem]:flex">
+      <div className="relative z-1 hidden h-full w-full items-center gap-6 px-6 md:flex">
         <Link
           href="/"
           className="shrink-0 rounded border-2 border-accent px-2 py-1 font-semibold font-mono tracking-tighter text-white"
@@ -78,7 +78,7 @@ export function SiteHeader() {
       </div>
 
       {/* Small screens: compact bar with a drawer for the links. */}
-      <div className="relative z-50 flex h-full w-full items-center gap-2 px-2 sm:px-6 min-[56rem]:hidden">
+      <div className="relative z-50 flex h-full w-full items-center gap-2 px-2 sm:px-6 md:hidden">
         <Link
           href="/"
           className="rounded border-2 border-accent px-2 py-1 font-semibold text-white"

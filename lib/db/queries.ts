@@ -2834,6 +2834,57 @@ export const getSeasonNetValueLeaders = cached("getSeasonNetValueLeaders", async
   return { top, bottom };
 });
 
+export interface HomeNetValueRow extends SeasonNetValueRow {
+  nbaPersonId: number | null;
+}
+
+export interface HomeNetValueSeason {
+  season: string;
+  /** Still in its regular season, so the page can say "so far". */
+  inProgress: boolean;
+  top: HomeNetValueRow[];
+  bottom: HomeNetValueRow[];
+}
+
+/**
+ * The five best and five worst Net Values of the two latest scored seasons,
+ * newest first. Scored rather than on file: next season's contracts are loaded
+ * before it tips off, so it only takes over the top spot once its first games
+ * have been priced, and the season before it moves down.
+ */
+export const getHomeNetValueLeaders = cached("getHomeNetValueLeaders", async function getHomeNetValueLeaders(): Promise<HomeNetValueSeason[]> {
+  const recent = await db
+    .selectDistinct({ season: netValues.season })
+    .from(netValues)
+    .where(isNotNull(netValues.seasonRank))
+    .orderBy(desc(netValues.season))
+    .limit(2);
+
+  const selection = { ...seasonNetValueSelection, nbaPersonId: players.nbaPersonId };
+  return Promise.all(
+    recent.map(async ({ season }) => {
+      const ranked = and(eq(netValues.season, season), isNotNull(netValues.seasonRank));
+      const [top, bottom] = await Promise.all([
+        db
+          .select(selection)
+          .from(netValues)
+          .innerJoin(players, eq(players.id, netValues.playerId))
+          .where(ranked)
+          .orderBy(asc(netValues.seasonRank))
+          .limit(5),
+        db
+          .select(selection)
+          .from(netValues)
+          .innerJoin(players, eq(players.id, netValues.playerId))
+          .where(ranked)
+          .orderBy(desc(netValues.seasonRank))
+          .limit(5),
+      ]);
+      return { season, inProgress: inRegularSeason(season), top, bottom };
+    }),
+  );
+});
+
 /**
  * Every player and team page worth listing in the sitemap. Only players with a
  * contract or a stat line on file: a bare row in `players` renders a page with

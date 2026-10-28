@@ -972,7 +972,7 @@ export async function generateMetadata({
   const headshot = headshotUrl(player.nbaPersonId);
   return pageMetadata({
     title: `${player.name} Salary, Stats & Net Value`,
-    description: `${player.name}'s NBA contract history, career stats and Net Value by season: what he produced on the court against what his salary paid for, with salary comparisons.`,
+    description: `${player.name}'s NBA contract history, career stats, and Net Value by season: what he produced on the court against what his salary paid for, plus players with comparable contracts.`,
     // The ?salary= comp anchor is a view of this page, not a page of its own.
     path: `/players/${player.id}`,
     image: headshot

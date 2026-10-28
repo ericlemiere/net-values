@@ -30,7 +30,7 @@ import { pageMetadata } from "@/lib/site";
 export const metadata = pageMetadata({
   title: "NBA Teams",
   description:
-    "Every NBA team by season: payroll, record, playoff appearances and the roster's combined Net Value, showing which front offices got the most for their money.",
+    "Every NBA team by season: payroll, record, playoff berth, and the roster's combined Net Value, showing which front offices got the most for their money.",
   path: "/teams",
 });
 

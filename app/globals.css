@@ -740,8 +740,8 @@ body {
 
 .sheet-link:hover {
   text-decoration-color: #000;
-  text-decoration-thickness: 2px;
-  text-underline-offset: 4px;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
 }
 
 /*

@@ -127,3 +127,16 @@ export function netValueClass(score: number | null): string {
   if (score <= -NET_VALUE_MARK) return `text-red-700${strength}`;
   return "";
 }
+
+/**
+ * "Oct 5, 2026", on Eastern time — the NBA's clock, and the one the morning
+ * job's "yesterday's games" means.
+ */
+export function formatUpdated(iso: string) {
+  return new Date(iso).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "America/New_York",
+  });
+}

@@ -19,16 +19,22 @@ export function PlayerHeadshot({
   nbaPersonId,
   name,
   height = 95,
+  frame = true,
 }: {
   nbaPersonId: number | null;
   name: string;
   height?: number;
+  /** The rounded, outlined box. Off where the photo runs flush to the edge of
+   *  something that already frames it, like a row of a list. */
+  frame?: boolean;
 }) {
   const width = Math.round(height * RATIO);
 
   return (
     <div
-      className="shrink-0 overflow-hidden rounded-lg border border-white/15 bg-background-box"
+      className={`shrink-0 overflow-hidden bg-background-box ${
+        frame ? "rounded-lg border border-white/15" : ""
+      }`.trim()}
       style={{ width, height }}
     >
       {nbaPersonId !== null ? (

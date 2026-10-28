@@ -18,7 +18,7 @@ import { WhySubtract } from "./_sections/WhySubtract";
 export const metadata = pageMetadata({
   title: "How Net Value Works",
   description:
-    "How Net Value is calculated: the formula comparing an NBA player's on-court production with what his salary bought, with a step-by-step worked example.",
+    "How Net Value is calculated: an NBA player's on-court production in dollars minus his salary, reported in NVP, with the full formula and a step-by-step worked example.",
   path: "/net-value",
 });
 

@@ -21,7 +21,7 @@ import { pageMetadata } from "@/lib/site";
 export const metadata = pageMetadata({
   title: "NBA Player Stats",
   description:
-    "NBA player stats for every season since 1990-91: per-game averages, season totals and advanced metrics like TS% and usage, filterable by season, team and position.",
+    "NBA player stats for every season since 1990-91: per-game averages, season totals, and advanced metrics like TS% and usage, filterable by season, team, and position.",
   path: "/stats",
 });
 

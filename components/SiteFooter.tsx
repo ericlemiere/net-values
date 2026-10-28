@@ -2,22 +2,10 @@ import Image from "next/image";
 import Link from "next/link";
 import { HideOnHome } from "@/components/HideOnHome";
 import { getDataUpdatedAt } from "@/lib/db/queries";
+import { formatUpdated } from "@/lib/format";
 import { SITE_NAME } from "@/lib/site";
 
 const linkClass = "text-white/70 transition-colors hover:text-accent";
-
-/**
- * "Oct 5, 2026", on Eastern time — the NBA's clock, and the one the morning
- * job's "yesterday's games" means.
- */
-function formatUpdated(iso: string) {
-  return new Date(iso).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    timeZone: "America/New_York",
-  });
-}
 
 /**
  * The logo bottom-left, where the home page always had it, with the site's
@@ -64,25 +52,26 @@ export async function SiteFooter() {
         </nav>
         {/* Two dotted lines on a wide screen. On a phone, beside the logo, the
             dots drop out and each phrase takes its own line, so nothing breaks
-            mid-name. The home page drops the data credit and keeps the date. */}
-        <p>
-          <HideOnHome>
+            mid-name. The home page leaves this line out: it shows the date
+            beside the current season's leaders instead. */}
+        <HideOnHome>
+          <p>
             <span className="block whitespace-nowrap md:inline">
               Data via NBA.com,
             </span>{" "}
             <span className="block whitespace-nowrap md:inline">
               Basketball-Reference, and HoopsHype
             </span>
-            {updatedAt && <span className="hidden md:inline"> &middot; </span>}
-          </HideOnHome>
-          {updatedAt && (
-            <>
-              <span className="block whitespace-nowrap md:inline">
-                Updated {formatUpdated(updatedAt)}
-              </span>
-            </>
-          )}
-        </p>
+            {updatedAt && (
+              <>
+                <span className="hidden md:inline"> &middot; </span>
+                <span className="block whitespace-nowrap md:inline">
+                  Updated {formatUpdated(updatedAt)}
+                </span>
+              </>
+            )}
+          </p>
+        </HideOnHome>
         <p>
           <span className="block whitespace-nowrap md:inline">
             &copy; {new Date().getFullYear()} {SITE_NAME}

@@ -558,7 +558,7 @@ export async function generateMetadata({
   if (!team) return { title: "Team not found" };
   return pageMetadata({
     title: `${team.name} Payroll, Roster & Net Value`,
-    description: `${team.name} season by season: payroll, record, roster salaries and the Net Value of every player, showing how much the team got for its money.`,
+    description: `${team.name} season by season: payroll, record, roster salaries, future commitments, and the Net Value of every player, showing how much the team got for its money.`,
     // Lookups are case-insensitive, so /teams/lal and /teams/LAL are one page.
     path: `/teams/${team.abbr}`,
   });

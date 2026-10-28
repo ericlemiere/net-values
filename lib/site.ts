@@ -6,7 +6,7 @@ export const SITE_NAME = "The Net Values";
 export const CONTACT_EMAIL = "support@thenetvalues.com";
 
 export const SITE_DESCRIPTION =
-  "NBA player value measuring production against salary. Net Value compares what every player produced on the court with what his contract paid for, for every season since 1990-91.";
+  "Which NBA players are worth their contracts? Net Value prices every season since 1990-91: what a player produced on the court, in dollars, minus his salary.";
 
 /**
  * The absolute origin every canonical URL, sitemap entry and social card is

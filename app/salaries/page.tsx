@@ -36,7 +36,7 @@ import { pageMetadata } from "@/lib/site";
 export const metadata = pageMetadata({
   title: "NBA Salaries",
   description:
-    "Every NBA player salary since 1990-91 with team payroll, share of the salary cap, deserved pay and Net Value, showing who was overpaid and who was a bargain.",
+    "Every NBA player salary since 1990-91 with team payroll, share of the salary cap, deserved pay, and Net Value, showing who was overpaid and who was a bargain.",
   path: "/salaries",
 });
 

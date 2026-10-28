@@ -36,7 +36,7 @@ import { pageMetadata } from "@/lib/site";
 export const metadata = pageMetadata({
   title: "Price Check",
   description:
-    "What an NBA player was paid for every game, minute, point, rebound, assist, steal and block of a season. Pick a player and a stat, or put two side by side.",
+    "What an NBA player was paid for every game, minute, point, rebound, assist, steal, and block of a season. Pick a player and a stat, or put two side by side.",
   path: "/price-check",
 });
 

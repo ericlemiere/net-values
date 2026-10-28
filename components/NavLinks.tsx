@@ -12,11 +12,11 @@ export const NAV_LINKS = [
   // Advanced stats live behind the toggle on /stats rather than taking a nav
   // slot of their own; /advanced-stats redirects there.
   { href: "/stats", label: "Stats" },
+  // The award pages hang off Seasons, which links every one of them, and
+  // /price-check off each player page's price tag.
   { href: "/seasons", label: "Seasons" },
-  { href: "/mvp", label: "Awards" },
   { href: "/cap-converter", label: "Cap Converter" },
-  { href: "/price-check", label: "Price Check" },
-  { href: "/net-value", label: "Net Value" },
+  { href: "/net-value", label: "How It Works" },
 ];
 
 /**

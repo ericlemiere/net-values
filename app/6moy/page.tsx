@@ -2,9 +2,9 @@ import { AwardHistory } from "@/components/AwardHistory";
 import { pageMetadata } from "@/lib/site";
 
 export const metadata = pageMetadata({
-  title: "Sixth Man of the Year",
+  title: "NBA Sixth Man of the Year Winners",
   description:
-    "Every NBA Sixth Man of the Year winner, with the Net Value each earned that season.",
+    "Every NBA Sixth Man of the Year since 1990-91, with the Net Value and league rank each winner earned that season.",
   path: "/6moy",
 });
 

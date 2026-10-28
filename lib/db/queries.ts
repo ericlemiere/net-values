@@ -3000,6 +3000,49 @@ export const getCapSeasons = cached("getCapSeasons", async function getCapSeason
   return result.rows as unknown as CapSeason[];
 });
 
+export interface PlayerCapSeason {
+  season: string;
+  salary: number;
+  team: string | null;
+  teamLabel: string | null;
+  netValueScore: number | null;
+}
+
+/**
+ * One player's pay in every season the cap converter covers, newest first:
+ * the /cap-converter player picker's seasons, and the figure each converts.
+ * Measured the way getCapLadder measures everyone else, so his own season
+ * matches the row the ladder would show for him.
+ */
+export const getPlayerCapSeasons = cached("getPlayerCapSeasons", async function getPlayerCapSeasons(
+  playerId: number,
+): Promise<PlayerCapSeason[]> {
+  const result = await db.execute(sql`
+    SELECT pay.season,
+           COALESCE(nv.salary, pay.salary)::float8 AS salary,
+           COALESCE(nv.team, pay.team) AS team,
+           (SELECT ti.abbr FROM ${teamIdentities} ti
+              JOIN ${teams} era_team ON era_team.id = ti.team_id
+             WHERE era_team.abbr = COALESCE(nv.team, pay.team)
+               AND pay.season >= ti.first_season
+               AND (ti.last_season IS NULL OR pay.season <= ti.last_season)
+             LIMIT 1) AS "teamLabel",
+           nv.net_value_score::float8 AS "netValueScore"
+    FROM (
+      SELECT season, ${seasonSalarySql} AS salary,
+             (array_agg(team ORDER BY salary DESC, team))[1] AS team
+      FROM ${salaries}
+      WHERE player_id = ${playerId} AND salary > 0
+      GROUP BY season
+    ) pay
+    JOIN ${seasons} se ON se.season = pay.season AND se.league_cap IS NOT NULL
+    LEFT JOIN ${netValues} nv
+           ON nv.player_id = ${playerId} AND nv.season = pay.season
+    WHERE COALESCE(nv.salary, pay.salary) > 0
+    ORDER BY pay.season DESC`);
+  return result.rows as unknown as PlayerCapSeason[];
+});
+
 export interface CapLadderRow {
   season: string;
   playerId: number;
@@ -3017,10 +3060,14 @@ export interface CapLadderRow {
  *
  * A player with a Net Value on file wins a tie over one without, so the ladder
  * shows what the money bought wherever it can.
+ *
+ * `excludePlayerId` leaves one player out of every season, for when the
+ * conversion started from him and his own row is shown on its own.
  */
 export const getCapLadder = cached("getCapLadder", async function getCapLadder(
   targetPct: number,
   tolerance = 1,
+  excludePlayerId: number | null = null,
 ): Promise<CapLadderRow[]> {
   const pct = sql`round(100.0 * s.salary / nullif(se.league_cap, 0), 2)`;
   const result = await db.execute(sql`
@@ -3062,6 +3109,7 @@ export const getCapLadder = cached("getCapLadder", async function getCapLadder(
     JOIN ${players} p ON p.id = s.player_id
     WHERE s.salary > 0
       AND abs(${pct} - ${targetPct}) <= ${tolerance}
+      ${excludePlayerId === null ? sql`` : sql`AND s.player_id <> ${excludePlayerId}`}
     ORDER BY s.season DESC,
              (s.score IS NULL),
              abs(${pct} - ${targetPct}),
@@ -3082,12 +3130,14 @@ export interface CapShareOutcomes {
 /**
  * What a given share of the cap has bought across every season with a Net
  * Value: the spread of outcomes, and the best and worst seasons inside the
- * window. The window is the same one the ladder uses.
+ * window. The window is the same one the ladder uses, and so is
+ * `excludePlayerId`: the player left out of the count and both lists.
  */
 export const getCapShareOutcomes = cached("getCapShareOutcomes", async function getCapShareOutcomes(
   targetPct: number,
   tolerance = 1,
   limit = 5,
+  excludePlayerId: number | null = null,
 ): Promise<CapShareOutcomes> {
   const pool = sql`
     SELECT nv.player_id, nv.season, nv.team,
@@ -3097,7 +3147,8 @@ export const getCapShareOutcomes = cached("getCapShareOutcomes", async function 
     JOIN ${seasons} se ON se.season = nv.season
     WHERE nv.net_value_score IS NOT NULL
       AND nv.salary > 0
-      AND abs(round(100.0 * nv.salary / nullif(se.league_cap, 0), 2) - ${targetPct}) <= ${tolerance}`;
+      AND abs(round(100.0 * nv.salary / nullif(se.league_cap, 0), 2) - ${targetPct}) <= ${tolerance}
+      ${excludePlayerId === null ? sql`` : sql`AND nv.player_id <> ${excludePlayerId}`}`;
 
   const ranked = (dir: SQL) => sql`
     SELECT pool.season,

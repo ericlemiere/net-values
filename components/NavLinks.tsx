@@ -14,6 +14,7 @@ export const NAV_LINKS = [
   { href: "/stats", label: "Stats" },
   { href: "/seasons", label: "Seasons" },
   { href: "/mvp", label: "Awards" },
+  { href: "/cap-converter", label: "Cap Converter" },
   { href: "/price-check", label: "Price Check" },
   { href: "/net-value", label: "Net Value" },
 ];

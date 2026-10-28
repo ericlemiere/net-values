@@ -97,7 +97,11 @@ export function HomeIntro() {
           <Link
             key={link.href}
             href={link.href}
-            className={`home-in ${cardClass}`}
+            // An odd card out at the end takes the whole row rather than
+            // leaving half of it empty.
+            className={`home-in ${cardClass} ${
+              i === HOME_LINKS.length - 1 && i % 2 === 0 ? "col-span-2" : ""
+            }`}
             // A step per row, so both cards in a row rise together.
             style={{ "--i": Math.floor(i / 2) + 3 } as React.CSSProperties}
           >

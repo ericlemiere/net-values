@@ -12,6 +12,7 @@ import {
 } from "@/components/PriceCheckControls";
 import { formatCurrency, formatScore } from "@/lib/format";
 import {
+  getCapSeasons,
   getPlayerById,
   getPlayerCareerSalaries,
   getPlayerCareerStatsTotals,
@@ -165,11 +166,14 @@ export default async function PriceCheckPage({
   // A second player's own stat only means anything when there is one.
   const stat2 = p2 !== null && sp.stat2 ? parsePriceStat(sp.stat2) : null;
 
-  const [slot1, slot2, teams] = await Promise.all([
+  const [slot1, slot2, teams, capSeasons] = await Promise.all([
     p1 === null ? null : loadSlot(p1, sp.s1 ?? null, stat),
     p2 === null ? null : loadSlot(p2, sp.s2 ?? null, stat2 ?? stat),
     getTeams(),
+    getCapSeasons(),
   ]);
+  // The seasons /cap-converter can restate a salary from.
+  const capped = new Set(capSeasons.map((s) => s.season));
 
   // A bad id in the URL drops out rather than 404ing the page. If it was the
   // first player, the second moves up so the empty slot is always on the right.
@@ -204,9 +208,9 @@ export default async function PriceCheckPage({
 
       {a ? (
         <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-2">
-            <PlayerCard slot={a} index={1} state={state} teams={teams} view={view} />
+            <PlayerCard slot={a} index={1} state={state} teams={teams} view={view} capped={capped} />
             {b ? (
-              <PlayerCard slot={b} index={2} state={state} teams={teams} view={view} />
+              <PlayerCard slot={b} index={2} state={state} teams={teams} view={view} capped={capped} />
             ) : (
               <AddPlayerSlot
                 state={state}
@@ -236,12 +240,14 @@ function PlayerCard({
   state,
   teams,
   view,
+  capped,
 }: {
   slot: Slot;
   index: 1 | 2;
   state: PriceCheckState;
   teams: Teams;
   view: PriceView;
+  capped: Set<string>;
 }) {
   const { player, season, stat, totals, pay, total, rank } = slot;
   const def = PRICE_STATS[stat];
@@ -283,6 +289,14 @@ function PlayerCard({
                 <div className="font-mono text-2xl font-semibold tabular-nums">
                   {formatCurrency(salary)}
                 </div>
+                {salary && capped.has(season) && (
+                  <Link
+                    href={`/cap-converter?player=${player.id}&season=${season}`}
+                    className="mt-1 inline-block text-xs text-accent decoration-accent underline-offset-4 hover:underline"
+                  >
+                    What&rsquo;s this salary worth today? &rarr;
+                  </Link>
+                )}
               </div>
               <div className="px-1">
                 <div className={FIGURE_LABEL}>Net Value</div>

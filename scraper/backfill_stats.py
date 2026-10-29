@@ -17,30 +17,24 @@ here and backfilled from basketball-reference by backfill_bref_stats.py, which
 is why this script preserves them on conflict rather than overwriting.
 """
 import sys
-import time
 
 from nba_api.stats.endpoints import leaguedashplayerstats
 
+import nba
+
 from db import connect, NBA_API_SEASONS, to_season_label
 
-SLEEP_SECONDS = 1.2
 
 
 def fetch(season: str, per_mode: str):
-    for attempt in range(5):
-        try:
-            r = leaguedashplayerstats.LeagueDashPlayerStats(
-                season=season,
-                season_type_all_star="Regular Season",
-                per_mode_detailed=per_mode,
-                timeout=60,
-            )
-            return r.get_data_frames()[0]
-        except Exception as e:
-            wait = 5 * (attempt + 1)
-            print(f"  fetch failed ({e}), retrying in {wait}s...", file=sys.stderr)
-            time.sleep(wait)
-    raise RuntimeError(f"Failed to fetch {season} {per_mode} after 5 attempts")
+    return nba.frames(
+        leaguedashplayerstats.LeagueDashPlayerStats,
+        f"{season} {per_mode}",
+        season=season,
+        season_type_all_star="Regular Season",
+        per_mode_detailed=per_mode,
+        timeout=60,
+    )[0]
 
 
 def _num(x):
@@ -165,9 +159,7 @@ def run(seasons):
         print(f"=== {season} ({label}) ===")
 
         totals_df = fetch(season, "Totals")
-        time.sleep(SLEEP_SECONDS)
         pergame_df = fetch(season, "PerGame")
-        time.sleep(SLEEP_SECONDS)
 
         pergame_by_player = {row["PLAYER_ID"]: row for _, row in pergame_df.iterrows()}
 

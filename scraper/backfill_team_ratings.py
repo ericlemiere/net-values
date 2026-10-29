@@ -33,14 +33,14 @@ Usage:
   python backfill_team_ratings.py 2024-25         # one nba_api season string
 """
 import sys
-import time
 
 from nba_api.stats.endpoints import leaguegamelog
+
+import nba
 
 from db import connect, to_season_label
 from backfill_stats import current_season
 
-SLEEP_SECONDS = 1.4
 
 # Net Value prices seasons from 1990-91, which is as far back as the salary
 # data reaches. The game log itself goes back much further.
@@ -53,19 +53,14 @@ def seasons_through_current():
 
 
 def fetch(season):
-    for attempt in range(5):
-        try:
-            return leaguegamelog.LeagueGameLog(
-                season=season,
-                season_type_all_star="Regular Season",
-                player_or_team_abbreviation="T",
-                timeout=90,
-            ).get_data_frames()[0]
-        except Exception as e:
-            wait = 5 * (attempt + 1)
-            print(f"  fetch failed ({e}), retrying in {wait}s...", file=sys.stderr)
-            time.sleep(wait)
-    raise RuntimeError(f"Failed to fetch {season} after 5 attempts")
+    return nba.frames(
+        leaguegamelog.LeagueGameLog,
+        f"{season}",
+        season=season,
+        season_type_all_star="Regular Season",
+        player_or_team_abbreviation="T",
+        timeout=90,
+    )[0]
 
 
 def possessions(row, opp):
@@ -135,7 +130,6 @@ def main():
         label = to_season_label(season)
         if df.empty:
             print(f"{label}: no games")
-            time.sleep(SLEEP_SECONDS)
             continue
 
         for abbr, t in sorted(team_season_rows(df).items()):
@@ -170,7 +164,6 @@ def main():
             written += 1
         conn.commit()
         print(f"{label}: {len(team_season_rows(df))} teams")
-        time.sleep(SLEEP_SECONDS)
 
     cur.close()
     conn.close()

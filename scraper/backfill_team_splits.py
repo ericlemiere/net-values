@@ -35,10 +35,11 @@ Usage:
   python backfill_team_splits.py 1997 2026    # a range of end-years
 """
 import sys
-import time
 from collections import defaultdict
 
 from nba_api.stats.endpoints import playergamelogs
+
+import nba
 
 import bref
 from backfill_advanced import load_team_resolver, num, intnum
@@ -48,7 +49,6 @@ from db import connect
 FIRST_END_YEAR = 1990
 # The first season nba.com has game logs for.
 FIRST_GAMELOG_END_YEAR = 1997
-SLEEP_SECONDS = 1.2
 
 # bref totals data-stat -> column, for the seasons bref supplies the box score.
 BREF_BOX = {
@@ -94,18 +94,13 @@ def bref_splits(rows, resolve_team):
 
 
 def fetch_gamelogs(season):
-    for attempt in range(5):
-        try:
-            return playergamelogs.PlayerGameLogs(
-                season_nullable=season,
-                season_type_nullable="Regular Season",
-                timeout=90,
-            ).get_data_frames()[0]
-        except Exception as e:
-            wait = 5 * (attempt + 1)
-            print(f"  fetch failed ({e}), retrying in {wait}s...", file=sys.stderr)
-            time.sleep(wait)
-    raise RuntimeError(f"Failed to fetch {season} game logs after 5 attempts")
+    return nba.frames(
+        playergamelogs.PlayerGameLogs,
+        f"{season} game logs",
+        season_nullable=season,
+        season_type_nullable="Regular Season",
+        timeout=90,
+    )[0]
 
 
 def gamelog_splits(df, player_by_nba_id, team_by_nba_id):
@@ -236,7 +231,6 @@ def build_season(end_year, cur, resolve_team, slug_to_id, lookups):
     if end_year >= FIRST_GAMELOG_END_YEAR:
         player_by_nba_id, team_by_nba_id = lookups
         df = fetch_gamelogs(f"{end_year - 1}-{str(end_year)[2:]}")
-        time.sleep(SLEEP_SECONDS)
         for pid, stints in gamelog_splits(df, player_by_nba_id, team_by_nba_id).items():
             for s in stints:
                 s["source"] = "nba_api"

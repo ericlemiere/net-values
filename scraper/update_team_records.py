@@ -22,9 +22,10 @@ Usage:
   python update_team_records.py 2026-27     # a specific nba_api season string
 """
 import sys
-import time
 
 from nba_api.stats.endpoints import leaguegamelog
+
+import nba
 
 from backfill_stats import current_season
 from backfill_team_ratings import load_team_ids
@@ -35,19 +36,14 @@ TITLE_WINS = 16
 
 
 def fetch(season, season_type):
-    for attempt in range(5):
-        try:
-            return leaguegamelog.LeagueGameLog(
-                season=season,
-                season_type_all_star=season_type,
-                player_or_team_abbreviation="T",
-                timeout=90,
-            ).get_data_frames()[0]
-        except Exception as e:
-            wait = 5 * (attempt + 1)
-            print(f"  fetch failed ({e}), retrying in {wait}s...", file=sys.stderr)
-            time.sleep(wait)
-    raise RuntimeError(f"Failed to fetch {season} {season_type} after 5 attempts")
+    return nba.frames(
+        leaguegamelog.LeagueGameLog,
+        f"{season} {season_type}",
+        season=season,
+        season_type_all_star=season_type,
+        player_or_team_abbreviation="T",
+        timeout=90,
+    )[0]
 
 
 def records(df):

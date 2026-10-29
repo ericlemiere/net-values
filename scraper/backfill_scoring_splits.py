@@ -29,14 +29,14 @@ Usage:
   python backfill_scoring_splits.py 2024-25       # one nba_api season string
 """
 import sys
-import time
 
 from nba_api.stats.endpoints import leaguedashplayerstats
+
+import nba
 
 from db import connect, NBA_API_SEASONS, to_season_label
 from backfill_stats import current_season
 
-SLEEP_SECONDS = 1.4
 
 # endpoint column -> our column, for 0-1 fractions stored 0-100.
 PERCENTS = {
@@ -63,20 +63,15 @@ def num(x):
 
 
 def fetch(season):
-    for attempt in range(5):
-        try:
-            return leaguedashplayerstats.LeagueDashPlayerStats(
-                season=season,
-                season_type_all_star="Regular Season",
-                measure_type_detailed_defense="Scoring",
-                per_mode_detailed="Totals",
-                timeout=60,
-            ).get_data_frames()[0]
-        except Exception as e:
-            wait = 5 * (attempt + 1)
-            print(f"  fetch failed ({e}), retrying in {wait}s...", file=sys.stderr)
-            time.sleep(wait)
-    raise RuntimeError(f"Failed to fetch {season} after 5 attempts")
+    return nba.frames(
+        leaguedashplayerstats.LeagueDashPlayerStats,
+        f"{season}",
+        season=season,
+        season_type_all_star="Regular Season",
+        measure_type_detailed_defense="Scoring",
+        per_mode_detailed="Totals",
+        timeout=60,
+    )[0]
 
 
 def seasons_through_current():
@@ -120,7 +115,6 @@ def main():
             written += 1
         conn.commit()
         print(f"{label}: {len(df)} players")
-        time.sleep(SLEEP_SECONDS)
 
     cur.close()
     conn.close()

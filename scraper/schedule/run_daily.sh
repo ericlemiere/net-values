@@ -27,6 +27,16 @@ main() {
 
     echo "=== $(date) ==="
 
+    # Up to twenty minutes' random delay, so nba.com doesn't see the same
+    # address at the same minute every day, which is what its bot protection
+    # looks for. Skipped when run by hand from a terminal; launchd gives the
+    # job no terminal.
+    if [[ ! -t 0 ]]; then
+        local delay=$((RANDOM % 1200))
+        echo "waiting ${delay}s before starting"
+        sleep "$delay"
+    fi
+
     # Wi-Fi can take a while to come back after a wake. Five minutes, then go
     # anyway: the job's own requests fail loudly enough if it is really down.
     local i

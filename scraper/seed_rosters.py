@@ -17,26 +17,23 @@ Usage:
   python seed_rosters.py 2026-27     # an explicit nba_api season string
 """
 import sys
-import time
 
 from nba_api.stats.endpoints import commonallplayers
+
+import nba
 
 from backfill_stats import current_season
 from db import connect
 
 
 def fetch(season: str):
-    for attempt in range(5):
-        try:
-            r = commonallplayers.CommonAllPlayers(
-                is_only_current_season=1, season=season, timeout=60
-            )
-            return r.get_data_frames()[0]
-        except Exception as e:
-            wait = 5 * (attempt + 1)
-            print(f"  fetch failed ({e}), retrying in {wait}s...", file=sys.stderr)
-            time.sleep(wait)
-    raise RuntimeError(f"Failed to fetch {season} rosters after 5 attempts")
+    return nba.frames(
+        commonallplayers.CommonAllPlayers,
+        f"{season} rosters",
+        is_only_current_season=1,
+        season=season,
+        timeout=60,
+    )[0]
 
 
 def main():

@@ -23,14 +23,14 @@ Usage:
   python backfill_nba_advanced.py 2024-25         # one nba_api season string
 """
 import sys
-import time
 
 from nba_api.stats.endpoints import leaguedashplayerstats
+
+import nba
 
 from db import connect, NBA_API_SEASONS, to_season_label
 from backfill_stats import current_season
 
-SLEEP_SECONDS = 1.5
 
 # endpoint column -> our column, for values stored as-is.
 #
@@ -69,20 +69,15 @@ def num(x):
 
 
 def fetch(season):
-    for attempt in range(5):
-        try:
-            return leaguedashplayerstats.LeagueDashPlayerStats(
-                season=season,
-                season_type_all_star="Regular Season",
-                measure_type_detailed_defense="Advanced",
-                per_mode_detailed="Totals",
-                timeout=60,
-            ).get_data_frames()[0]
-        except Exception as e:
-            wait = 5 * (attempt + 1)
-            print(f"  fetch failed ({e}), retrying in {wait}s...", file=sys.stderr)
-            time.sleep(wait)
-    raise RuntimeError(f"Failed to fetch {season} after 5 attempts")
+    return nba.frames(
+        leaguedashplayerstats.LeagueDashPlayerStats,
+        f"{season}",
+        season=season,
+        season_type_all_star="Regular Season",
+        measure_type_detailed_defense="Advanced",
+        per_mode_detailed="Totals",
+        timeout=60,
+    )[0]
 
 
 def build_values(r, team_abbr):
@@ -112,7 +107,6 @@ def run(seasons):
     for season in seasons:
         label = to_season_label(season)
         df = fetch(season)
-        time.sleep(SLEEP_SECONDS)
 
         n = miss = 0
         for _, r in df.iterrows():

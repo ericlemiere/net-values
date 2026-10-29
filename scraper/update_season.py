@@ -27,9 +27,6 @@ has to be refreshed before the numbers mean anything:
   tracking defense  nba_api: shots defended, deflections, contests and the
                     other hustle counts the defensive model reads
   production        recomputed for this season from all of the above
-  on/off            nba.com's on-court and off-court team ratings, one request
-                    per team (30 a day). Nothing in the model reads them yet;
-                    kept current so the table is complete when something does.
   future contracts  bref's team contracts pages, one request per team: every
                     year a player is signed through past this one, with player
                     and team options. Not part of the model; kept current
@@ -97,7 +94,6 @@ def main():
     import backfill_scoring_splits
     import backfill_tracking_defense
     import compute_production
-    import backfill_on_off
     import backfill_awards
     import backfill_future_salaries
     import backfill_salaries
@@ -146,9 +142,12 @@ def main():
     sys.argv = ["compute_production", to_season_label(season)]
     compute_production.main()
 
-    # After team records: which teams to request comes from team_seasons.
-    print(f"\n=== on/off from nba.com: {season} ===")
-    backfill_on_off.run([season])
+    # Not on/off. backfill_on_off.py is thirty nba.com requests, one per team,
+    # more than the rest of the job's put together, and nothing in the model or
+    # on the site reads player_on_off. nba.com blocks addresses whose traffic
+    # looks automated, so a daily job asks for only what it uses. The table
+    # stays as last backfilled; run backfill_on_off.py by hand, or put it back
+    # here, once something reads it.
 
     print(f"\n=== awards from bref: {end_year} ===")
     # bref only. The nba.com pass walks every ever-All-Star player one request

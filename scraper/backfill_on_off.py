@@ -26,15 +26,15 @@ Usage:
   python backfill_on_off.py 2024-25         # one or more nba_api season strings
 """
 import sys
-import time
 
 from nba_api.stats.endpoints import teamplayeronoffsummary
+
+import nba
 
 from db import connect, NBA_API_SEASONS, to_season_label
 from backfill_nba_advanced import num
 from backfill_stats import current_season
 
-SLEEP_SECONDS = 1.5
 
 # The first season the endpoint has player on/off for.
 FIRST_SEASON = "2007-08"
@@ -54,23 +54,17 @@ COLUMNS = [
 
 def fetch(nba_team_id, season):
     """(on rows, off rows) as DataFrames, whichever order the endpoint sends."""
-    for attempt in range(5):
-        try:
-            frames = teamplayeronoffsummary.TeamPlayerOnOffSummary(
-                team_id=nba_team_id,
-                season=season,
-                season_type_all_star="Regular Season",
-                timeout=60,
-            ).get_data_frames()
-            players = [f for f in frames[1:] if "COURT_STATUS" in f.columns]
-            on = next((f for f in players if (f["COURT_STATUS"] == "On").all()), None)
-            off = next((f for f in players if (f["COURT_STATUS"] == "Off").all()), None)
-            return on, off
-        except Exception as e:
-            wait = 5 * (attempt + 1)
-            print(f"  fetch failed ({e}), retrying in {wait}s...", file=sys.stderr)
-            time.sleep(wait)
-    raise RuntimeError(f"Failed to fetch team {nba_team_id} {season} after 5 attempts")
+    frames = nba.frames(
+        teamplayeronoffsummary.TeamPlayerOnOffSummary,
+        f"team {nba_team_id} {season}",
+        team_id=nba_team_id,
+        season=season,
+        season_type_all_star="Regular Season",
+    )
+    players = [f for f in frames[1:] if "COURT_STATUS" in f.columns]
+    on = next((f for f in players if (f["COURT_STATUS"] == "On").all()), None)
+    off = next((f for f in players if (f["COURT_STATUS"] == "Off").all()), None)
+    return on, off
 
 
 def run(seasons):
@@ -107,7 +101,6 @@ def run(seasons):
         miss = 0
         for nba_team_id, abbr in teams:
             on, off = fetch(nba_team_id, season)
-            time.sleep(SLEEP_SECONDS)
             if on is None or on.empty:
                 continue
             off_by_player = (

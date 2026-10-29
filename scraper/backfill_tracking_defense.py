@@ -37,14 +37,14 @@ Usage:
   python backfill_tracking_defense.py 2024-25     # one nba_api season string
 """
 import sys
-import time
 
 from nba_api.stats.endpoints import leaguedashptdefend, leaguehustlestatsplayer
+
+import nba
 
 from db import connect, to_season_label
 from backfill_stats import current_season
 
-SLEEP_SECONDS = 1.4
 
 # Tracking cameras were installed league-wide for 2013-14; the hustle box score
 # is a later product built on the same feed.
@@ -70,40 +70,27 @@ def num(x):
         return None
 
 
-def retrying(fn, what):
-    for attempt in range(5):
-        try:
-            return fn()
-        except Exception as e:
-            wait = 5 * (attempt + 1)
-            print(f"  {what} failed ({e}), retrying in {wait}s...", file=sys.stderr)
-            time.sleep(wait)
-    raise RuntimeError(f"Failed to fetch {what} after 5 attempts")
-
-
 def fetch_defend(season):
-    return retrying(
-        lambda: leaguedashptdefend.LeagueDashPtDefend(
-            season=season,
-            season_type_all_star="Regular Season",
-            defense_category="Overall",
-            per_mode_simple="Totals",
-            timeout=90,
-        ).get_data_frames()[0],
+    return nba.frames(
+        leaguedashptdefend.LeagueDashPtDefend,
         f"ptdefend {season}",
-    )
+        season=season,
+        season_type_all_star="Regular Season",
+        defense_category="Overall",
+        per_mode_simple="Totals",
+        timeout=90,
+    )[0]
 
 
 def fetch_hustle(season):
-    return retrying(
-        lambda: leaguehustlestatsplayer.LeagueHustleStatsPlayer(
-            season=season,
-            season_type_all_star="Regular Season",
-            per_mode_time="Totals",
-            timeout=90,
-        ).get_data_frames()[0],
+    return nba.frames(
+        leaguehustlestatsplayer.LeagueHustleStatsPlayer,
         f"hustle {season}",
-    )
+        season=season,
+        season_type_all_star="Regular Season",
+        per_mode_time="Totals",
+        timeout=90,
+    )[0]
 
 
 def upsert(cur, player_id, season, columns, values):
@@ -163,7 +150,6 @@ def main():
             defended += 1
         conn.commit()
         print(f"{label}: {len(df)} defenders")
-        time.sleep(SLEEP_SECONDS)
 
     for season in hustle_seasons:
         df = fetch_hustle(season)
@@ -186,7 +172,6 @@ def main():
             hustled += 1
         conn.commit()
         print(f"{label}: {len(df)} hustle rows")
-        time.sleep(SLEEP_SECONDS)
 
     cur.close()
     conn.close()

@@ -37,6 +37,7 @@ import {
   getPlayerCareerSalaries,
   getPlayerFutureSalaries,
   getPlayerTeamSplits,
+  getPaidSoFar,
   getSalaryComps,
   type PlayerAward,
   type PlayerContract,
@@ -1103,19 +1104,26 @@ export default async function PlayerPage({
   );
 
   // The Price Check tile's teaser: what his latest paid season cost per point,
-  // the same season /price-check itself opens on.
+  // the same season /price-check itself opens on. A season still being played
+  // divides only the salary paid so far, as /price-check does, rather than a
+  // full year's pay over a few weeks of points.
   const payBySeason = new Map(salaries.map((r) => [r.season, r.salary]));
-  const priceTeaser =
+  const teaserSeason =
     [...totals]
       .reverse()
-      .map((t) => ({
-        season: t.season,
-        salary: payBySeason.get(t.season) ?? null,
-        pts: t.pts,
-      }))
-      .filter((t) => t.salary && t.pts)
-      .map((t) => ({ season: t.season, perPoint: t.salary! / t.pts! }))[0] ??
-    null;
+      .find((t) => payBySeason.get(t.season) && t.pts) ?? null;
+  const teaserPaid = teaserSeason
+    ? await getPaidSoFar(player.id, teaserSeason.season)
+    : null;
+  const priceTeaser = teaserSeason
+    ? {
+        season: teaserSeason.season,
+        perPoint:
+          (payBySeason.get(teaserSeason.season)! * (teaserPaid?.share ?? 1)) /
+          teaserSeason.pts!,
+        soFar: teaserPaid !== null,
+      }
+    : null;
 
   const truncation = (comps: { rows: unknown[]; totalCount: number } | null) =>
     comps && comps.totalCount > comps.rows.length
@@ -1186,7 +1194,7 @@ export default async function PlayerPage({
             <PriceCheckBox
               href={`/price-check?p1=${player.id}&s1=${priceTeaser.season}&stat=pts`}
               value={`$${Math.round(priceTeaser.perPoint).toLocaleString("en-US")}`}
-              caption={`per point, ${priceTeaser.season}`}
+              caption={`per point${priceTeaser.soFar ? " so far" : ""}, ${priceTeaser.season}`}
             />
           )}
         </div>

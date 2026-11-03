@@ -15,12 +15,16 @@ export function Modal({
   open,
   onClose,
   title,
+  tone = "dark",
   children,
 }: {
   open: boolean;
   onClose: () => void;
   /** The modal's heading, and its accessible name. */
   title: string;
+  /** "light" matches an embedded third-party form (the Ko-fi panel) so the
+   * panel blends into the modal instead of sitting in a box inside it. */
+  tone?: "dark" | "light";
   children: ReactNode;
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -56,7 +60,11 @@ export function Modal({
       }}
       // text-left: the dialog can be rendered inside an aligned table cell or
       // header, and would otherwise inherit its alignment.
-      className="modal-dialog m-auto text-left max-h-[calc(100dvh-4rem)] overflow-y-auto w-[min(32rem,calc(100vw-2rem))] rounded-lg border-2 border-accent bg-background-box p-0 text-white backdrop:bg-black/70"
+      className={`modal-dialog m-auto text-left max-h-[calc(100dvh-4rem)] overflow-y-auto w-[min(32rem,calc(100vw-2rem))] rounded-lg border-2 border-accent p-0 backdrop:bg-black/70 ${
+        tone === "light"
+          ? "bg-[#f9f9f9] text-neutral-900"
+          : "bg-background-box text-white"
+      }`}
     >
       <div className="p-5">
         <div className="flex items-start justify-between gap-4">
@@ -65,7 +73,11 @@ export function Modal({
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="-mt-1 -mr-1 cursor-pointer rounded px-2 py-1 text-white/60 hover:text-white"
+            className={`-mt-1 -mr-1 cursor-pointer rounded px-2 py-1 ${
+              tone === "light"
+                ? "text-neutral-500 hover:text-neutral-900"
+                : "text-white/60 hover:text-white"
+            }`}
           >
             ✕
           </button>

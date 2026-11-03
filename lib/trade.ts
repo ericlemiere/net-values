@@ -120,6 +120,10 @@ export interface TradePlayer {
   /** Net Value scores, NVP. Null with no season on file. */
   nvp: number | null;
   nvpPrev: number | null;
+  /** Seasons left on his contract, this one included. Null when unknown. */
+  yearsLeft: number | null;
+  /** 'player' or 'team' when the contract's last year is an option. */
+  finalOption: string | null;
 }
 
 export type NvpBasis = "now" | "prev";

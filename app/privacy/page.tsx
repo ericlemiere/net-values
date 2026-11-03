@@ -5,7 +5,7 @@ import { CONTACT_EMAIL, pageMetadata } from "@/lib/site";
 export const metadata = pageMetadata({
   title: "Privacy",
   description:
-    "What The Net Values collects when you visit (anonymous usage stats via Google Analytics) and what it doesn't.",
+    "What The Net Values collects when you visit (anonymous usage stats via Google Analytics) or donate (through Ko-fi), and what it doesn't.",
   path: "/privacy",
 });
 
@@ -19,8 +19,9 @@ export default function PrivacyPage() {
       <h1 className="text-3xl font-semibold tracking-tight">Privacy</h1>
       <p className="mt-3 max-w-prose text-white/70">
         The short version: there are no accounts, nothing to sign up for, and
-        nothing about you is sold. The only thing collected is anonymous
-        information about how the site gets used.
+        nothing about you is sold. Browsing the site only collects anonymous
+        information about how it gets used. If you donate, Ko-fi handles the
+        payment and shares a few details with me, covered below.
       </p>
 
       <h2 className={HEADING}>Google Analytics</h2>
@@ -54,6 +55,30 @@ export default function PrivacyPage() {
         same either way.
       </p>
 
+      <h2 className={HEADING}>Donations</h2>
+      <p className={BODY}>
+        The Donate form in the footer is provided by Ko-fi and loads from
+        Ko-fi&rsquo;s servers only when you open it. Ko-fi may set its own
+        cookies at that point. Payments are processed by Ko-fi&rsquo;s payment
+        partners (Stripe or PayPal), and your card or bank details never reach
+        this site or me.
+      </p>
+      <p className={BODY}>
+        When you donate, Ko-fi shares the amount, your email address, and the
+        name and message you enter, if any. They&rsquo;re used only to keep
+        track of donations and to thank you, and are never sold or shared. Ko-fi
+        handles everything else under its own{" "}
+        <a
+          href="https://more.ko-fi.com/privacy"
+          className={LINK}
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          privacy policy
+        </a>
+        .
+      </p>
+
       <h2 className={HEADING}>Email</h2>
       <p className={BODY}>
         If you write in through the{" "}
@@ -71,7 +96,9 @@ export default function PrivacyPage() {
         </a>
         .
       </p>
-      <p className="mt-8 text-sm text-white/40">Last updated October 5, 2026</p>
+      <p className="mt-8 text-sm text-white/40">
+        Last updated November 3, 2026
+      </p>
     </div>
   );
 }

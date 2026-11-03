@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { HideOnHome } from "@/components/HideOnHome";
+import { SupportButton } from "@/components/SupportButton";
 import { getDataUpdatedAt } from "@/lib/db/queries";
 import { formatUpdated } from "@/lib/format";
 import { SITE_NAME } from "@/lib/site";
@@ -9,7 +10,7 @@ const linkClass = "text-white/70 transition-colors hover:text-accent";
 
 /**
  * The logo bottom-left, where the home page always had it, with the site's
- * housekeeping beside it: contact, privacy, where the numbers come from and
+ * housekeeping beside it: contact, privacy, donations, where the numbers come from and
  * how fresh they are. The header nav stays out of it on purpose.
  *
  * The layout's body is a flex column with `main` taking up the slack, so on a
@@ -42,13 +43,14 @@ export async function SiteFooter() {
       </Link>
       {/* footer-in: rises in after the home page's hero (see globals.css). */}
       <div className="footer-in flex min-w-0 flex-col items-start gap-1.5 pb-2 text-xs text-white/50 md:text-sm">
-        <nav className="mb-1 flex gap-4 text-sm font-semibold md:text-base">
+        <nav className="mb-1 flex flex-wrap gap-x-4 gap-y-1 text-sm font-semibold md:text-base">
           <Link href="/contact" className={linkClass}>
             Contact
           </Link>
           <Link href="/privacy" className={linkClass}>
             Privacy
           </Link>
+          <SupportButton className={linkClass} />
         </nav>
         {/* Two dotted lines on a wide screen. On a phone, beside the logo, the
             dots drop out and each phrase takes its own line, so nothing breaks

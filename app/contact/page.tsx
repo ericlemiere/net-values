@@ -69,7 +69,7 @@ export default function ContactPage() {
             <p className="mt-1 text-white/70">{r.text}</p>
             <a
               href={r.href}
-              className="mt-4 inline-block rounded-md border border-accent px-3 py-1.5 font-semibold transition-colors hover:bg-accent hover:text-black"
+              className="mt-4 inline-block rounded-md border border-accent px-3 py-1.5 font-semibold hover:bg-accent hover:text-black"
             >
               {r.action}
             </a>

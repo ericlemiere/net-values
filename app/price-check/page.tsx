@@ -17,8 +17,10 @@ import {
   getPlayerById,
   getPlayerCareerSalaries,
   getPlayerCareerStatsTotals,
+  getPaidSoFar,
   getPriceRank,
   getTeams,
+  type PaidSoFar,
   type PlayerContract,
   type PriceRank,
 } from "@/lib/db/queries";
@@ -120,6 +122,9 @@ interface Slot {
   pay: Pay | undefined;
   total: number | null;
   rank: PriceRank | null;
+  /** For a season still being played, how much of the salary is paid so far.
+   *  The price divides that, not the whole year's pay. */
+  paid: PaidSoFar | null;
 }
 
 async function loadSlot(
@@ -148,10 +153,15 @@ async function loadSlot(
   const totals = careerTotals.find((t) => t.season === season) ?? null;
   const pay = season ? payBySeason.get(season) : undefined;
   const total = totals ? statTotal(stat, totals, pay) : null;
-  const rank =
-    season && pay?.salary && total ? await getPriceRank(playerId, season, stat) : null;
+  const [rank, paid] =
+    season && pay?.salary && total
+      ? await Promise.all([
+          getPriceRank(playerId, season, stat),
+          getPaidSoFar(playerId, season),
+        ])
+      : [null, null];
 
-  return { player, seasons, season, stat, totals, pay, total, rank };
+  return { player, seasons, season, stat, totals, pay, total, rank, paid };
 }
 
 export default async function PriceCheckPage({
@@ -250,9 +260,10 @@ function PlayerCard({
   view: PriceView;
   capped: Set<string>;
 }) {
-  const { player, season, stat, totals, pay, total, rank } = slot;
+  const { player, season, stat, totals, pay, total, rank, paid } = slot;
   const def = PRICE_STATS[stat];
   const salary = pay?.salary ?? null;
+  const paidSalary = salary && paid ? salary * paid.share : salary;
 
   return (
     <PriceCard label={player.name}>
@@ -290,6 +301,12 @@ function PlayerCard({
                 <div className="font-mono text-2xl font-semibold tabular-nums">
                   {formatCurrency(salary)}
                 </div>
+                {paid && paidSalary !== null && (
+                  <div className="mt-1 text-xs text-white/40">
+                    {formatCurrency(Math.round(paidSalary))} paid so far,{" "}
+                    {paid.games} of {paid.seasonGames} games
+                  </div>
+                )}
                 {salary && capped.has(season) && (
                   <Link
                     href={`/cap-converter?player=${player.id}&season=${season}`}
@@ -328,7 +345,8 @@ function PlayerCard({
           </div>
 
           <PriceFigure
-            salary={salary}
+            salary={paidSalary}
+            soFar={paid !== null}
             total={total}
             stat={stat}
             rank={rank}
@@ -416,13 +434,17 @@ function rankLine(
 /** The answer: the salary divided by the stat, and where that sits in the league. */
 function PriceFigure({
   salary,
+  soFar,
   total,
   stat,
   rank,
   view,
   season,
 }: {
+  /** What's been paid for the stat: the whole salary, or the part paid so far. */
   salary: number | null;
+  /** The season is still being played, and `salary` is only what's paid so far. */
+  soFar: boolean;
   total: number | null;
   stat: PriceStat;
   rank: PriceRank | null;
@@ -441,10 +463,10 @@ function PriceFigure({
     headline = "Not paid for this";
   } else if (view === "dollars") {
     headline = formatPrice(salary / total);
-    unit = `per ${def.one}`;
+    unit = `per ${def.one}${soFar ? " so far" : ""}`;
   } else {
     headline = formatPerMillion((total / salary) * 1_000_000);
-    unit = `${def.many} per $1M`;
+    unit = `${def.many} per $1M${soFar ? " so far" : ""}`;
   }
 
   const median =

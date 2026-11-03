@@ -434,7 +434,7 @@ export function DataTable<Row>({
               },
               extraParams,
             )}
-            className={`rounded border border-white/20 px-3 py-1.5 transition-colors ${
+            className={`rounded border border-white/20 px-3 py-1.5 ${
               page <= 1
                 ? "pointer-events-none opacity-30"
                 : "hover:border-accent hover:bg-accent hover:text-black"
@@ -458,7 +458,7 @@ export function DataTable<Row>({
               },
               extraParams,
             )}
-            className={`group rounded border border-white/20 px-3 py-1.5 transition-colors ${
+            className={`group rounded border border-white/20 px-3 py-1.5 ${
               page >= totalPages
                 ? "pointer-events-none opacity-30"
                 : "hover:border-accent hover:bg-accent hover:text-black"

@@ -72,6 +72,8 @@ export default async function TradeFinderPage({
         salaries. Draft picks, cash, trade restrictions on newly signed
         players, no-trade clauses, traded player exceptions, and roster limits
         aren&apos;t considered, and two-way players aren&apos;t offered.
+        Years left counts the seasons on each contract, this one included;
+        PO and TO mark a final year that&apos;s a player or team option.
       </p>
     </div>
   );

@@ -38,6 +38,7 @@ import {
   playerAwards,
   playerTeamSplits,
   playerProduction,
+  teamSeasonRatings,
   siteMeta,
   futureSalaries,
   capProjections,
@@ -2934,6 +2935,67 @@ const PRICE_STAT_SQL: Record<PriceStat, SQL> = {
   miss: sql`t.fga - t.fgm`,
 };
 
+/** A full regular season, which a season in progress is measured against. */
+const SEASON_GAMES = 82;
+
+/**
+ * How much of a season's salary has been paid so far, as a share from 0 to 1,
+ * for the player-season in `nv` (net_values) beside its totals row `t`.
+ *
+ * Salary is paid out across the regular season, so dividing a full year's pay
+ * by a week's stats made every star cost $400K a point in November. This is
+ * his teams' games to date over 82: the games each team played while he was
+ * on its roster, summed across stints for a player who has been traded, or
+ * else his team's games played. A player who sits still draws his pay, so
+ * missed games make him dearer, which is the point. If the team can't be
+ * found it falls back to the most games any team has played.
+ */
+const paidShareSql = sql`LEAST(1, COALESCE(
+    (SELECT SUM(sp.team_games) FROM ${playerTeamSplits} sp
+      WHERE sp.player_id = nv.player_id AND sp.season = nv.season),
+    (SELECT r.gp FROM ${teamSeasonRatings} r
+       JOIN ${teams} tm ON tm.id = r.team_id
+      WHERE tm.abbr = t.team AND r.season = nv.season),
+    (SELECT max(r.gp) FROM ${teamSeasonRatings} r WHERE r.season = nv.season)
+  )::float8 / ${SEASON_GAMES})`;
+
+export interface PaidSoFar {
+  /** Share of the season's salary paid to date, 0 to 1. */
+  share: number;
+  /** The team games that share was measured over. */
+  games: number;
+  /** What a full season is measured against. */
+  seasonGames: number;
+}
+
+/**
+ * How much of one player's salary has been paid so far, for a season still
+ * being played. Null for a finished season, where the whole salary counts, or
+ * when there's no salary or stat line to measure against.
+ */
+export const getPaidSoFar = cached("getPaidSoFar", async function getPaidSoFar(
+  playerId: number,
+  season: string,
+): Promise<PaidSoFar | null> {
+  if (!inRegularSeason(season)) return null;
+  const rows = await db.execute(sql`
+    SELECT ${paidShareSql} AS share
+    FROM ${netValues} nv
+    JOIN ${playerStatsTotals} t
+      ON t.player_id = nv.player_id AND t.season = nv.season
+    WHERE nv.player_id = ${playerId} AND nv.season = ${season}
+    LIMIT 1
+  `);
+  const row = rows.rows[0] as { share: number | null } | undefined;
+  if (!row || row.share === null) return null;
+  const share = Number(row.share);
+  return {
+    share,
+    games: Math.round(share * SEASON_GAMES),
+    seasonGames: SEASON_GAMES,
+  };
+});
+
 export interface PriceRank {
   /** 1 = the fewest dollars per stat in the league. Null when he isn't in the
    *  pool: no salary, or none of this stat to divide by. */
@@ -2950,7 +3012,9 @@ export interface PriceRank {
  * The pool is every player with a salary and at least one of the stat, so a
  * player with no blocks is left out rather than dividing by zero. Salary is
  * net_values' whole-season figure — what the player cost the league, buyouts
- * included — which is the same number the page shows him being paid.
+ * included — which is the same number the page shows him being paid. While the
+ * season is still being played, it's only the part paid so far (see
+ * paidShareSql), the same figure the page divides by.
  */
 export const getPriceRank = cached("getPriceRank", async function getPriceRank(
   playerId: number,
@@ -2958,9 +3022,11 @@ export const getPriceRank = cached("getPriceRank", async function getPriceRank(
   stat: PriceStat,
 ): Promise<PriceRank> {
   const expr = PRICE_STAT_SQL[stat];
+  const paid = inRegularSeason(season) ? paidShareSql : sql`1`;
   const rows = await db.execute(sql`
     WITH pool AS (
-      SELECT nv.player_id, nv.salary::float8 / (${expr})::float8 AS ratio
+      SELECT nv.player_id,
+             nv.salary::float8 * ${paid} / (${expr})::float8 AS ratio
       FROM ${netValues} nv
       JOIN ${playerStatsTotals} t
         ON t.player_id = nv.player_id AND t.season = nv.season
@@ -3247,8 +3313,9 @@ export interface TradePool {
 }
 
 /**
- * Everyone /trade-finder can deal: on a roster today with a cap hit, and his
- * Net Value this season and last. Payroll is the team's cap sheet from
+ * Everyone /trade-finder can deal: on a roster today with a cap hit, his Net
+ * Value this season and last, and how many seasons his contract has left
+ * (this one included) from bref's contract years. Payroll is the team's cap sheet from
  * `team_payrolls`, which counts the dead money `rosters` leaves out, since
  * that money counts toward the cap and the aprons all the same.
  */
@@ -3265,8 +3332,16 @@ export const getTradePool = cached("getTradePool", async function getTradePool()
              COALESCE(st.pos, sp.pos) AS pos,
              r.cap_hit AS "capHit",
              nv.net_value_score::float8 AS nvp,
-             nvp.net_value_score::float8 AS "nvpPrev"
+             nvp.net_value_score::float8 AS "nvpPrev",
+             ctr.years::int AS "yearsLeft",
+             ctr.last_option AS "finalOption"
       FROM ${rosters} r
+      LEFT JOIN LATERAL (
+        SELECT count(DISTINCT f.season) AS years,
+               (array_agg(f.option ORDER BY f.season DESC))[1] AS last_option
+        FROM ${futureSalaries} f
+        WHERE f.player_id = r.player_id AND f.season >= ${season}
+      ) ctr ON ctr.years > 0
       LEFT JOIN ${players} p ON p.id = r.player_id
       LEFT JOIN ${netValues} nv ON nv.player_id = r.player_id AND nv.season = ${season}
       LEFT JOIN ${netValues} nvp ON nvp.player_id = r.player_id AND nvp.season = ${prev}

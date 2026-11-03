@@ -78,3 +78,6 @@ export function pageMetadata({
 export function jsonLd(data: object) {
   return { __html: JSON.stringify(data).replace(/</g, "\\u003c") };
 }
+
+/** Where the footer's Donate link sends people to give, once or monthly. */
+export const KOFI_URL = "https://ko-fi.com/thenetvalues";

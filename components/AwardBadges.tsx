@@ -129,7 +129,7 @@ export function CareerAwardBadges({ awards }: { awards: Award[] }) {
             .slice()
             .reverse()
             .join(", ")}`}
-          className="inline-flex items-center gap-1 rounded-md border border-accent/60 bg-background-box px-2 py-1 text-xs font-medium text-white transition-colors hover:border-accent hover:bg-accent hover:text-black"
+          className="inline-flex items-center gap-1 rounded-md border border-accent/60 bg-background-box px-2 py-1 text-xs font-medium text-white hover:border-accent hover:bg-accent hover:text-black"
         >
           {badgeLabel(award.award, award.teamNumber)}
           {seasons.length > 1 && (

@@ -16,6 +16,7 @@ import {
   findTrades,
   tierOf,
   type CapRules,
+  type Tier,
   type NvpBasis,
   type Trade,
   type TradePlayer,
@@ -182,7 +183,7 @@ export function TradeFinder({
             : `Pick a team to trade ${anchor.name} to.`}
         </p>
       ) : (
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-4">
           {/* Always in the same place, with or without trades, so the toggles
               under it don't jump as the count comes and goes. Two lines are
               held on a phone, where a long team name wraps the count. */}
@@ -541,75 +542,78 @@ function TradeSide({
   const values = players.map(nvpOf);
   const known = values.filter((v): v is number => v !== null);
   const nvpTotal = known.length > 0 ? known.reduce((a, b) => a + b, 0) : null;
-  // Light rules between the columns; the figures' columns stay tight so the
-  // name keeps what room there is on a phone.
-  const num =
-    "border-l border-white/10 px-2 text-right font-mono tabular-nums md:px-3";
+  // The figures' columns stay tight so the name keeps what room there is on
+  // a phone; alignment does the work column rules used to.
+  const num = "pl-2 text-right font-mono tabular-nums md:pl-4";
 
   return (
-    <div className="flex flex-col gap-2 p-4">
-      <span className="text-lg font-semibold">{team} sends</span>
+    <div className="flex flex-col gap-3 p-4">
       {/* Fixed figure columns, so they line up from one card to the next
-          instead of each table sizing them to its own numbers. */}
+          instead of each table sizing them to its own numbers. The team's
+          name heads the player column, so the card needs no title of its own. */}
       <table className="w-full table-fixed border-collapse text-sm md:text-base">
         <thead>
-          <tr className="border-b border-white/10 text-xs uppercase tracking-wide text-white/50 md:text-sm md:normal-case md:tracking-normal">
-            <th scope="col" className="pb-1.5 pr-2 text-left font-normal">
-              Player
-            </th>
+          <tr className="text-xs text-white/50 md:text-sm">
             <th
               scope="col"
-              className={`${num} w-28 pb-1.5 font-sans font-normal md:w-36`}
+              className="pb-1 pr-2 text-left text-base font-semibold text-white md:text-lg"
             >
+              {team} sends
+            </th>
+            <th scope="col" className={`${num} w-16 pb-1 font-sans font-normal md:w-32`}>
               Salary
             </th>
-            <th
-              scope="col"
-              className={`${num} w-16 pb-1.5 pr-0 font-sans font-normal md:w-24 md:pr-0`}
-            >
-              Net Value
+            <th scope="col" className={`${num} w-14 pb-1 font-sans font-normal md:w-24`}>
+              <span className="md:hidden">NVP</span>
+              <span className="hidden md:inline">Net Value</span>
             </th>
           </tr>
         </thead>
         <tbody>
           {players.map((p, i) => (
             <tr key={p.key}>
-              <td className="py-2 pr-2">
+              <td className="py-1.5 pr-2">
                 <div className="flex items-center gap-2.5 md:gap-3">
                   <span className="md:hidden">
                     <PlayerHeadshot
                       nbaPersonId={p.nbaPersonId}
                       name={p.name}
-                      height={44}
+                      height={40}
                     />
                   </span>
                   <span className="hidden md:block">
                     <PlayerHeadshot
                       nbaPersonId={p.nbaPersonId}
                       name={p.name}
-                      height={60}
+                      height={52}
                     />
                   </span>
                   {/* Wraps rather than truncates: a long name on a phone
                       takes two lines instead of losing its end. */}
-                  <span className="min-w-0">
-                    {p.playerId ? (
-                      <Link href={`/players/${p.playerId}`} className={LINK}>
-                        {p.name}
-                      </Link>
-                    ) : (
-                      p.name
-                    )}
-                    {p.pos && <span className="text-white/50"> {p.pos}</span>}
+                  <span className="flex min-w-0 flex-col leading-snug">
+                    <span>
+                      {p.playerId ? (
+                        <Link href={`/players/${p.playerId}`} className={LINK}>
+                          {p.name}
+                        </Link>
+                      ) : (
+                        p.name
+                      )}
+                    </span>
+                    <span className="flex flex-wrap items-center gap-x-1.5 text-xs text-white/50 md:text-sm">
+                      {[p.pos, contractYears(p)]
+                        .filter(Boolean)
+                        .join(" · ")}
+                      <OptionPill option={p.finalOption} />
+                    </span>
                   </span>
                 </div>
               </td>
-              <td className={`${num} py-2 text-white/80`}>
-                {formatCurrency(p.capHit)}
+              <td className={`${num} py-1.5 text-white/80`}>
+                <span className="md:hidden">{formatCompactCurrency(p.capHit)}</span>
+                <span className="hidden md:inline">{formatCurrency(p.capHit)}</span>
               </td>
-              <td
-                className={`${num} py-2 pr-0 md:pr-0 ${netValueClass(values[i])}`}
-              >
+              <td className={`${num} py-1.5 ${netValueClass(values[i])}`}>
                 {formatScore(values[i])}
               </td>
             </tr>
@@ -622,22 +626,26 @@ function TradeSide({
               <th scope="row" className="pt-2 pr-2 text-left">
                 Total
               </th>
-              <td className={`${num} pt-2`}>{formatCurrency(salary)}</td>
-              <td
-                className={`${num} pt-2 pr-0 md:pr-0 ${netValueClass(nvpTotal)}`}
-              >
+              <td className={`${num} pt-2`}>
+                <span className="md:hidden">{formatCompactCurrency(salary)}</span>
+                <span className="hidden md:inline">{formatCurrency(salary)}</span>
+              </td>
+              <td className={`${num} pt-2 ${netValueClass(nvpTotal)}`}>
                 {formatScore(nvpTotal)}
               </td>
             </tr>
           </tfoot>
         )}
       </table>
-      {/* What the deal does to this team, both ways: what it gets back
-          against what it gives up. */}
+      {/* What the deal does to this team: what it gets back against what it
+          gives up, and the cap tier its payroll lands in. */}
       <div className="mt-auto flex flex-col gap-1.5 rounded-md bg-white/5 px-3 py-2.5 text-sm md:text-base">
-        <span className="text-xs font-semibold uppercase tracking-wide text-white/50">
-          For {team}
-        </span>
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-xs font-semibold uppercase tracking-wide text-white/50">
+            For {team}
+          </span>
+          <TierBadge tier={tierOf(payrollAfter, rules)} />
+        </div>
         <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
           <dt className="text-white/60">Net Value change</dt>
           <dd
@@ -649,17 +657,46 @@ function TradeSide({
           <dd className="text-right font-mono tabular-nums">
             {formatChange(salaryChange)}
           </dd>
-          <dt className="text-white/60">Payroll after</dt>
-          <dd className="text-right">
-            <span className="font-mono tabular-nums">
-              {formatCurrency(payrollAfter)}
-            </span>
-            <span className="block text-sm text-white/50">
-              {TIER_LABEL[tierOf(payrollAfter, rules)]}
-            </span>
-          </dd>
         </dl>
       </div>
     </div>
+  );
+}
+
+/** The cap tier a payroll lands in, louder the more it restricts the team. */
+function TierBadge({ tier }: { tier: Tier }) {
+  const tone: Record<Tier, string> = {
+    room: "border-white/20 text-white/70",
+    cap: "border-white/20 text-white/70",
+    tax: "border-amber-400/40 text-amber-300",
+    first: "border-orange-400/50 text-orange-300",
+    second: "border-red-400/50 text-red-300",
+  };
+  return (
+    <span
+      className={`whitespace-nowrap rounded-full border px-2 py-0.5 text-xs ${tone[tier]}`}
+    >
+      {TIER_LABEL[tier]}
+    </span>
+  );
+}
+
+/** "3 yrs left" or "1 yr left"; null when bref has no contract years for him. */
+function contractYears(p: TradePlayer): string | null {
+  if (p.yearsLeft === null) return null;
+  const n = p.yearsLeft;
+  return `${n} ${n === 1 ? "yr" : "yrs"} left`;
+}
+
+/** PO or TO when the contract's last year is a player or team option. */
+function OptionPill({ option }: { option: string | null }) {
+  if (option !== "player" && option !== "team") return null;
+  return (
+    <span
+      title={`Final year is a ${option} option`}
+      className="rounded-full border border-white/20 px-1.5 text-[0.65rem] leading-4 font-medium tracking-wide text-white/60 md:text-xs md:leading-4"
+    >
+      {option === "player" ? "PO" : "TO"}
+    </span>
   );
 }

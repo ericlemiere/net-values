@@ -120,7 +120,34 @@ export function TradeFinder({
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-col gap-3 rounded-lg bg-neutral-800 p-4">
+      <div
+        className={`relative flex flex-col gap-3 overflow-hidden rounded-lg bg-neutral-800 p-4 ${
+          anchor ? "min-[460px]:pr-[calc(27%+1rem)] md:pr-[calc(26%+1rem)] lg:pr-48" : ""
+        }`}
+      >
+        {/* The picked player, the form's full height against its right
+            edge. Pinned out of the flow so the photo takes the form's height
+            rather than setting it; the padding above keeps the controls clear
+            of it. On a wide screen the form is two short rows and the photo
+            keeps its own shape. Narrower, the controls stack and the form
+            grows tall, so the photo takes a fixed share of the width instead
+            and crops in to his face. Percent padding and a percent width both
+            measure the form's width, so the two stay matched. Under 460px
+            that share is too thin for the controls beside it, so the photo
+            is left out and the form keeps its plain phone layout. */}
+        {anchor && (
+          <div className="pointer-events-none absolute inset-y-0 right-0 hidden w-[27%] min-[460px]:block md:w-[26%] lg:w-auto lg:aspect-[260/190]">
+            {anchor.nbaPersonId !== null && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                key={anchor.key}
+                src={`https://cdn.nba.com/headshots/nba/latest/1040x760/${anchor.nbaPersonId}.png`}
+                alt={`${anchor.name} headshot`}
+                className="h-full w-full object-cover object-top"
+              />
+            )}
+          </div>
+        )}
         <div className="flex flex-col gap-3 md:flex-row md:flex-wrap md:items-center">
           <PlayerPicker
             pool={pool}
@@ -145,10 +172,17 @@ export function TradeFinder({
               ...teams.map((t) => ({ value: t, label: teamNames[t] ?? t })),
             ]}
             onChange={(v) => set({ partner: v || null })}
+            // Beside the photo a small screen's column is too narrow for label
+            // and control on one line, so the label goes on top.
+            className={
+              anchor
+                ? "min-[460px]:max-md:flex-col min-[460px]:max-md:items-stretch min-[460px]:max-md:gap-1.5"
+                : undefined
+            }
           />
         </div>
         <div className="flex flex-col gap-3 text-sm md:flex-row md:flex-wrap md:items-center md:gap-x-6">
-          <Control label="Net Value from">
+          <Control label="Net Value from" besidePhoto={anchor !== null}>
             <SegmentedControl
               label="Which season's Net Value to weigh"
               size="md"
@@ -160,7 +194,7 @@ export function TradeFinder({
               onChange={(v) => set({ basis: v })}
             />
           </Control>
-          <Control label="Sort by" stack>
+          <Control label="Sort by" stack besidePhoto={anchor !== null}>
             <SegmentedControl
               label="Order trades by"
               size="md"
@@ -293,18 +327,30 @@ function SideHeader({
 function Control({
   label,
   stack = false,
+  besidePhoto = false,
   children,
 }: {
   label: string;
   /** Put the control under its label on a phone, for one too wide to share a line. */
   stack?: boolean;
+  /**
+   * In the narrow column beside the player's photo, 460px up to md: the
+   * label always goes on top, and a stretched control shrinks back to its
+   * labels, since equal halves are wider than the column.
+   */
+  besidePhoto?: boolean;
   children: React.ReactNode;
 }) {
+  const beside = !besidePhoto
+    ? ""
+    : stack
+      ? "min-[460px]:max-md:[&_[role=group]]:w-fit min-[460px]:max-md:[&_button]:flex-none"
+      : "min-[460px]:max-md:flex-col min-[460px]:max-md:items-stretch min-[460px]:max-md:justify-start min-[460px]:max-md:gap-1.5";
   return (
     <div
       className={`flex gap-3 md:flex-row md:items-center md:justify-start md:gap-3 ${
         stack ? "flex-col gap-1.5" : "items-center justify-between"
-      }`}
+      } ${beside}`}
     >
       <span className="whitespace-nowrap text-white/70">{label}</span>
       {/* Labels never wrap: a stretched control on a phone, and on a wide
@@ -359,7 +405,7 @@ function PlayerPicker({
 
   if (selected) {
     return (
-      <div className="flex w-full items-center justify-between gap-2 rounded-md bg-background-box p-2 text-sm md:w-auto">
+      <div className="flex w-full items-center justify-between gap-2 rounded-md bg-background-box p-2 text-sm min-[460px]:max-md:flex-col min-[460px]:max-md:items-stretch min-[460px]:max-md:gap-1.5 md:w-auto">
         <span className="text-white/70">Player</span>
         <div className="flex min-w-0 items-center gap-2 rounded-md border border-white/20 bg-white/5 py-1 pl-2.5 pr-1 md:min-w-56">
           <span className="min-w-0 flex-1 truncate">{selected.name}</span>

@@ -116,6 +116,41 @@ def load_team_ids(cur):
     return dict(cur.fetchall())
 
 
+def write_season(cur, team_ids, label, rows, source):
+    """Upsert one season's {abbr: {gp, minutes, poss, pts, opp_pts}}."""
+    for abbr, t in sorted(rows.items()):
+        team_id = team_ids.get(abbr)
+        if team_id is None:
+            raise SystemExit(
+                f"{label}: unknown team abbreviation {abbr!r} — add it to "
+                f"ALIASES in seed_teams.py and re-run that first"
+            )
+        off = 100.0 * t["pts"] / t["poss"]
+        deff = 100.0 * t["opp_pts"] / t["poss"]
+        cur.execute(
+            """
+            INSERT INTO team_season_ratings
+                (team_id, season, gp, minutes, poss, pts, opp_pts,
+                 off_rating, def_rating, net_rating, source)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (team_id, season) DO UPDATE SET
+                gp = EXCLUDED.gp, minutes = EXCLUDED.minutes,
+                poss = EXCLUDED.poss, pts = EXCLUDED.pts,
+                opp_pts = EXCLUDED.opp_pts, off_rating = EXCLUDED.off_rating,
+                def_rating = EXCLUDED.def_rating, net_rating = EXCLUDED.net_rating,
+                source = EXCLUDED.source
+            """,
+            (
+                team_id, label, t["gp"], round(t["minutes"], 1),
+                round(t["poss"], 1),
+                t["pts"], t["opp_pts"],
+                round(off, 2), round(deff, 2), round(off - deff, 2), source,
+            ),
+        )
+    print(f"{label}: {len(rows)} teams")
+    return len(rows)
+
+
 def main():
     only = sys.argv[1] if len(sys.argv) > 1 else None
     seasons = [only] if only else seasons_through_current()
@@ -131,39 +166,8 @@ def main():
         if df.empty:
             print(f"{label}: no games")
             continue
-
-        for abbr, t in sorted(team_season_rows(df).items()):
-            team_id = team_ids.get(abbr)
-            if team_id is None:
-                raise SystemExit(
-                    f"{label}: unknown team abbreviation {abbr!r} — add it to "
-                    f"ALIASES in seed_teams.py and re-run that first"
-                )
-            off = 100.0 * t["pts"] / t["poss"]
-            deff = 100.0 * t["opp_pts"] / t["poss"]
-            cur.execute(
-                """
-                INSERT INTO team_season_ratings
-                    (team_id, season, gp, minutes, poss, pts, opp_pts,
-                     off_rating, def_rating, net_rating, source)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'nba_api')
-                ON CONFLICT (team_id, season) DO UPDATE SET
-                    gp = EXCLUDED.gp, minutes = EXCLUDED.minutes,
-                    poss = EXCLUDED.poss, pts = EXCLUDED.pts,
-                    opp_pts = EXCLUDED.opp_pts, off_rating = EXCLUDED.off_rating,
-                    def_rating = EXCLUDED.def_rating, net_rating = EXCLUDED.net_rating,
-                    source = EXCLUDED.source
-                """,
-                (
-                    team_id, label, t["gp"], round(t["minutes"], 1),
-                    round(t["poss"], 1),
-                    t["pts"], t["opp_pts"],
-                    round(off, 2), round(deff, 2), round(off - deff, 2),
-                ),
-            )
-            written += 1
+        written += write_season(cur, team_ids, label, team_season_rows(df), "nba_api")
         conn.commit()
-        print(f"{label}: {len(team_season_rows(df))} teams")
 
     cur.close()
     conn.close()

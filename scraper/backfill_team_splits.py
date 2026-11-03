@@ -6,10 +6,10 @@ only, in the order he played for each team.
 
 Where each column comes from:
 
-  box score, dates   1996-97 on: nba.com's game logs, summed per team. One
-                     request returns every game of a season, so the stints fall
-                     out of it directly, dated, and they sum back to the
-                     nba.com season row exactly.
+  box score, dates   1996-97 on: game logs, summed per team, so the stints
+                     fall out directly, dated, and sum back to the season row
+                     exactly. nba.com's through 2024-25; BALLDONTLIE's game
+                     lines after (backfill_bdl.gamelog_frame).
                      Before that: bref's per-team rows on the totals page.
   gs, pos, age       bref's per-team rows on the totals page. The game logs
                      carry none of them.
@@ -41,6 +41,7 @@ from nba_api.stats.endpoints import playergamelogs
 
 import nba
 
+import backfill_bdl
 import bref
 from backfill_advanced import load_team_resolver, num, intnum
 from backfill_stats import _num, current_season
@@ -229,11 +230,16 @@ def build_season(end_year, cur, resolve_team, slug_to_id, lookups):
 
     stints_by_player = {}
     if end_year >= FIRST_GAMELOG_END_YEAR:
-        player_by_nba_id, team_by_nba_id = lookups
-        df = fetch_gamelogs(f"{end_year - 1}-{str(end_year)[2:]}")
+        if end_year >= backfill_bdl.FIRST_END_YEAR:
+            df, (player_by_nba_id, team_by_nba_id) = backfill_bdl.gamelog_frame(end_year - 1, cur)
+            source = backfill_bdl.SOURCE
+        else:
+            player_by_nba_id, team_by_nba_id = lookups
+            df = fetch_gamelogs(f"{end_year - 1}-{str(end_year)[2:]}")
+            source = "nba_api"
         for pid, stints in gamelog_splits(df, player_by_nba_id, team_by_nba_id).items():
             for s in stints:
-                s["source"] = "nba_api"
+                s["source"] = source
             stints_by_player[pid] = stints
         add_windows(stints_by_player, df, team_by_nba_id)
     else:

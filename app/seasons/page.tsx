@@ -30,6 +30,7 @@ import {
 } from "@/lib/db/queries";
 import { PAGE_COLUMN } from "@/lib/layout";
 import { pageMetadata } from "@/lib/site";
+import { ChampionTrophy } from "@/components/ChampionTrophy";
 
 /**
  * Each season is its own page as far as a search engine is concerned, so it
@@ -135,9 +136,7 @@ function SummaryPanel({
           href={`/teams/${champion.abbr}`}
           className="group flex flex-wrap items-baseline gap-x-3 gap-y-1"
         >
-          <span aria-hidden="true" className="text-2xl">
-            🏆
-          </span>
+          <ChampionTrophy className="h-8 self-center" />
           <span className="text-2xl font-semibold tracking-tight transition-colors group-hover:text-accent">
             {champion.eraName ?? champion.name}
           </span>

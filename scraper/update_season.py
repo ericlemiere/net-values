@@ -3,29 +3,32 @@
 Net Value is a function of things that all move during a season, so each one
 has to be refreshed before the numbers mean anything:
 
-  box score stats   nba_api, via update_daily
-  position, GS      bref's totals page: nba_api has neither, and production
-                    baselines each player against his position, so without
-                    this every player of the season is position-less
-  nba.com advanced  nba_api: TS%, USG% and the rest of what nba.com publishes
+  BALLDONTLIE       backfill_bdl, the paid API that replaced nba.com: every
+                    game line of the season, summed into box score totals;
+                    each team's offensive and defensive rating, which
+                    production starts from, and its MINUTES PLAYED SO FAR,
+                    overtime included, which set the availability
+                    denominator (without them, a player who has started every
+                    game of a 20-game-old season looks 25% available against
+                    a full 82-game workload); wins, losses, SRS, and once the
+                    playoffs start, who is in them and who won; nba.com's
+                    advanced numbers (TS%, USG% and the rest); how much of
+                    each player's scoring was assisted; and the shots
+                    defended, deflections, contests, and other hustle counts
+                    the defensive model reads. Also adds anyone on a roster
+                    who isn't on file yet, chiefly rookies before their
+                    debut, so their contracts have someone to match to.
+  position, GS      bref's totals page: BALLDONTLIE has only G/F/C and no
+                    games started, and production baselines each player
+                    against his position, so without this every player of
+                    the season is position-less. Fills in age, too.
   bref advanced     basketball-reference's advanced page, for the figures only
                     bref has: VORP, BPM, PER and Win Shares. The model no longer
                     needs it; VORP is priced alongside for comparison only.
-  team splits       a traded player's season, one row per team: nba.com's game
-                    logs (one request) for the box score and bref's per-team
-                    rows for the rest, so a trade shows up the day after the
-                    player's first game with his new team
-  team ratings      nba_api's game log: each team's offensive and defensive
-                    rating, which production starts from, and its MINUTES
-                    PLAYED SO FAR, overtime included, which set the
-                    availability denominator. Without them, a player who has
-                    started every game of a 20-game-old season looks 25%
-                    available against a full 82-game workload.
-  team records      nba_api's game log again: wins, losses, SRS, and once the
-                    playoffs start, who is in them and who won.
-  scoring splits    nba_api: how much of each player's scoring was assisted
-  tracking defense  nba_api: shots defended, deflections, contests and the
-                    other hustle counts the defensive model reads
+  team splits       a traded player's season, one row per team: the game
+                    lines summed per team for the box score and bref's
+                    per-team rows for the rest, so a trade shows up the day
+                    after the player's first game with his new team
   production        recomputed for this season from all of the above
   future contracts  bref's team contracts pages, one request per team: every
                     year a player is signed through past this one, with player
@@ -34,10 +37,6 @@ has to be refreshed before the numbers mean anything:
   awards            nothing is voted on until the season ends, so this is a
                     no-op for most of the year and then fills in by itself the
                     day bref publishes. Cheap either way: one cached page.
-  rosters           nba.com's current-season player list, one request: adds
-                    anyone on a roster who isn't on file yet, chiefly rookies
-                    before their debut, so their contracts have someone to
-                    match to and they're on the salaries pages from day one
   salary caps       bref's cap history, one page: picks up next season's cap
                     the day bref publishes it, usually in early summer
   salaries          bref's team pages, one request per team: this season's,
@@ -63,7 +62,7 @@ figures settle as the sample grows.
 
 Usage:
   python update_season.py              # the season now in progress
-  python update_season.py 2026-27      # an explicit nba_api season string
+  python update_season.py 2026-27      # an explicit season
 """
 import sys
 
@@ -84,33 +83,23 @@ def main():
 
     bref.MAX_CACHE_AGE = CACHE_HOURS * 3600
 
-    import update_daily
+    import backfill_bdl
     import backfill_bref_stats
-    import backfill_nba_advanced
     import backfill_advanced
     import backfill_team_splits
-    import backfill_team_ratings
-    import update_team_records
-    import backfill_scoring_splits
-    import backfill_tracking_defense
     import compute_production
     import backfill_awards
     import backfill_future_salaries
     import backfill_salaries
-    import seed_rosters
     import seed_seasons
     import compute_net_values
 
-    print(f"=== stats from nba.com: {season} ===")
-    sys.argv = ["update_daily", season]
-    update_daily.main()
+    print(f"=== stats from BALLDONTLIE: {season} ===")
+    backfill_bdl.run(int(season[:4]))
 
     print(f"\n=== positions and games started from bref: {end_year} ===")
     sys.argv = ["backfill_bref_stats", str(end_year)]
     backfill_bref_stats.main()
-
-    print(f"\n=== advanced stats from nba.com: {season} ===")
-    backfill_nba_advanced.run([season])
 
     print(f"\n=== advanced stats from bref: {end_year} ===")
     sys.argv = ["backfill_advanced", str(end_year)]
@@ -119,22 +108,6 @@ def main():
     print(f"\n=== team splits: {end_year} ===")
     sys.argv = ["backfill_team_splits", str(end_year)]
     backfill_team_splits.main()
-
-    print(f"\n=== team ratings from nba.com: {season} ===")
-    sys.argv = ["backfill_team_ratings", season]
-    backfill_team_ratings.main()
-
-    print(f"\n=== team records from nba.com: {season} ===")
-    sys.argv = ["update_team_records", season]
-    update_team_records.main()
-
-    print(f"\n=== scoring splits from nba.com: {season} ===")
-    sys.argv = ["backfill_scoring_splits", season]
-    backfill_scoring_splits.main()
-
-    print(f"\n=== tracking defense from nba.com: {season} ===")
-    sys.argv = ["backfill_tracking_defense", season]
-    backfill_tracking_defense.main()
 
     # After the ratings, splits and tracking it is built from, and before net
     # values, which price it.
@@ -159,12 +132,6 @@ def main():
 
     print("\n=== future contracts from bref ===")
     backfill_future_salaries.main()
-
-    # Before salaries, so a contract signed by someone who hasn't played yet
-    # has a player to match to.
-    print(f"\n=== rosters from nba.com: {season} ===")
-    sys.argv = ["seed_rosters", season]
-    seed_rosters.main()
 
     # Before salaries: a season's salaries count for nothing without its cap.
     print("\n=== salary caps from bref ===")
@@ -192,7 +159,6 @@ def main():
         sys.argv = ["compute_net_values", label]
         compute_net_values.main()
 
-    # update_daily revalidated back at the start; everything since needs it too.
     revalidate()
 
 

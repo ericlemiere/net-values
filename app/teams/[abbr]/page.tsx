@@ -39,6 +39,7 @@ import {
 import { withBasis } from "@/lib/glossary";
 import { PAGE_COLUMN } from "@/lib/layout";
 import { SITE_URL, jsonLd, pageMetadata } from "@/lib/site";
+import { ChampionTrophy } from "@/components/ChampionTrophy";
 
 type HistoryRow = Awaited<ReturnType<typeof getTeamHistory>>[number] & {
   netValue?: TeamNetValue;
@@ -78,12 +79,7 @@ function historyColumnsFor(
         return (
           <span className="flex items-center gap-2 whitespace-nowrap">
             {r.champion && (
-              <span
-                title="Won the championship"
-                aria-label="Won the championship"
-              >
-                🏆
-              </span>
+              <ChampionTrophy label="Won the championship" />
             )}
             <span
               className={`font-mono text-[0.8125rem] tabular-nums ${

@@ -106,10 +106,11 @@ COLUMNS = [
 ]
 
 # Columns this importer always writes as NULL (see above) but another source
-# can fill in — backfill_bref_stats.py patches both from bref. They are set on
+# can fill in — backfill_bref_stats.py patches them from bref. They are set on
 # INSERT, where nothing is known yet, and left alone on CONFLICT, so the daily
-# refresh can overwrite the season-to-date numbers without wiping them.
-PRESERVE_ON_CONFLICT = ("pos", "gs")
+# refresh can overwrite the season-to-date numbers without wiping them. Age is
+# here for backfill_bdl.py, which shares upsert_stat_row and has no ages.
+PRESERVE_ON_CONFLICT = ("pos", "gs", "age")
 
 
 def upsert_stat_row(cur, table, player_id, season, values):

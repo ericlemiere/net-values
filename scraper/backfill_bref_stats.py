@@ -266,9 +266,12 @@ def main():
                 gs = intnum(r.get("games_started"))
                 touched = 0
                 for table in ("player_stats_totals", "player_stats_per_game"):
+                    # Age only where there is none: BALLDONTLIE rows arrive
+                    # without one, and nba.com's, where present, stay.
                     cur.execute(
-                        f"UPDATE {table} SET pos = %s, gs = %s WHERE player_id = %s AND season = %s",
-                        (pos, gs, pid, season),
+                        f"UPDATE {table} SET pos = %s, gs = %s, age = COALESCE(age, %s) "
+                        "WHERE player_id = %s AND season = %s",
+                        (pos, gs, intnum(r.get("age")), pid, season),
                     )
                     touched += cur.rowcount
                 if touched:

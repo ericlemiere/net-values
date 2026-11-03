@@ -57,7 +57,7 @@ export async function SiteFooter() {
         <HideOnHome>
           <p>
             <span className="block whitespace-nowrap md:inline">
-              Data via NBA.com,
+              Data via Balldontlie, NBA.com,
             </span>{" "}
             <span className="block whitespace-nowrap md:inline">
               Basketball-Reference, and HoopsHype

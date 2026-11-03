@@ -26,6 +26,7 @@ import {
 } from "@/lib/db/queries";
 import { PAGE_COLUMN } from "@/lib/layout";
 import { pageMetadata } from "@/lib/site";
+import { ChampionTrophy } from "@/components/ChampionTrophy";
 
 export const metadata = pageMetadata({
   title: "NBA Teams",
@@ -51,9 +52,7 @@ const columns: ColumnDef<TeamSeasonRow>[] = [
         {/* The title is the whole reason a season is memorable, so it reads as
             a mark on the team rather than another column of true/false. */}
         {r.champion && (
-          <span title="Won the championship" aria-label="Won the championship">
-            🏆
-          </span>
+          <ChampionTrophy label="Won the championship" />
         )}
         <Link
           href={`/teams/${r.abbr}`}

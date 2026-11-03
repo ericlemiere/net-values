@@ -106,6 +106,32 @@ def team_rows(regular, playoffs):
     return sorted(rows, key=lambda r: (-r[1], r[0]))
 
 
+def write_season(cur, label, rows, source):
+    """Upsert team_rows() output for one season."""
+    team_ids = load_team_ids(cur)
+    for abbr, wins, losses, srs, made_playoffs, champion in rows:
+        team_id = team_ids.get(abbr)
+        if team_id is None:
+            raise SystemExit(
+                f"{label}: unknown team abbreviation {abbr!r} — add it to "
+                f"ALIASES in seed_teams.py and re-run that first"
+            )
+        cur.execute(
+            """
+            INSERT INTO team_seasons
+                (team_id, season, wins, losses, srs, made_playoffs, champion, source)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (team_id, season) DO UPDATE SET
+                wins = EXCLUDED.wins, losses = EXCLUDED.losses, srs = EXCLUDED.srs,
+                made_playoffs = EXCLUDED.made_playoffs, champion = EXCLUDED.champion,
+                source = EXCLUDED.source
+            """,
+            (team_id, label, wins, losses, srs, made_playoffs, champion, source),
+        )
+    champ = next((r[0] for r in rows if r[5]), None)
+    print(f"{label}: {len(rows)} teams" + (f", champion {champ}" if champ else ""))
+
+
 def main():
     season = sys.argv[1] if len(sys.argv) > 1 else current_season()
     label = to_season_label(season)
@@ -118,32 +144,10 @@ def main():
 
     conn = connect()
     cur = conn.cursor()
-    team_ids = load_team_ids(cur)
-    rows = team_rows(regular, playoffs)
-    for abbr, wins, losses, srs, made_playoffs, champion in rows:
-        team_id = team_ids.get(abbr)
-        if team_id is None:
-            raise SystemExit(
-                f"{label}: unknown team abbreviation {abbr!r} — add it to "
-                f"ALIASES in seed_teams.py and re-run that first"
-            )
-        cur.execute(
-            """
-            INSERT INTO team_seasons
-                (team_id, season, wins, losses, srs, made_playoffs, champion, source)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, 'nba_api')
-            ON CONFLICT (team_id, season) DO UPDATE SET
-                wins = EXCLUDED.wins, losses = EXCLUDED.losses, srs = EXCLUDED.srs,
-                made_playoffs = EXCLUDED.made_playoffs, champion = EXCLUDED.champion,
-                source = EXCLUDED.source
-            """,
-            (team_id, label, wins, losses, srs, made_playoffs, champion),
-        )
+    write_season(cur, label, team_rows(regular, playoffs), "nba_api")
     conn.commit()
     cur.close()
     conn.close()
-    champ = next((r[0] for r in rows if r[5]), None)
-    print(f"{label}: {len(rows)} teams" + (f", champion {champ}" if champ else ""))
 
 
 if __name__ == "__main__":

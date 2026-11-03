@@ -76,6 +76,9 @@ export const players = pgTable("players", {
   name: text("name").notNull(),
   nbaPersonId: integer("nba_person_id").unique(),
   bbrefSlug: text("bbref_slug").unique(),
+  // BALLDONTLIE's player id, where the season's stats come from. Pinned once by
+  // scraper/map_balldontlie.py; null for players from before the switch.
+  balldontlieId: integer("balldontlie_id").unique(),
 });
 
 // Confirmed name variants (from fuzzy salary matching or manual review) that

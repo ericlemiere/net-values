@@ -20,21 +20,15 @@ import { SITE_NAME, pageMetadata } from "@/lib/site";
 
 // The intro animates on the client, so that part lives in its own component
 // and this stays a server file that can carry the metadata and fetch the lists.
-const base = pageMetadata({
+// The home page is the brand itself; "The Net Values - The Net Values" would
+// read as a mistake, in the tab and on a shared link alike.
+export const metadata: Metadata = pageMetadata({
   title: SITE_NAME,
+  absoluteTitle: `${SITE_NAME}: NBA Player Value vs. Salary`,
   description:
     "The NBA's best values and worst contracts this season and last, ranked by Net Value: what each player produced on the court against what his salary paid for.",
   path: "/",
 });
-
-export const metadata: Metadata = {
-  ...base,
-  // The home page is the brand itself; "The Net Values - The Net Values"
-  // would read as a mistake.
-  title: {
-    absolute: `${SITE_NAME}: NBA Player Value vs. Salary`,
-  },
-};
 
 const boxClass = "rounded-md border border-white/15 bg-background-box/95";
 

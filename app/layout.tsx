@@ -5,7 +5,13 @@ import { LogoWatermark } from "@/components/LogoWatermark";
 import { SiteFooter } from "@/components/SiteFooter";
 import { SiteHeader } from "@/components/SiteHeader";
 import { TableNavProvider } from "@/components/TableNav";
-import { SITE_DESCRIPTION, SITE_NAME, SITE_URL, jsonLd } from "@/lib/site";
+import {
+  OG_CARD,
+  SITE_DESCRIPTION,
+  SITE_NAME,
+  SITE_URL,
+  jsonLd,
+} from "@/lib/site";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -44,9 +50,9 @@ export const metadata: Metadata = {
     siteName: SITE_NAME,
     type: "website",
     locale: "en_US",
-    images: [{ url: "/tnv2.png", width: 1254, height: 1254, alt: SITE_NAME }],
+    images: [OG_CARD],
   },
-  twitter: { card: "summary", images: ["/tnv2.png"] },
+  twitter: { card: "summary_large_image", images: [OG_CARD.url] },
   icons: {
     icon: [{ url: "/tnv2.png" }],
     apple: [{ url: "/tnv2.png" }],

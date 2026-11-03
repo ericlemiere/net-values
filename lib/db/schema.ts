@@ -386,6 +386,41 @@ export const futureSalaries = pgTable(
 );
 
 /**
+ * Who is on each roster today and what he counts against the cap: the pool
+ * /trade-finder deals from. BALLDONTLIE's team contracts, one request per team.
+ *
+ * Kept apart from `future_salaries` because that one is a cap sheet, not a
+ * roster: a waived player's dead money stays on his old team's page (Lillard
+ * on Milwaukee's), which is right for payroll and wrong for "who can be
+ * traded". BALLDONTLIE lists only the players a team actually has. A player
+ * it has just moved arrives with no cap hit yet; `capHit` is then taken from
+ * bref's contract year, and stays null for one neither source prices
+ * (two-way deals, mostly), who isn't offered in trades.
+ *
+ * Replaced wholesale by scraper/backfill_rosters.py.
+ */
+export const rosters = pgTable(
+  "rosters",
+  {
+    id: serial("id").primaryKey(),
+    /** Null for a BALLDONTLIE player not pinned to a `players` row yet. */
+    playerId: integer("player_id").references(() => players.id),
+    balldontlieId: integer("balldontlie_id").notNull(),
+    name: text("name").notNull(),
+    team: varchar("team", { length: 3 }).notNull(),
+    season: text("season").notNull(),
+    capHit: integer("cap_hit"),
+    /** 'bdl', or 'bref' when BALLDONTLIE had no cap hit for him. */
+    capSource: varchar("cap_source", { length: 10 }),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("rosters_bdl_season_idx").on(t.balldontlieId, t.season),
+    index("rosters_team_idx").on(t.team),
+  ],
+);
+
+/**
  * NBA.com's own advanced numbers, kept separate from `advanced_stats` because
  * that table holds basketball-reference's box-score formulas (PER, WS, BPM,
  * VORP) and these come from a different source with different meaning: these

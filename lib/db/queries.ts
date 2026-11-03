@@ -41,7 +41,9 @@ import {
   siteMeta,
   futureSalaries,
   capProjections,
+  rosters,
 } from "./schema";
+import type { TradePlayer } from "@/lib/trade";
 
 export const PAGE_SIZE = 100;
 
@@ -3234,5 +3236,57 @@ export const getCapShareOutcomes = cached("getCapShareOutcomes", async function 
     ...s,
     best: best.rows as unknown as CapLadderRow[],
     worst: worst.rows as unknown as CapLadderRow[],
+  };
+});
+
+export interface TradePool {
+  season: string;
+  players: TradePlayer[];
+  /** Each team's cap sheet this season, dead money included. */
+  payrolls: Record<string, number>;
+}
+
+/**
+ * Everyone /trade-finder can deal: on a roster today with a cap hit, and his
+ * Net Value this season and last. Payroll is the team's cap sheet from
+ * `team_payrolls`, which counts the dead money `rosters` leaves out, since
+ * that money counts toward the cap and the aprons all the same.
+ */
+export const getTradePool = cached("getTradePool", async function getTradePool(): Promise<TradePool | null> {
+  const latest = await db.execute(sql`SELECT max(season) AS season FROM ${rosters}`);
+  const season = (latest.rows[0] as { season: string | null } | undefined)?.season;
+  if (!season) return null;
+  const prev = `${Number(season.slice(0, 4)) - 1}-${season.slice(0, 4)}`;
+
+  const [poolRows, payrollRows] = await Promise.all([
+    db.execute(sql`
+      SELECT r.balldontlie_id AS key, r.player_id AS "playerId",
+             p.nba_person_id AS "nbaPersonId", r.name, r.team,
+             COALESCE(st.pos, sp.pos) AS pos,
+             r.cap_hit AS "capHit",
+             nv.net_value_score::float8 AS nvp,
+             nvp.net_value_score::float8 AS "nvpPrev"
+      FROM ${rosters} r
+      LEFT JOIN ${players} p ON p.id = r.player_id
+      LEFT JOIN ${netValues} nv ON nv.player_id = r.player_id AND nv.season = ${season}
+      LEFT JOIN ${netValues} nvp ON nvp.player_id = r.player_id AND nvp.season = ${prev}
+      LEFT JOIN ${playerStatsTotals} st ON st.player_id = r.player_id AND st.season = ${season}
+      LEFT JOIN ${playerStatsTotals} sp ON sp.player_id = r.player_id AND sp.season = ${prev}
+      WHERE r.season = ${season} AND r.cap_hit > 0
+      ORDER BY r.cap_hit DESC
+    `),
+    db.execute(sql`
+      SELECT t.abbr AS team, tp.payroll::float8 AS payroll
+      FROM ${teamPayrolls} tp JOIN ${teams} t ON t.id = tp.team_id
+      WHERE tp.season = ${season}
+    `),
+  ]);
+
+  return {
+    season,
+    players: poolRows.rows as unknown as TradePlayer[],
+    payrolls: Object.fromEntries(
+      (payrollRows.rows as { team: string; payroll: number }[]).map((r) => [r.team, r.payroll]),
+    ),
   };
 });

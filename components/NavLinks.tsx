@@ -16,6 +16,7 @@ export const NAV_LINKS = [
   // /price-check off each player page's price tag.
   { href: "/seasons", label: "Seasons" },
   { href: "/cap-converter", label: "Cap Converter" },
+  { href: "/trade-finder", label: "Trade Finder" },
   { href: "/net-value", label: "How It Works" },
 ];
 

@@ -34,6 +34,9 @@ has to be refreshed before the numbers mean anything:
                     year a player is signed through past this one, with player
                     and team options. Not part of the model; kept current
                     because signings, trades, and waivers change it any day.
+  rosters           BALLDONTLIE's team contracts, one request per team: who
+                    is on each roster today and his cap hit, for
+                    /trade-finder. No dead money, unlike bref's pages.
   awards            nothing is voted on until the season ends, so this is a
                     no-op for most of the year and then fills in by itself the
                     day bref publishes. Cheap either way: one cached page.
@@ -90,6 +93,7 @@ def main():
     import compute_production
     import backfill_awards
     import backfill_future_salaries
+    import backfill_rosters
     import backfill_salaries
     import seed_seasons
     import compute_net_values
@@ -132,6 +136,11 @@ def main():
 
     print("\n=== future contracts from bref ===")
     backfill_future_salaries.main()
+
+    # After future contracts: a player BALLDONTLIE has just moved has no cap
+    # hit there yet, and his bref contract year fills it in.
+    print("\n=== rosters and cap hits from BALLDONTLIE ===")
+    backfill_rosters.run(to_season_label(season))
 
     # Before salaries: a season's salaries count for nothing without its cap.
     print("\n=== salary caps from bref ===")

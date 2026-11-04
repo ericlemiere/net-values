@@ -121,14 +121,17 @@ export function TradeFinder({
   return (
     <div className="flex flex-col gap-6">
       <div
-        className={`relative flex flex-col gap-3 overflow-hidden rounded-lg bg-neutral-800 p-4 ${
-          anchor ? "min-[460px]:pr-[calc(27%+1rem)] md:pr-[calc(26%+1rem)] lg:pr-48" : ""
+        className={`relative flex flex-col gap-3 rounded-lg bg-neutral-800 p-4 ${
+          anchor
+            ? "min-[460px]:pr-[calc(27%+1rem)] md:pr-[calc(26%+1rem)] lg:pr-48"
+            : ""
         }`}
       >
         {/* The picked player, the form's full height against its right
-            edge. Pinned out of the flow so the photo takes the form's height
-            rather than setting it; the padding above keeps the controls clear
-            of it. On a wide screen the form is two short rows and the photo
+            edge. Clipped to the card's corners itself, not by the card: the
+            card can't hide overflow, or it cuts off the dropdowns. Pinned
+            out of the flow so the photo takes the form's height rather than
+            setting it; the padding above keeps the controls clear of it. On a wide screen the form is two short rows and the photo
             keeps its own shape. Narrower, the controls stack and the form
             grows tall, so the photo takes a fixed share of the width instead
             and crops in to his face. Percent padding and a percent width both
@@ -136,7 +139,7 @@ export function TradeFinder({
             that share is too thin for the controls beside it, so the photo
             is left out and the form keeps its plain phone layout. */}
         {anchor && (
-          <div className="pointer-events-none absolute inset-y-0 right-0 hidden w-[27%] min-[460px]:block md:w-[26%] lg:w-auto lg:aspect-[260/190]">
+          <div className="pointer-events-none absolute inset-y-0 right-0 hidden overflow-hidden rounded-r-lg w-[27%] min-[460px]:block md:w-[26%] lg:w-auto lg:aspect-260/190">
             {anchor.nbaPersonId !== null && (
               // eslint-disable-next-line @next/next/no-img-element
               <img
@@ -606,10 +609,16 @@ function TradeSide({
             >
               {team} sends
             </th>
-            <th scope="col" className={`${num} w-16 pb-1 font-sans font-normal md:w-32`}>
+            <th
+              scope="col"
+              className={`${num} w-16 pb-1 font-sans font-normal md:w-32`}
+            >
               Salary
             </th>
-            <th scope="col" className={`${num} w-14 pb-1 font-sans font-normal md:w-24`}>
+            <th
+              scope="col"
+              className={`${num} w-14 pb-1 font-sans font-normal md:w-24`}
+            >
               <span className="md:hidden">NVP</span>
               <span className="hidden md:inline">Net Value</span>
             </th>
@@ -647,17 +656,19 @@ function TradeSide({
                       )}
                     </span>
                     <span className="flex flex-wrap items-center gap-x-1.5 text-xs text-white/50 md:text-sm">
-                      {[p.pos, contractYears(p)]
-                        .filter(Boolean)
-                        .join(" · ")}
+                      {[p.pos, contractYears(p)].filter(Boolean).join(" · ")}
                       <OptionPill option={p.finalOption} />
                     </span>
                   </span>
                 </div>
               </td>
               <td className={`${num} py-1.5 text-white/80`}>
-                <span className="md:hidden">{formatCompactCurrency(p.capHit)}</span>
-                <span className="hidden md:inline">{formatCurrency(p.capHit)}</span>
+                <span className="md:hidden">
+                  {formatCompactCurrency(p.capHit)}
+                </span>
+                <span className="hidden md:inline">
+                  {formatCurrency(p.capHit)}
+                </span>
               </td>
               <td className={`${num} py-1.5 ${netValueClass(values[i])}`}>
                 {formatScore(values[i])}
@@ -673,8 +684,12 @@ function TradeSide({
                 Total
               </th>
               <td className={`${num} pt-2`}>
-                <span className="md:hidden">{formatCompactCurrency(salary)}</span>
-                <span className="hidden md:inline">{formatCurrency(salary)}</span>
+                <span className="md:hidden">
+                  {formatCompactCurrency(salary)}
+                </span>
+                <span className="hidden md:inline">
+                  {formatCurrency(salary)}
+                </span>
               </td>
               <td className={`${num} pt-2 ${netValueClass(nvpTotal)}`}>
                 {formatScore(nvpTotal)}

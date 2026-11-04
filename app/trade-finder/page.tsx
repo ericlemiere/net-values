@@ -3,7 +3,8 @@ import { TradeFinder, type TradeFinderState } from "@/components/TradeFinder";
 import { getTeams, getTradePool } from "@/lib/db/queries";
 import { PAGE_COLUMN } from "@/lib/layout";
 import { pageMetadata } from "@/lib/site";
-import { CAP_RULES, type NvpBasis, type TradeSort } from "@/lib/trade";
+import { formatCurrency } from "@/lib/format";
+import { capRules, type NvpBasis, type TradeSort } from "@/lib/trade";
 
 export const metadata = pageMetadata({
   title: "Trade Finder",
@@ -11,6 +12,11 @@ export const metadata = pageMetadata({
     "Pick an NBA player and see every trade that works under the salary cap, with the Net Value each team gains or gives up.",
   path: "/trade-finder",
 });
+
+/** "$9.1 million": a matching band, as the fine print says it. */
+function millions(n: number): string {
+  return `$${(n / 1e6).toFixed(1)} million`;
+}
 
 function pick<T extends string | number>(value: string | undefined, allowed: readonly T[], fallback: T): T {
   const found = allowed.find((a) => String(a) === value);
@@ -24,7 +30,7 @@ export default async function TradeFinderPage({
 }) {
   const sp = await searchParams;
   const [pool, teams] = await Promise.all([getTradePool(), getTeams()]);
-  const rules = pool ? CAP_RULES[pool.season] : undefined;
+  const rules = pool ? capRules(pool.season) : undefined;
 
   if (!pool || !rules) {
     return (
@@ -54,7 +60,7 @@ export default async function TradeFinderPage({
 
   return (
     <div className={PAGE_COLUMN}>
-      <PageHeader title="Trade Finder" />
+      {/* TradeFinder draws the heading itself, with Reset beside it. */}
       <TradeFinder
         pool={pool.players}
         payrolls={pool.payrolls}
@@ -65,8 +71,10 @@ export default async function TradeFinderPage({
       <p className="mt-8 max-w-3xl text-xs leading-relaxed text-white/50">
         Trades are checked against salary alone, under the 2023 CBA: a team
         that finishes over the cap can take back up to 200% of what it sends
-        plus $250,000 on small salaries, what it sends plus about $9.1 million
-        in the middle, and 125% plus $250,000 above about $35.2 million. A
+        plus {formatCurrency(rules.cushion)} on small salaries, what it sends
+        plus about {millions(rules.smallBand)} in the middle, and 125% plus{" "}
+        {formatCurrency(rules.cushion)} above about{" "}
+        {millions(rules.largeBand)}. A
         team that would finish over the first apron can&apos;t take back more
         than it sends, and one over the second apron can&apos;t combine
         salaries. Draft picks, cash, trade restrictions on newly signed

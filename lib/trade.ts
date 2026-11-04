@@ -23,31 +23,60 @@ export interface CapRules {
    *   up to `smallBand`            200% of outgoing + `cushion`
    *   up to `largeBand`            outgoing + `smallBand`
    *   above `largeBand`            125% of outgoing + `cushion`
-   * The CBA set them at $7.5M and $29M for 2023-24 and grows them with the
-   * cap, which is how the figures below were derived.
+   * Worked out from the cap; see capRules.
    */
   smallBand: number;
   largeBand: number;
   cushion: number;
 }
 
+/** The four figures the league publishes each July. */
+type CapFigures = Pick<CapRules, "cap" | "tax" | "firstApron" | "secondApron">;
+
 /**
- * By season. The cap, tax, and aprons are the league's published figures
- * (pr.nba.com, July 2026). The bands are the 2023-24 ones grown by the cap
- * ($136.021M then): $7.5M and $29M times 164.961 / 136.021.
+ * By season: the league's published cap, tax line, and aprons, the only
+ * figures entered by hand. Add the coming season's each July, when the
+ * league announces them (pr.nba.com); until a season is here, the trade
+ * finder says it isn't set up for it. BALLDONTLIE doesn't carry them, and
+ * basketball-reference has the cap but not the tax or aprons.
  */
-export const CAP_RULES: Record<string, CapRules> = {
+const CAP_FIGURES: Record<string, CapFigures> = {
+  // pr.nba.com, July 2026.
   "2026-2027": {
-    season: "2026-2027",
     cap: 164_961_000,
     tax: 200_428_000,
     firstApron: 209_015_000,
     secondApron: 221_686_000,
-    smallBand: 9_096_000,
-    largeBand: 35_170_000,
-    cushion: 250_000,
   },
 };
+
+/**
+ * The 2023 CBA set the matching bands at $7.5M and $29M for 2023-24, when
+ * the cap was $136.021M, and grows them with the cap, rounded to the
+ * thousand: for 2026-27, $9,096,000 and $35,170,000. The $250,000 cushion
+ * doesn't grow.
+ */
+const BAND_BASE_CAP = 136_021_000;
+const SMALL_BAND_BASE = 7_500_000;
+const LARGE_BAND_BASE = 29_000_000;
+const CUSHION = 250_000;
+
+function grownBand(base: number, cap: number): number {
+  return Math.round((base * cap) / BAND_BASE_CAP / 1000) * 1000;
+}
+
+/** A season's full rules, or undefined when its figures aren't in yet. */
+export function capRules(season: string): CapRules | undefined {
+  const f = CAP_FIGURES[season];
+  if (!f) return undefined;
+  return {
+    season,
+    ...f,
+    smallBand: grownBand(SMALL_BAND_BASE, f.cap),
+    largeBand: grownBand(LARGE_BAND_BASE, f.cap),
+    cushion: CUSHION,
+  };
+}
 
 /** The most a team under the first apron can take back for `out`. */
 export function matchLimit(out: number, r: CapRules): number {
@@ -68,11 +97,11 @@ export function tierOf(payroll: number, r: CapRules): Tier {
 }
 
 export const TIER_LABEL: Record<Tier, string> = {
-  room: "Under the cap",
-  cap: "Over the cap",
+  room: "Under cap",
+  cap: "Over cap",
   tax: "Taxpayer",
-  first: "Over the first apron",
-  second: "Over the second apron",
+  first: "Over 1st apron",
+  second: "Over 2nd apron",
 };
 
 /** One team's side of a deal: what it sends, what it gets back. */

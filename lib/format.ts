@@ -119,12 +119,21 @@ export const NET_VALUE_STRONG = 1.5;
  * The classes for a span around a player's Net Value score, in the same green
  * and red as payGapClass. Only for a single player-season (or a team's share
  * of one); a team's summed total runs on a much wider scale.
+ *
+ * The 700 shades are made for the light tables. On a dark background they
+ * drop to about 2.5:1 contrast, so `onDark` swaps in the 400 shades, which
+ * clear 7:1 on the dark boxes.
  */
-export function netValueClass(score: number | null): string {
+export function netValueClass(
+  score: number | null,
+  { onDark = false }: { onDark?: boolean } = {},
+): string {
   if (score === null || score === undefined) return "";
   const strength = Math.abs(score) >= NET_VALUE_STRONG ? " font-bold" : "";
-  if (score >= NET_VALUE_MARK) return `text-green-700${strength}`;
-  if (score <= -NET_VALUE_MARK) return `text-red-700${strength}`;
+  if (score >= NET_VALUE_MARK)
+    return `${onDark ? "text-green-400" : "text-green-700"}${strength}`;
+  if (score <= -NET_VALUE_MARK)
+    return `${onDark ? "text-red-400" : "text-red-700"}${strength}`;
   return "";
 }
 

@@ -45,3 +45,4 @@ scraper/.venv/
 scraper/.cache/
 scraper/logs/
 __pycache__/
+scraper/.run_daily.lock/

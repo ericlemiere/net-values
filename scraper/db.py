@@ -30,7 +30,16 @@ def load_database_url() -> str:
 def connect():
     import psycopg2
 
-    return psycopg2.connect(load_database_url())
+    # Keepalives make a connection that dropped silently (common while a
+    # script sits on it during minutes of scraping) fail within about a
+    # minute with an OperationalError, instead of hanging forever.
+    return psycopg2.connect(
+        load_database_url(),
+        keepalives=1,
+        keepalives_idle=30,
+        keepalives_interval=10,
+        keepalives_count=5,
+    )
 
 
 # 1996-97 through 2025-26

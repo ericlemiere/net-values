@@ -23,13 +23,23 @@ main() {
     log_dir="$scraper_dir/logs"
     log="$log_dir/$(date +%F).log"
     mkdir -p "$log_dir"
+    exec >>"$log" 2>&1
+
+    # One run at a time. The lock holds the running job's PID, so a lock left
+    # behind by a run that never got to clean up (a reboot, a kill -9) is
+    # noticed and cleared instead of blocking every run after it.
     local lock_dir="$scraper_dir/.run_daily.lock"
     if ! mkdir "$lock_dir" 2>/dev/null; then
-        echo "daily job already running; exiting"
-        exit 0
+        local holder
+        holder="$(cat "$lock_dir/pid" 2>/dev/null)"
+        if [[ -n "$holder" ]] && kill -0 "$holder" 2>/dev/null; then
+            echo "=== $(date): daily job already running (pid $holder); exiting ==="
+            exit 0
+        fi
+        echo "removing stale lock (pid ${holder:-unknown} is gone)"
     fi
-    trap 'rmdir "$lock_dir" 2>/dev/null || true' EXIT
-    exec >>"$log" 2>&1
+    echo $$ >"$lock_dir/pid"
+    trap 'rm -rf "$lock_dir"' EXIT
 
     echo "=== $(date) ==="
 

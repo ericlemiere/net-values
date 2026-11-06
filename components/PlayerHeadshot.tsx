@@ -20,6 +20,7 @@ export function PlayerHeadshot({
   name,
   height = 95,
   frame = true,
+  sizeClassName,
 }: {
   nbaPersonId: number | null;
   name: string;
@@ -27,6 +28,10 @@ export function PlayerHeadshot({
   /** The rounded, outlined box. Off where the photo runs flush to the edge of
    *  something that already frames it, like a row of a list. */
   frame?: boolean;
+  /** Sizes the box with classes instead of the fixed `height`, for a photo
+   *  that changes size with the screen. `height` then only sets the size the
+   *  image is requested at. */
+  sizeClassName?: string;
 }) {
   const width = Math.round(height * RATIO);
 
@@ -34,8 +39,8 @@ export function PlayerHeadshot({
     <div
       className={`shrink-0 overflow-hidden ${
         frame ? "rounded-lg border border-white/15" : ""
-      }`.trim()}
-      style={{ width, height }}
+      } ${sizeClassName ?? ""}`.trim()}
+      style={sizeClassName ? undefined : { width, height }}
     >
       {nbaPersonId !== null ? (
         <Image

@@ -39,6 +39,7 @@ import {
   getPlayerTeamSplits,
   getPaidSoFar,
   getSalaryComps,
+  getTradePool,
   type PlayerAward,
   type PlayerContract,
 } from "@/lib/db/queries";
@@ -889,44 +890,33 @@ function futureSalRow(f: FutureRow): SalRow {
 // one, otherwise the player's most recent season that has both a salary and a
 // league cap to divide it by.
 /**
- * The way into /price-check. A header box like its neighbors, but filled in
- * the accent and linked, so it reads as the one thing up here you can press —
- * and it leads with a real figure, which does more to invite a click than a
- * button label could.
+ * A way into one of the site's tools (Price Check, Trade Finder), in a row of
+ * its own under the header. Kept apart from the header boxes, which report
+ * his figures, and drawn as a slim outlined link rather than another box, so
+ * the tools read as things to press without outweighing the figures: the
+ * tool's name in the accent, one short line under it. Every one is the same
+ * width, so a row of them matches; a line too long for it (a long
+ * name in "Find trades for …") truncates, with the whole line on hover.
  */
-function PriceCheckBox({
+function ToolLink({
+  label,
   href,
-  value,
-  caption,
+  detail,
 }: {
+  label: string;
   href: string;
-  value: string;
-  caption: string;
+  detail: string;
 }) {
   return (
     <Link
       href={href}
-      // Hover stays yellow and grows a ring and a glow outside the box, which
-      // none of its neighbors do. Swapping it to their dark fill made it look
-      // like one of them, and running the fill and the text through opposite
-      // color changes at once passed through a muddy frame that read as a
-      // flicker.
-      className="group w-full rounded-lg border-2 border-accent bg-accent px-3 py-2 text-accent-foreground transition-shadow duration-200 ease-out hover:shadow-[0_0_0_3px_var(--background),0_0_0_5px_var(--accent),0_0_24px_4px_color-mix(in_srgb,var(--accent)_45%,transparent)] focus-visible:shadow-[0_0_0_3px_var(--background),0_0_0_5px_var(--accent)] focus-visible:outline-none md:w-auto md:whitespace-nowrap md:px-4 md:text-right"
+      title={detail}
+      className="group block w-full min-w-0 rounded-md border border-accent/40 bg-background-box px-3 py-1.5 transition-colors hover:border-accent focus-visible:border-accent focus-visible:outline-none md:w-64"
     >
-      <div className="flex items-center justify-between gap-3 md:block md:items-start">
-        <div className="text-sm font-semibold">
-          Price Check <LinkArrow />
-          <div className="text-xs font-normal opacity-60 md:hidden">
-            {caption}
-          </div>
-        </div>
-        <div className="shrink-0 text-right font-mono text-lg font-semibold tabular-nums md:text-2xl">
-          {value}
-        </div>
-      </div>
-      <div className="hidden min-h-4 text-xs opacity-60 md:block">
-        {caption}
-      </div>
+      <span className="block text-sm font-semibold text-accent">
+        {label} <LinkArrow />
+      </span>
+      <span className="block truncate text-xs text-white/60">{detail}</span>
     </Link>
   );
 }
@@ -1000,6 +990,7 @@ export default async function PlayerPage({
     careerAwards,
     teamSplits,
     futureSalaries,
+    tradePool,
   ] = await Promise.all([
     getPlayerCareerStatsPerGame(playerId),
     getPlayerCareerStatsTotals(playerId),
@@ -1009,6 +1000,7 @@ export default async function PlayerPage({
     getPlayerAwards(playerId),
     getPlayerTeamSplits(playerId),
     getPlayerFutureSalaries(playerId),
+    getTradePool(),
   ]);
   const splits = groupSplits(teamSplits);
   const career = careerRows(totals);
@@ -1103,24 +1095,24 @@ export default async function PlayerPage({
     null,
   );
 
-  // The Price Check tile's teaser: what his latest paid season cost per point,
-  // the same season /price-check itself opens on. A season still being played
-  // divides only the salary paid so far, as /price-check does, rather than a
-  // full year's pay over a few weeks of points.
+  // The Price Check link's teaser: what his latest paid season cost per game
+  // played, the same season /price-check itself opens on. A season still
+  // being played divides only the salary paid so far, as /price-check does,
+  // rather than a full year's pay over a few weeks of games.
   const payBySeason = new Map(salaries.map((r) => [r.season, r.salary]));
   const teaserSeason =
     [...totals]
       .reverse()
-      .find((t) => payBySeason.get(t.season) && t.pts) ?? null;
+      .find((t) => payBySeason.get(t.season) && t.gp) ?? null;
   const teaserPaid = teaserSeason
     ? await getPaidSoFar(player.id, teaserSeason.season)
     : null;
   const priceTeaser = teaserSeason
     ? {
         season: teaserSeason.season,
-        perPoint:
+        perGame:
           (payBySeason.get(teaserSeason.season)! * (teaserPaid?.share ?? 1)) /
-          teaserSeason.pts!,
+          teaserSeason.gp!,
         soFar: teaserPaid !== null,
       }
     : null;
@@ -1131,6 +1123,13 @@ export default async function PlayerPage({
       : "";
 
   const headshot = headshotUrl(player.nbaPersonId);
+
+  // The Trade Finder link: only for a player the Trade Finder can shop, which
+  // is anyone on a roster this season with a cap hit (two-way deals carry
+  // none). Its URL keys players by their BALLDONTLIE id, not ours.
+  const tradeKey =
+    tradePool?.players.find((p) => p.playerId === player.id)?.key ?? null;
+  const hasTools = priceTeaser !== null || tradeKey !== null;
 
   return (
     <div className={PAGE_COLUMN}>
@@ -1145,19 +1144,34 @@ export default async function PlayerPage({
           ...(headshot && { image: headshot }),
         })}
       />
-      <div className="mb-10 flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
-        <div className="flex min-w-0 items-center gap-4">
-          <PlayerHeadshot nbaPersonId={player.nbaPersonId} name={player.name} />
-          <div className="min-w-0">
-            <h1 className="min-w-0 wrap-break-word text-2xl font-semibold tracking-tight">
-              {player.name}
-            </h1>
-            {careerAwards.length > 0 && (
-              <div className="mt-2">
-                <CareerAwardBadges awards={careerAwards} />
-              </div>
-            )}
-          </div>
+      <div
+        className={`${hasTools ? "mb-5" : "mb-10"} flex flex-col justify-between gap-4 lg:flex-row lg:items-center`}
+      >
+        {/* One grid, so the name is a single h1 at every width. On a phone
+            the name has a row to itself, and under it the photo takes half
+            the width beside the badges, growing taller with them when they
+            run to several rows (never shorter than the photo's own shape).
+            From sm the photo is its usual fixed size, with the name and the
+            badges stacked beside it. */}
+        <div className="grid min-w-0 grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-center sm:gap-y-2">
+          <h1
+            className={`col-span-2 min-w-0 wrap-break-word text-2xl font-semibold tracking-tight sm:col-span-1 sm:col-start-2 sm:row-start-1 ${
+              careerAwards.length > 0 ? "sm:self-end" : "sm:row-span-2"
+            }`}
+          >
+            {player.name}
+          </h1>
+          <PlayerHeadshot
+            nbaPersonId={player.nbaPersonId}
+            name={player.name}
+            height={190}
+            sizeClassName="col-start-1 row-start-2 aspect-[260/190] w-full self-stretch sm:row-span-2 sm:row-start-1 sm:aspect-auto sm:h-[95px] sm:w-[130px] sm:self-center"
+          />
+          {careerAwards.length > 0 && (
+            <div className="col-start-2 row-start-2 min-w-0 sm:self-start">
+              <CareerAwardBadges awards={careerAwards} />
+            </div>
+          )}
         </div>
         {/* The boxes keep their text on one line and never give up width:
             beside them, it's the name and award badges that narrow, and the
@@ -1190,15 +1204,29 @@ export default async function PlayerPage({
               caption={bestSeason.season}
             />
           )}
+        </div>
+      </div>
+      {hasTools && (
+        <div className="mb-10 grid grid-cols-1 gap-2 sm:grid-cols-2 sm:gap-3 md:flex md:flex-wrap">
+          {/* Full width and stacked on a phone; half the row each from sm,
+              where the header boxes above are still full width; a fixed
+              width each from md, where those boxes sit in a row. */}
           {priceTeaser && (
-            <PriceCheckBox
-              href={`/price-check?p1=${player.id}&s1=${priceTeaser.season}&stat=pts`}
-              value={`$${Math.round(priceTeaser.perPoint).toLocaleString("en-US")}`}
-              caption={`per point${priceTeaser.soFar ? " so far" : ""}, ${priceTeaser.season}`}
+            <ToolLink
+              label="Price Check"
+              href={`/price-check?p1=${player.id}&s1=${priceTeaser.season}&stat=gp`}
+              detail={`$${Math.round(priceTeaser.perGame).toLocaleString("en-US")} per game${priceTeaser.soFar ? " so far" : ""}, ${priceTeaser.season}`}
+            />
+          )}
+          {tradeKey !== null && (
+            <ToolLink
+              label="Trade Finder"
+              href={`/trade-finder?player=${tradeKey}`}
+              detail={`Find trades for ${player.name}`}
             />
           )}
         </div>
-      </div>
+      )}
       {/* Three sections, each opened by a rule: what he was paid, who else was
           paid like that, and what he did for it. `items-start` rather than the
           default stretch, so the salary log keeps its fitted width instead of

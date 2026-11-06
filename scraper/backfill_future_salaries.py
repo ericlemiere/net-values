@@ -29,7 +29,9 @@ Usage:
   python backfill_future_salaries.py
 """
 import re
+import time
 
+import psycopg2
 from bs4 import BeautifulSoup
 
 import bref
@@ -112,83 +114,94 @@ def seed_projections(cur):
 
 
 def main():
-    conn = connect()
-    cur = conn.cursor()
-    resolve_team = load_team_resolver(cur)
-    index = PlayerIndex(cur)
+    for attempt in range(3):
+        conn = None
+        try:
+            conn = connect()
+            cur = conn.cursor()
+            resolve_team = load_team_resolver(cur)
+            index = PlayerIndex(cur)
 
-    seed_projections(cur)
+            seed_projections(cur)
 
-    # bref names league pages by the season's end year.
-    end_year = int(current_season()[:4]) + 1
-    season = bref.season_label(end_year)
+            # bref names league pages by the season's end year.
+            end_year = int(current_season()[:4]) + 1
+            season = bref.season_label(end_year)
 
-    rows = {}
-    unmatched = []
-    for abbr in season_teams(end_year):
-        canon_abbr, _ = resolve_team(abbr)
-        for name, slug, years in team_contracts(abbr):
-            if not slug:
-                print(f"  skipped {canon_abbr} {name}: no bref id")
-                continue
-            pid, method, _ = match_row(
-                {"name": name, "season": season, "team": canon_abbr, "slug": slug}, index
+            rows = {}
+            unmatched = []
+            for abbr in season_teams(end_year):
+                canon_abbr, _ = resolve_team(abbr)
+                for name, slug, years in team_contracts(abbr):
+                    if not slug:
+                        print(f"  skipped {canon_abbr} {name}: no bref id")
+                        continue
+                    pid, method, _ = match_row(
+                        {"name": name, "season": season, "team": canon_abbr, "slug": slug}, index
+                    )
+                    # Exact matches only. Before opening night the season has no stat
+                    # rows, so the fuzzy fallback pools every player in history, and a
+                    # rookie lands on whoever's name is closest: Mikel Brown Jr. came
+                    # out as the Mike Brown who retired in 2001. An unmatched player is
+                    # still stored, under his bref id and name, so his team's
+                    # commitments are whole; he links up once he has played and the
+                    # name matches exactly.
+                    if method in FUZZY_METHODS:
+                        pid = None
+                    if pid is None:
+                        unmatched.append(f"{canon_abbr} {name} ({slug})")
+                    else:
+                        index.record_slug(cur, pid, slug)
+                    for year, salary, option in years:
+                        # A player listed twice on one page is one contract shown twice.
+                        rows[(slug, year, canon_abbr)] = (pid, name, salary, option)
+
+            if not rows:
+                raise RuntimeError("no contract years parsed; leaving future_salaries untouched")
+
+            cur.executemany(
+                """
+                INSERT INTO future_salaries
+                  (bref_slug, season, team, player_id, name, salary, option, source)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, 'bref')
+                ON CONFLICT (bref_slug, season, team) DO UPDATE
+                  SET player_id = EXCLUDED.player_id, name = EXCLUDED.name,
+                      salary = EXCLUDED.salary, option = EXCLUDED.option,
+                      source = EXCLUDED.source, updated_at = now()
+                """,
+                [(slug, year, team, *vals) for (slug, year, team), vals in rows.items()],
             )
-            # Exact matches only. Before opening night the season has no stat
-            # rows, so the fuzzy fallback pools every player in history, and a
-            # rookie lands on whoever's name is closest: Mikel Brown Jr. came
-            # out as the Mike Brown who retired in 2001. An unmatched player is
-            # still stored, under his bref id and name, so his team's
-            # commitments are whole; he links up once he has played and the
-            # name matches exactly.
-            if method in FUZZY_METHODS:
-                pid = None
-            if pid is None:
-                unmatched.append(f"{canon_abbr} {name} ({slug})")
-            else:
-                index.record_slug(cur, pid, slug)
-            for year, salary, option in years:
-                # A player listed twice on one page is one contract shown twice.
-                rows[(slug, year, canon_abbr)] = (pid, name, salary, option)
+            # Whatever this run didn't see is no longer on anyone's books.
+            cur.execute(
+                """
+                DELETE FROM future_salaries f
+                WHERE f.source = 'bref'
+                  AND NOT EXISTS (
+                    SELECT 1 FROM unnest(%s::text[], %s::text[], %s::text[]) AS k(slug, season, team)
+                    WHERE k.slug = f.bref_slug AND k.season = f.season AND k.team = f.team)
+                """,
+                [list(col) for col in zip(*rows.keys())],
+            )
+            removed = cur.rowcount
+            conn.commit()
 
-    if not rows:
-        raise RuntimeError("no contract years parsed; leaving future_salaries untouched")
+            players = len({slug for slug, _, _ in rows})
+            options = sum(1 for *_, option in rows.values() if option)
+            print(f"{len(rows)} future contract years for {players} players ({options} options), "
+                  f"{removed} removed")
+            if unmatched:
+                print(f"stored without a player link ({len(unmatched)}): " + ", ".join(unmatched))
 
-    cur.executemany(
-        """
-        INSERT INTO future_salaries
-          (bref_slug, season, team, player_id, name, salary, option, source)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, 'bref')
-        ON CONFLICT (bref_slug, season, team) DO UPDATE
-          SET player_id = EXCLUDED.player_id, name = EXCLUDED.name,
-              salary = EXCLUDED.salary, option = EXCLUDED.option,
-              source = EXCLUDED.source, updated_at = now()
-        """,
-        [(slug, year, team, *vals) for (slug, year, team), vals in rows.items()],
-    )
-    # Whatever this run didn't see is no longer on anyone's books.
-    cur.execute(
-        """
-        DELETE FROM future_salaries f
-        WHERE f.source = 'bref'
-          AND NOT EXISTS (
-            SELECT 1 FROM unnest(%s::text[], %s::text[], %s::text[]) AS k(slug, season, team)
-            WHERE k.slug = f.bref_slug AND k.season = f.season AND k.team = f.team)
-        """,
-        [list(col) for col in zip(*rows.keys())],
-    )
-    removed = cur.rowcount
-    conn.commit()
-
-    players = len({slug for slug, _, _ in rows})
-    options = sum(1 for *_, option in rows.values() if option)
-    print(f"{len(rows)} future contract years for {players} players ({options} options), "
-          f"{removed} removed")
-    if unmatched:
-        print(f"stored without a player link ({len(unmatched)}): " + ", ".join(unmatched))
-
-    cur.close()
-    conn.close()
+            cur.close()
+            conn.close()
+            return
+        except psycopg2.OperationalError as exc:
+            if conn is not None:
+                conn.close()
+            if attempt == 2:
+                raise
+            print(f"database connection reset during future salaries; retrying ({attempt + 1}/3)")
+            time.sleep(5 * (attempt + 1))
 
 
 if __name__ == "__main__":

@@ -23,6 +23,12 @@ main() {
     log_dir="$scraper_dir/logs"
     log="$log_dir/$(date +%F).log"
     mkdir -p "$log_dir"
+    local lock_dir="$scraper_dir/.run_daily.lock"
+    if ! mkdir "$lock_dir" 2>/dev/null; then
+        echo "daily job already running; exiting"
+        exit 0
+    fi
+    trap 'rmdir "$lock_dir" 2>/dev/null || true' EXIT
     exec >>"$log" 2>&1
 
     echo "=== $(date) ==="

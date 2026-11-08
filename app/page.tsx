@@ -7,6 +7,7 @@ import { SiteSearch } from "@/components/SiteSearch";
 import {
   getDataUpdatedAt,
   getHomeNetValueLeaders,
+  type HomeMoverRow,
   type HomeNetValueRow,
   type HomeNetValueSeason,
 } from "@/lib/db/queries";
@@ -37,52 +38,148 @@ function step(i: number) {
   return { "--i": i } as React.CSSProperties;
 }
 
+/**
+ * Spots moved, under a row's score. Colored by what the move means for the
+ * player, so climbing the worst list reads red. In the dark-background shades,
+ * like the score above it.
+ */
+function Movement({
+  moved,
+  worst = false,
+  since = "since yesterday",
+}: {
+  moved: HomeNetValueRow["moved"];
+  /** The worst-values list, where moving up the list is bad news. */
+  worst?: boolean;
+  /** Ends the labels: "Up 4 spots since yesterday". */
+  since?: string;
+}) {
+  if (moved === null) return null;
+  const base = "block text-right font-mono text-xs tabular-nums";
+  if (moved === "new")
+    return (
+      <span className={`${base} text-white/50`} title="Not ranked yesterday">
+        New
+      </span>
+    );
+  if (moved === 0)
+    return (
+      <span className={`${base} text-white/40`} title={`No change ${since}`}>
+        <span aria-hidden>&ndash;</span>
+        <span className="sr-only">No change {since}</span>
+      </span>
+    );
+  const up = moved > 0;
+  const n = Math.abs(moved);
+  const label = `${up ? "Up" : "Down"} ${n} ${n === 1 ? "spot" : "spots"} ${since}`;
+  return (
+    <span
+      className={`${base} ${up !== worst ? "text-green-400" : "text-red-400"}`}
+      title={label}
+    >
+      <span aria-hidden>
+        {up ? "\u25B2" : "\u25BC"}
+        {n}
+      </span>
+      <span className="sr-only">{label}</span>
+    </span>
+  );
+}
+
+/** A row's Net Value, the biggest figure on it, with its movement underneath. */
+function ScoreWithMovement({
+  score,
+  children,
+}: {
+  score: number | null;
+  children: React.ReactNode;
+}) {
+  return (
+    <>
+      <span
+        className={`block text-right font-mono text-lg tabular-nums ${netValueClass(score, { onDark: true })}`}
+      >
+        {formatScore(score)}
+      </span>
+      {children}
+    </>
+  );
+}
+
+/** One player as a row of a home-page list: headshot, name, a detail line, and
+ *  whatever the list puts at the right end. */
+function PlayerRow({
+  player,
+  detail,
+  children,
+}: {
+  player: { playerId: number; name: string; nbaPersonId: number | null };
+  detail: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <li>
+      <Link
+        href={`/players/${player.playerId}`}
+        className="flex items-center gap-3 pr-3 transition-colors hover:bg-white/5"
+      >
+        {/* The headshot fills the row's left end, top to bottom and flush to
+            the edge. */}
+        <span className="shrink-0 pt-2">
+          <PlayerHeadshot
+            nbaPersonId={player.nbaPersonId}
+            name={player.name}
+            height={76}
+            frame={false}
+          />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block font-semibold leading-tight md:text-lg">
+            {player.name}
+          </span>
+          <span className="mt-0.5 block truncate text-sm text-white/50">
+            {detail}
+          </span>
+        </span>
+        <span className="shrink-0">{children}</span>
+      </Link>
+    </li>
+  );
+}
+
 function LeaderList({
   title,
   rows,
   href,
+  worst = false,
 }: {
   title: string;
   rows: HomeNetValueRow[];
   href: string;
+  /** The worst-values list, where moving up is bad news. */
+  worst?: boolean;
 }) {
   return (
     <section className="min-w-0">
       <h3 className="mb-2 text-lg font-semibold">{title}</h3>
       <ol className={`${boxClass} divide-y divide-white/10 overflow-hidden`}>
         {rows.map((r) => (
-          <li key={r.playerId}>
-            <Link
-              href={`/players/${r.playerId}`}
-              className="flex items-center gap-3 pr-3 transition-colors hover:bg-white/5"
-            >
-              {/* The headshot fills the row's left end, top to bottom and
-                  flush to the edge. */}
-              <span className="shrink-0 pt-2">
-                <PlayerHeadshot
-                  nbaPersonId={r.nbaPersonId}
-                  name={r.name}
-                  height={76}
-                  frame={false}
-                />
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block font-semibold leading-tight md:text-lg">
-                  {r.name}
-                </span>
-                <span className="mt-0.5 block truncate text-sm text-white/50">
-                  {r.teamLabel ?? r.team ?? "—"} &middot;{" "}
-                  {formatCompactCurrency(r.salary)}
-                </span>
-              </span>
-              {/* No rank: the title says how many, and the order says the rest. */}
-              <span
-                className={`shrink-0 font-mono text-lg tabular-nums ${netValueClass(r.netValueScore)}`}
-              >
-                {formatScore(r.netValueScore)}
-              </span>
-            </Link>
-          </li>
+          <PlayerRow
+            key={r.playerId}
+            player={r}
+            detail={
+              <>
+                {r.teamLabel ?? r.team ?? "—"} &middot;{" "}
+                {formatCompactCurrency(r.salary)}
+              </>
+            }
+          >
+            {/* No rank: the title says how many, and the order says the
+                rest. The day's movement sits under the score. */}
+            <ScoreWithMovement score={r.netValueScore}>
+              <Movement moved={r.moved} worst={worst} />
+            </ScoreWithMovement>
+          </PlayerRow>
         ))}
       </ol>
       <Link
@@ -91,6 +188,48 @@ function LeaderList({
       >
         Full list <LinkArrow />
       </Link>
+    </section>
+  );
+}
+
+/**
+ * The biggest rank changes over some span, up or down the whole league. Laid
+ * out like the best and worst lists, score first and movement under it; the
+ * detail line says where he was and is now.
+ */
+function MoversList({
+  title,
+  rows,
+  since,
+}: {
+  title: string;
+  rows: HomeMoverRow[];
+  /** Ends the movement labels: "Up 40 spots since yesterday". */
+  since: string;
+}) {
+  return (
+    <section className="min-w-0">
+      <h3 className="mb-2 text-lg font-semibold">{title}</h3>
+      <ol className={`${boxClass} divide-y divide-white/10 overflow-hidden`}>
+        {rows.map((r) => (
+          <PlayerRow
+            key={r.playerId}
+            player={r}
+            detail={
+              <>
+                {r.teamLabel ?? r.team ?? "—"} &middot;{" "}
+                <span className="tabular-nums">
+                  #{r.wasRank} &rarr; #{r.seasonRank}
+                </span>
+              </>
+            }
+          >
+            <ScoreWithMovement score={r.netValueScore}>
+              <Movement moved={r.moved} since={since} />
+            </ScoreWithMovement>
+          </PlayerRow>
+        ))}
+      </ol>
     </section>
   );
 }
@@ -137,8 +276,27 @@ function SeasonLeaders({
           title={`${data.bottom.length} Worst Values of ${data.season}`}
           rows={data.bottom}
           href={salariesBy(data.season, "asc")}
+          worst
         />
       </div>
+      {(data.movers.day.length > 0 || data.movers.week.length > 0) && (
+        <div className="mt-8 grid gap-6 md:grid-cols-2">
+          {data.movers.day.length > 0 && (
+            <MoversList
+              title="Biggest Movers Since Yesterday"
+              rows={data.movers.day}
+              since="since yesterday"
+            />
+          )}
+          {data.movers.week.length > 0 && (
+            <MoversList
+              title="Biggest Movers This Week"
+              rows={data.movers.week}
+              since="this week"
+            />
+          )}
+        </div>
+      )}
     </section>
   );
 }

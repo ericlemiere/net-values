@@ -10,6 +10,7 @@ import {
   uniqueIndex,
   index,
   timestamp,
+  date,
 } from "drizzle-orm/pg-core";
 
 // precision 8 comfortably holds both per-game decimals (e.g. 21.1) and
@@ -619,6 +620,30 @@ export const netValues = pgTable(
   (t) => [
     uniqueIndex("net_values_player_season_idx").on(t.playerId, t.season),
     index("net_values_season_idx").on(t.season),
+  ],
+);
+
+/**
+ * Each in-progress season's `season_rank`, one copy per day, so the home page
+ * can say how far a player has moved since the last update. `net_values` is
+ * rewritten in place every morning and keeps no history of its own.
+ *
+ * Written by scraper/compute_net_values.py whenever it prices the season in
+ * progress, keyed by the day it ran on the job's machine, so a second run the same day
+ * replaces that day's copy rather than adding one.
+ */
+export const netValueRankHistory = pgTable(
+  "net_value_rank_history",
+  {
+    season: text("season").notNull(),
+    asOf: date("as_of", { mode: "string" }).notNull(),
+    playerId: integer("player_id")
+      .notNull()
+      .references(() => players.id),
+    seasonRank: integer("season_rank").notNull(),
+  },
+  (t) => [
+    uniqueIndex("net_value_rank_history_idx").on(t.season, t.asOf, t.playerId),
   ],
 );
 

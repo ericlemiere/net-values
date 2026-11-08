@@ -898,10 +898,40 @@ def main():
         shares,
         page_size=1000,
     )
+    snapshot_ranks(cur, season_filter)
     conn.commit()
     cur.close()
     conn.close()
     print(f"\nwrote {len(rows)} player-seasons, {len(shares)} team shares")
+
+
+def snapshot_ranks(cur, season_filter):
+    """Copies the in-progress season's ranks into net_value_rank_history.
+
+    The home page compares today's rank against the previous day's copy to
+    show how far each player moved. Only the season in progress: a finished
+    season's ranks don't move. Dated by this machine's clock, the one the
+    morning job is scheduled on, and replaced if the job runs twice in a day.
+    Not Eastern time: a run late in a Pacific evening would land on tomorrow's
+    date there, and the next morning's job would overwrite it.
+    """
+    season = season_in_progress()
+    if season is None or season_filter not in (None, season):
+        return
+    as_of = date.today()
+    cur.execute(
+        "DELETE FROM net_value_rank_history WHERE season = %s AND as_of = %s",
+        (season, as_of),
+    )
+    cur.execute(
+        """
+        INSERT INTO net_value_rank_history (season, as_of, player_id, season_rank)
+        SELECT season, %s, player_id, season_rank FROM net_values
+        WHERE season = %s AND season_rank IS NOT NULL
+        """,
+        (as_of, season),
+    )
+    print(f"snapshotted {cur.rowcount} ranks for {season} as of {as_of}")
 
 
 if __name__ == "__main__":

@@ -32,6 +32,7 @@ import {
   teamPayrolls,
   teamSeasons,
   netValues,
+  netValueRankHistory,
   netValueShares,
   teamIdentities,
   teamAliases,
@@ -2839,6 +2840,27 @@ export const getSeasonNetValueLeaders = cached("getSeasonNetValueLeaders", async
 
 export interface HomeNetValueRow extends SeasonNetValueRow {
   nbaPersonId: number | null;
+  /**
+   * Spots moved within this list since the previous day's ranks: positive is
+   * up the list as shown, so on the worst-values list it means sliding
+   * further toward the bottom of the league. `"new"` when he wasn't ranked
+   * then, and null when there's no earlier day on file to compare against.
+   */
+  moved: number | "new" | null;
+}
+
+export interface HomeMoverRow {
+  playerId: number;
+  name: string;
+  nbaPersonId: number | null;
+  team: string | null;
+  teamLabel: string | null;
+  netValueScore: number | null;
+  seasonRank: number;
+  /** His rank on the day compared against. */
+  wasRank: number;
+  /** Spots climbed: positive is up the league, negative is down. */
+  moved: number;
 }
 
 export interface HomeNetValueSeason {
@@ -2847,6 +2869,12 @@ export interface HomeNetValueSeason {
   inProgress: boolean;
   top: HomeNetValueRow[];
   bottom: HomeNetValueRow[];
+  /**
+   * The five biggest rank changes in either direction, since the previous day
+   * on file and over the last week. Empty until there's a day that far back
+   * to compare against, and always empty for a season no longer in progress.
+   */
+  movers: { day: HomeMoverRow[]; week: HomeMoverRow[] };
 }
 
 /**
@@ -2883,10 +2911,119 @@ export const getHomeNetValueLeaders = cached("getHomeNetValueLeaders", async fun
           .orderBy(desc(netValues.seasonRank))
           .limit(5),
       ]);
-      return { season, inProgress: inRegularSeason(season), top, bottom };
+      const inProgress = inRegularSeason(season);
+      // Only a season in progress moves. A finished one keeps its last
+      // snapshots, which would otherwise show its final day's moves all summer.
+      const dates = inProgress ? await historyDates(season) : null;
+      const [prior, day, week] = await Promise.all([
+        dates?.previous
+          ? priorRanks(season, dates.previous, [...top, ...bottom].map((r) => r.playerId))
+          : null,
+        dates?.previous ? biggestMovers(season, dates.previous) : [],
+        dates?.weekAgo ? biggestMovers(season, dates.weekAgo) : [],
+      ]);
+      // The bottom list starts at the last rank, which is how many are ranked.
+      const total = bottom[0]?.seasonRank ?? 0;
+      // Counted from the bottom on the worst list, so a day that adds newly
+      // ranked players doesn't read as everyone near the bottom dropping.
+      const moved = (r: SeasonNetValueRow, fromBottom: boolean) => {
+        if (!prior || r.seasonRank == null) return null;
+        const was = prior.ranks.get(r.playerId);
+        if (was == null) return "new" as const;
+        return fromBottom
+          ? (prior.total - was + 1) - (total - r.seasonRank + 1)
+          : was - r.seasonRank;
+      };
+      return {
+        season,
+        inProgress,
+        top: top.map((r) => ({ ...r, moved: moved(r, false) })),
+        bottom: bottom.map((r) => ({ ...r, moved: moved(r, true) })),
+        movers: { day, week },
+      };
     }),
   );
 });
+
+/**
+ * The days a season's movement is measured from, out of
+ * `net_value_rank_history`. The latest snapshot is the ranks now on the site,
+ * so `previous` is the day before it (yesterday, even on a morning the job
+ * didn't run) and `weekAgo` the latest day at least seven days before it.
+ * Either is null until the history reaches back that far.
+ */
+async function historyDates(season: string) {
+  const { rows } = await db.execute<{ previous: string | null; week_ago: string | null }>(sql`
+    WITH latest AS (
+      SELECT max(as_of) AS d FROM ${netValueRankHistory} WHERE season = ${season}
+    )
+    SELECT
+      (SELECT max(as_of) FROM ${netValueRankHistory}, latest
+        WHERE season = ${season} AND as_of < latest.d)::text AS previous,
+      (SELECT max(as_of) FROM ${netValueRankHistory}, latest
+        WHERE season = ${season} AND as_of <= latest.d - 7)::text AS week_ago
+  `);
+  return { previous: rows[0]?.previous ?? null, weekAgo: rows[0]?.week_ago ?? null };
+}
+
+/**
+ * The given players' ranks on one snapshot day, plus how many were ranked
+ * that day.
+ */
+async function priorRanks(season: string, asOf: string, playerIds: number[]) {
+  const h = netValueRankHistory;
+  if (playerIds.length === 0) return null;
+  const day = and(eq(h.season, season), eq(h.asOf, asOf));
+  const [rows, [{ total }]] = await Promise.all([
+    db
+      .select({ playerId: h.playerId, seasonRank: h.seasonRank })
+      .from(h)
+      .where(and(day, inArray(h.playerId, playerIds))),
+    db.select({ total: sql<number>`count(*)::int` }).from(h).where(day),
+  ]);
+  return {
+    ranks: new Map(rows.map((r) => [r.playerId, r.seasonRank])),
+    total,
+  };
+}
+
+/**
+ * The five players whose rank changed most since a snapshot day, risers and
+ * fallers together, biggest move first. Only players ranked on both days: a
+ * debut isn't a move. Ties go to the better current rank.
+ */
+async function biggestMovers(season: string, asOf: string): Promise<HomeMoverRow[]> {
+  const h = netValueRankHistory;
+  const moved = sql<number>`(${h.seasonRank} - ${netValues.seasonRank})::int`;
+  const rows = await db
+    .select({
+      playerId: netValues.playerId,
+      name: players.name,
+      nbaPersonId: players.nbaPersonId,
+      team: netValues.team,
+      teamLabel: eraAbbrSql(netValues.team, netValues.season),
+      netValueScore: sql<number | null>`${netValues.netValueScore}::float8`,
+      seasonRank: sql<number>`${netValues.seasonRank}`,
+      wasRank: h.seasonRank,
+      moved,
+    })
+    .from(netValues)
+    .innerJoin(players, eq(players.id, netValues.playerId))
+    .innerJoin(
+      h,
+      and(eq(h.playerId, netValues.playerId), eq(h.season, netValues.season), eq(h.asOf, asOf)),
+    )
+    .where(
+      and(
+        eq(netValues.season, season),
+        isNotNull(netValues.seasonRank),
+        sql`${h.seasonRank} <> ${netValues.seasonRank}`,
+      ),
+    )
+    .orderBy(sql`abs(${moved}) DESC`, asc(netValues.seasonRank))
+    .limit(5);
+  return rows;
+}
 
 /**
  * Every player and team page worth listing in the sitemap. Only players with a

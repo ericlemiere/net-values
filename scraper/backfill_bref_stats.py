@@ -55,7 +55,10 @@ Usage:
 """
 import csv
 import sys
+import time
 from pathlib import Path
+
+import psycopg2
 
 import bref
 from db import connect
@@ -203,116 +206,145 @@ def main():
         (years[0], years[0]) if len(years) == 1 else (years[0], years[1])
     )
 
-    conn = connect()
-    cur = conn.cursor()
-    resolve_team = load_team_resolver(cur)
-    index = PlayerIndex(cur)
+    for attempt in range(3):
+        conn = None
+        cur = None
+        try:
+            conn = connect()
+            cur = conn.cursor()
+            resolve_team = load_team_resolver(cur)
+            index = PlayerIndex(cur)
 
-    unmatched, collisions, methods = [], [], {}
-    placeholders = ", ".join(["%s"] * (len(COLUMNS) + 2))
-    updates = ", ".join(f"{c} = EXCLUDED.{c}" for c in COLUMNS)
-    inserted = patched = missing_row = 0
+            unmatched, collisions, methods = [], [], {}
+            placeholders = ", ".join(["%s"] * (len(COLUMNS) + 2))
+            updates = ", ".join(f"{c} = EXCLUDED.{c}" for c in COLUMNS)
+            inserted = patched = missing_row = 0
 
-    for end_year in range(start, end + 1):
-        season = bref.season_label(end_year)
-        mode = "totals" if end_year < NBA_API_FIRST_END_YEAR else "pos/gs"
-        url = f"https://www.basketball-reference.com/leagues/NBA_{end_year}_totals.html"
-        chosen = pick_rows(bref.parse_table(bref.fetch(url), "totals_stats"))
-        print(f"=== {season} [{mode}] ({len(chosen)} players) ===")
+            for end_year in range(start, end + 1):
+                season = bref.season_label(end_year)
+                mode = "totals" if end_year < NBA_API_FIRST_END_YEAR else "pos/gs"
+                url = f"https://www.basketball-reference.com/leagues/NBA_{end_year}_totals.html"
 
-        # Resolve every bref row first, so a player claimed twice can be settled
-        # before anything is written.
-        claimed = {}
-        for slug, r in chosen.items():
-            name = r.get("name_display", "").strip()
-            team = resolve_team(r.get("team_name_abbr"))
-            pid, method, score = match_row(
-                {"name": name, "season": season, "team": team, "slug": slug}, index
-            )
-            methods[method] = methods.get(method, 0) + 1
-            if pid is None:
-                unmatched.append([season, team or "", name, slug, round(score or 0, 1)])
-                continue
-            claimed.setdefault(pid, []).append((slug, r, team))
+                while True:
+                    try:
+                        chosen = pick_rows(bref.parse_table(bref.fetch(url), "totals_stats"))
+                        print(f"=== {season} [{mode}] ({len(chosen)} players) ===")
 
-        winners, dropped = resolve_collisions(claimed, load_existing(cur, season))
-        for (slug, r, team), why in dropped:
-            collisions.append(
-                [season, team or "", r.get("name_display", "").strip(), slug,
-                 r.get("games", ""), why]
-            )
+                        # Resolve every bref row first, so a player claimed twice can be settled
+                        # before anything is written.
+                        claimed = {}
+                        for slug, r in chosen.items():
+                            name = r.get("name_display", "").strip()
+                            team = resolve_team(r.get("team_name_abbr"))
+                            pid, method, score = match_row(
+                                {"name": name, "season": season, "team": team, "slug": slug}, index
+                            )
+                            methods[method] = methods.get(method, 0) + 1
+                            if pid is None:
+                                unmatched.append([season, team or "", name, slug, round(score or 0, 1)])
+                                continue
+                            claimed.setdefault(pid, []).append((slug, r, team))
 
-        n_ins = n_pat = n_miss = 0
-        for pid, (slug, r, team) in winners.items():
-            if dry_run:
-                n_ins += 1
-                continue
+                        winners, dropped = resolve_collisions(claimed, load_existing(cur, season))
+                        for (slug, r, team), why in dropped:
+                            collisions.append(
+                                [season, team or "", r.get("name_display", "").strip(), slug,
+                                 r.get("games", ""), why]
+                            )
 
-            index.record_slug(cur, pid, slug)
+                        n_ins = n_pat = n_miss = 0
+                        for pid, (slug, r, team) in winners.items():
+                            if dry_run:
+                                n_ins += 1
+                                continue
 
-            if end_year < NBA_API_FIRST_END_YEAR:
-                values = build_totals(r, team)
-                cur.execute(
-                    f"""
-                    INSERT INTO player_stats_totals (player_id, season, {", ".join(COLUMNS)})
-                    VALUES ({placeholders})
-                    ON CONFLICT (player_id, season) DO UPDATE SET {updates}
-                    """,
-                    [pid, season] + [values[c] for c in COLUMNS],
-                )
-                n_ins += 1
-            else:
-                pos = r.get("pos") or None
-                gs = intnum(r.get("games_started"))
-                touched = 0
-                for table in ("player_stats_totals", "player_stats_per_game"):
-                    # Age only where there is none: BALLDONTLIE rows arrive
-                    # without one, and nba.com's, where present, stay.
-                    cur.execute(
-                        f"UPDATE {table} SET pos = %s, gs = %s, age = COALESCE(age, %s) "
-                        "WHERE player_id = %s AND season = %s",
-                        (pos, gs, intnum(r.get("age")), pid, season),
-                    )
-                    touched += cur.rowcount
-                if touched:
-                    n_pat += 1
-                else:
-                    # bref has this player-season but nba_api didn't write a row
-                    # for it (or the match landed on the wrong player).
-                    n_miss += 1
+                            index.record_slug(cur, pid, slug)
 
-        if not dry_run:
-            conn.commit()
-        inserted += n_ins
-        patched += n_pat
-        missing_row += n_miss
-        detail = f"inserted {n_ins}" if end_year < NBA_API_FIRST_END_YEAR else f"patched {n_pat}"
-        if n_miss:
-            detail += f", {n_miss} with no matching stat row"
-        n_drop = sum(1 for c in collisions if c[0] == season)
-        if n_drop:
-            detail += f", {n_drop} dropped to collisions"
-        print(f"  {detail}{'  (dry run, nothing written)' if dry_run else ''}")
+                            if end_year < NBA_API_FIRST_END_YEAR:
+                                values = build_totals(r, team)
+                                cur.execute(
+                                    f"""
+                                    INSERT INTO player_stats_totals (player_id, season, {", ".join(COLUMNS)})
+                                    VALUES ({placeholders})
+                                    ON CONFLICT (player_id, season) DO UPDATE SET {updates}
+                                    """,
+                                    [pid, season] + [values[c] for c in COLUMNS],
+                                )
+                                n_ins += 1
+                            else:
+                                pos = r.get("pos") or None
+                                gs = intnum(r.get("games_started"))
+                                touched = 0
+                                for table in ("player_stats_totals", "player_stats_per_game"):
+                                    # Age only where there is none: BALLDONTLIE rows arrive
+                                    # without one, and nba.com's, where present, stay.
+                                    cur.execute(
+                                        f"UPDATE {table} SET pos = %s, gs = %s, age = COALESCE(age, %s) "
+                                        "WHERE player_id = %s AND season = %s",
+                                        (pos, gs, intnum(r.get("age")), pid, season),
+                                    )
+                                    touched += cur.rowcount
+                                if touched:
+                                    n_pat += 1
+                                else:
+                                    # bref has this player-season but nba_api didn't write a row
+                                    # for it (or the match landed on the wrong player).
+                                    n_miss += 1
 
-    if collisions:
-        with open(COLLISION_CSV, "w", newline="") as f:
-            w = csv.writer(f)
-            w.writerow(["season", "team", "name", "slug", "games", "reason"])
-            w.writerows(collisions)
-        print(f"\n{len(collisions)} bref rows lost or dropped to a collision -> {COLLISION_CSV.name}")
+                        if not dry_run:
+                            conn.commit()
+                        inserted += n_ins
+                        patched += n_pat
+                        missing_row += n_miss
+                        detail = f"inserted {n_ins}" if end_year < NBA_API_FIRST_END_YEAR else f"patched {n_pat}"
+                        if n_miss:
+                            detail += f", {n_miss} with no matching stat row"
+                        n_drop = sum(1 for c in collisions if c[0] == season)
+                        if n_drop:
+                            detail += f", {n_drop} dropped to collisions"
+                        print(f"  {detail}{'  (dry run, nothing written)' if dry_run else ''}")
+                        break
+                    except psycopg2.OperationalError:
+                        if cur is not None:
+                            cur.close()
+                        if conn is not None:
+                            conn.close()
+                        conn = connect()
+                        cur = conn.cursor()
+                        resolve_team = load_team_resolver(cur)
+                        index = PlayerIndex(cur)
+                        print(f"database connection reset while refreshing {season}; retrying this season")
+                        time.sleep(5)
 
-    if unmatched:
-        with open(UNMATCHED_CSV, "w", newline="") as f:
-            w = csv.writer(f)
-            w.writerow(["season", "team", "name", "slug", "best_score"])
-            w.writerows(unmatched)
-        print(f"\nwrote {len(unmatched)} unmatched -> {UNMATCHED_CSV.name}")
+            if collisions:
+                with open(COLLISION_CSV, "w", newline="") as f:
+                    w = csv.writer(f)
+                    w.writerow(["season", "team", "name", "slug", "games", "reason"])
+                    w.writerows(collisions)
+                print(f"\n{len(collisions)} bref rows lost or dropped to a collision -> {COLLISION_CSV.name}")
 
-    cur.close()
-    conn.close()
-    print(f"\ntotals rows inserted: {inserted}   pos/gs rows patched: {patched}", end="")
-    print(f"   bref-only player-seasons: {missing_row}" if missing_row else "")
-    print("by match method:", dict(sorted(methods.items(), key=lambda x: -x[1])))
+            if unmatched:
+                with open(UNMATCHED_CSV, "w", newline="") as f:
+                    w = csv.writer(f)
+                    w.writerow(["season", "team", "name", "slug", "best_score"])
+                    w.writerows(unmatched)
+                print(f"\nwrote {len(unmatched)} unmatched -> {UNMATCHED_CSV.name}")
+
+            cur.close()
+            conn.close()
+            print(f"\ntotals rows inserted: {inserted}   pos/gs rows patched: {patched}", end="")
+            print(f"   bref-only player-seasons: {missing_row}" if missing_row else "")
+            print("by match method:", dict(sorted(methods.items(), key=lambda x: -x[1])))
+            return
+        except psycopg2.OperationalError:
+            if cur is not None:
+                cur.close()
+            if conn is not None:
+                conn.close()
+            if attempt == 2:
+                raise
+            print(f"database connection reset while refreshing bref stats; retrying ({attempt + 1}/3)")
+            time.sleep(5 * (attempt + 1))
 
 
 if __name__ == "__main__":

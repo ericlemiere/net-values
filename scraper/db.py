@@ -1,7 +1,8 @@
 """Shared Postgres connection helper for the scraper scripts."""
 import os
-from typing import Optional
 import re
+import time
+from typing import Optional
 
 
 def load_env(name: str) -> Optional[str]:
@@ -33,13 +34,23 @@ def connect():
     # Keepalives make a connection that dropped silently (common while a
     # script sits on it during minutes of scraping) fail within about a
     # minute with an OperationalError, instead of hanging forever.
-    return psycopg2.connect(
-        load_database_url(),
-        keepalives=1,
-        keepalives_idle=30,
-        keepalives_interval=10,
-        keepalives_count=5,
-    )
+    last_error = None
+    for attempt in range(3):
+        try:
+            return psycopg2.connect(
+                load_database_url(),
+                keepalives=1,
+                keepalives_idle=30,
+                keepalives_interval=10,
+                keepalives_count=5,
+                connect_timeout=20,
+            )
+        except psycopg2.OperationalError as exc:
+            last_error = exc
+            if attempt < 2:
+                time.sleep(2 * (attempt + 1))
+                continue
+    raise last_error
 
 
 # 1996-97 through 2025-26

@@ -22,7 +22,10 @@ Usage:
 import csv
 import re
 import sys
+import time
 from pathlib import Path
+
+import psycopg2
 
 import bref
 from db import connect
@@ -99,92 +102,106 @@ def main():
         (args[0], args[0]) if len(args) == 1 else (args[0], args[1])
     )
 
-    conn = connect()
-    cur = conn.cursor()
-    resolve_team = load_team_resolver(cur)
-    index = PlayerIndex(cur)
+    for attempt in range(3):
+        conn = None
+        cur = None
+        try:
+            conn = connect()
+            cur = conn.cursor()
+            resolve_team = load_team_resolver(cur)
+            index = PlayerIndex(cur)
 
-    stats = {"matched": 0, "unmatched": 0, "slugs_pinned": 0, "overridden": 0}
-    methods = {}
-    unmatched = []
+            stats = {"matched": 0, "unmatched": 0, "slugs_pinned": 0, "overridden": 0}
+            methods = {}
+            unmatched = []
 
-    for end_year in range(start, end + 1):
-        season = bref.season_label(end_year)
-        abbrs = season_teams(end_year)
-        print(f"=== {season} ({len(abbrs)} teams) ===")
-        season_rows = 0
+            for end_year in range(start, end + 1):
+                season = bref.season_label(end_year)
+                abbrs = season_teams(end_year)
+                print(f"=== {season} ({len(abbrs)} teams) ===")
+                season_rows = 0
 
-        for abbr in abbrs:
-            canon_abbr, team_id = resolve_team(abbr)
-            entries = team_salaries(abbr, end_year)
-            payroll = 0
+                for abbr in abbrs:
+                    canon_abbr, team_id = resolve_team(abbr)
+                    entries = team_salaries(abbr, end_year)
+                    payroll = 0
 
-            for name, slug, salary in entries:
-                pid, method, score = match_row(
-                    {"name": name, "season": season, "team": canon_abbr, "slug": slug}, index
-                )
-                methods[method] = methods.get(method, 0) + 1
+                    for name, slug, salary in entries:
+                        pid, method, score = match_row(
+                            {"name": name, "season": season, "team": canon_abbr, "slug": slug}, index
+                        )
+                        methods[method] = methods.get(method, 0) + 1
 
-                if pid is None:
-                    stats["unmatched"] += 1
-                    unmatched.append([season, canon_abbr, name, slug or "", salary or "", round(score or 0, 1)])
-                    continue
+                        if pid is None:
+                            stats["unmatched"] += 1
+                            unmatched.append([season, canon_abbr, name, slug or "", salary or "", round(score or 0, 1)])
+                            continue
 
-                if slug and index.record_slug(cur, pid, slug):
-                    stats["slugs_pinned"] += 1
+                        if slug and index.record_slug(cur, pid, slug):
+                            stats["slugs_pinned"] += 1
 
-                # Applied here rather than in a pass afterwards so the payroll
-                # summed below counts the real figure, not bref's blank cell.
-                override = override_for(slug, season, canon_abbr)
-                if override is not None:
-                    salary = override
-                    stats["overridden"] += 1
+                        # Applied here rather than in a pass afterwards so the payroll
+                        # summed below counts the real figure, not bref's blank cell.
+                        override = override_for(slug, season, canon_abbr)
+                        if override is not None:
+                            salary = override
+                            stats["overridden"] += 1
 
-                cur.execute(
-                    """
-                    INSERT INTO salaries (player_id, season, team, salary, source)
-                    VALUES (%s, %s, %s, %s, 'bref')
-                    ON CONFLICT (player_id, season, team) DO UPDATE
-                      -- A blank cell is "bref doesn't publish this one", not
-                      -- "this player earned nothing", so it must never clear a
-                      -- figure already on file — including one the legacy
-                      -- migration supplied for a season bref has no number for.
-                      SET salary = COALESCE(EXCLUDED.salary, salaries.salary),
-                          source = CASE WHEN EXCLUDED.salary IS NULL
-                                        THEN salaries.source ELSE EXCLUDED.source END
-                    """,
-                    (pid, season, canon_abbr, salary),
-                )
-                stats["matched"] += 1
-                season_rows += 1
-                payroll += salary or 0
+                        cur.execute(
+                            """
+                            INSERT INTO salaries (player_id, season, team, salary, source)
+                            VALUES (%s, %s, %s, %s, 'bref')
+                            ON CONFLICT (player_id, season, team) DO UPDATE
+                              -- A blank cell is "bref doesn't publish this one", not
+                              -- "this player earned nothing", so it must never clear a
+                              -- figure already on file — including one the legacy
+                              -- migration supplied for a season bref has no number for.
+                              SET salary = COALESCE(EXCLUDED.salary, salaries.salary),
+                                  source = CASE WHEN EXCLUDED.salary IS NULL
+                                                THEN salaries.source ELSE EXCLUDED.source END
+                            """,
+                            (pid, season, canon_abbr, salary),
+                        )
+                        stats["matched"] += 1
+                        season_rows += 1
+                        payroll += salary or 0
 
-            cur.execute(
-                """
-                INSERT INTO team_payrolls (team_id, season, payroll, source)
-                VALUES (%s, %s, %s, 'bref')
-                ON CONFLICT (team_id, season) DO UPDATE
-                  SET payroll = EXCLUDED.payroll, source = EXCLUDED.source
-                """,
-                (team_id, season, payroll),
-            )
+                    cur.execute(
+                        """
+                        INSERT INTO team_payrolls (team_id, season, payroll, source)
+                        VALUES (%s, %s, %s, 'bref')
+                        ON CONFLICT (team_id, season) DO UPDATE
+                          SET payroll = EXCLUDED.payroll, source = EXCLUDED.source
+                        """,
+                        (team_id, season, payroll),
+                    )
 
-        conn.commit()
-        print(f"  {season_rows} salary rows")
+                conn.commit()
+                print(f"  {season_rows} salary rows")
 
-    if unmatched:
-        with open(UNMATCHED_CSV, "w", newline="") as f:
-            w = csv.writer(f)
-            w.writerow(["season", "team", "name", "slug", "salary", "best_score"])
-            w.writerows(unmatched)
-        print(f"\nwrote {len(unmatched)} unmatched rows -> {UNMATCHED_CSV.name}")
+            if unmatched:
+                with open(UNMATCHED_CSV, "w", newline="") as f:
+                    w = csv.writer(f)
+                    w.writerow(["season", "team", "name", "slug", "salary", "best_score"])
+                    w.writerows(unmatched)
+                print(f"\nwrote {len(unmatched)} unmatched rows -> {UNMATCHED_CSV.name}")
 
-    cur.close()
-    conn.close()
+            cur.close()
+            conn.close()
 
-    print(f"\nmatched {stats['matched']}, unmatched {stats['unmatched']}, "
-          f"slugs pinned {stats['slugs_pinned']}")
-    print("by method:", dict(sorted(methods.items(), key=lambda x: -x[1])))
+            print(f"\nmatched {stats['matched']}, unmatched {stats['unmatched']}, "
+                  f"slugs pinned {stats['slugs_pinned']}")
+            print("by method:", dict(sorted(methods.items(), key=lambda x: -x[1])))
+            return
+        except psycopg2.OperationalError:
+            if cur is not None:
+                cur.close()
+            if conn is not None:
+                conn.close()
+            if attempt == 2:
+                raise
+            print(f"database connection reset while refreshing salaries; retrying ({attempt + 1}/3)")
+            time.sleep(5 * (attempt + 1))
 
 
 if __name__ == "__main__":

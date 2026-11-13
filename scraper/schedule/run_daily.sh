@@ -1,7 +1,9 @@
 #!/bin/bash
-# The morning job as launchd runs it: wait for the network, pull whatever was
-# last pushed to main, sync the venv with requirements.txt, then run
-# update_season.py. Everything it prints goes to scraper/logs/YYYY-MM-DD.log.
+# The bref half of the morning job, as launchd runs it: wait for the network,
+# pull whatever was last pushed to main, sync the venv with requirements.txt,
+# then run update_season.py --bref. The BALLDONTLIE half runs on GitHub
+# (.github/workflows/daily.yml), so a failure here never holds up the day's
+# stats. Everything it prints goes to scraper/logs/YYYY-MM-DD.log.
 #
 # With HEALTHCHECK_URL set (in .env.local, or the environment), each run
 # reports to that healthchecks.io check: started, then succeeded or failed with
@@ -43,9 +45,8 @@ main() {
 
     echo "=== $(date) ==="
 
-    # Up to twenty minutes' random delay, so nba.com doesn't see the same
-    # address at the same minute every day, which is what its bot protection
-    # looks for. Skipped when run by hand from a terminal; launchd gives the
+    # Up to twenty minutes' random delay, so bref doesn't see the same address
+    # at the same minute every day, which is what bot protection looks for. Skipped when run by hand from a terminal; launchd gives the
     # job no terminal.
     if [[ ! -t 0 ]]; then
         local delay=$((RANDOM % 1200))
@@ -88,7 +89,7 @@ main() {
     # Unbuffered (-u): Python otherwise holds file output back in blocks, so a
     # run that's killed loses its last few steps from the log, and the log
     # stops short of where the run actually got to.
-    cd "$scraper_dir" && "$scraper_dir/.venv/bin/python" -u update_season.py
+    cd "$scraper_dir" && "$scraper_dir/.venv/bin/python" -u update_season.py --bref
     local status=$?
     echo "=== finished $(date), exit $status ==="
 

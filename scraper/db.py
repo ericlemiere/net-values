@@ -57,6 +57,20 @@ def connect():
 NBA_API_SEASONS = [f"{y}-{str(y + 1)[2:]}" for y in range(1996, 2026)]
 
 # "1996-97" -> "1996-1997" (schema's season label format)
+# Taken by compute_production and compute_net_values for the length of their
+# write. The daily job runs in two places (GitHub for BALLDONTLIE, launchd for
+# bref) and both recompute; two delete-then-insert transactions overlapping can
+# each miss the other's new rows and leave duplicates. Transaction-scoped, so it
+# works through Neon's pooler and frees itself on commit or rollback.
+WRITE_LOCK = 7_311_004
+
+
+def lock_writes(cur):
+    """Waits for any other run's model write to finish, then holds the lock
+    until this transaction ends."""
+    cur.execute("SELECT pg_advisory_xact_lock(%s)", (WRITE_LOCK,))
+
+
 def to_season_label(nba_api_season: str) -> str:
     start = int(nba_api_season[:4])
     return f"{start}-{start + 1}"

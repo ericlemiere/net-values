@@ -75,7 +75,7 @@ from datetime import date
 
 from psycopg2.extras import execute_values
 
-from db import connect
+from db import connect, lock_writes
 
 # Below-replacement production counts as zero, not as a negative: a team gets
 # nothing back from those minutes, but it doesn't get paid either. Flooring
@@ -877,6 +877,7 @@ def main():
             f"row has {len(bad)} values, expected {expected_width}: {bad[:4]}"
         )
 
+    lock_writes(cur)
     if season_filter:
         cur.execute("DELETE FROM net_values WHERE season = %s", (season_filter,))
         cur.execute("DELETE FROM net_value_shares WHERE season = %s", (season_filter,))

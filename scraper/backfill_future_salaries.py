@@ -1,44 +1,60 @@
 """Refreshes `future_salaries` and `cap_projections`.
 
-Every season a player is signed through, read off basketball-reference's team
-contracts pages (/contracts/BOS.html): one request per team, rather than one
-per player. Those pages list the current season and up to five more.
+Every season a player is signed through, from BALLDONTLIE's team contracts
+(/nba/v1/contracts/teams), one request per team per season, this season and
+the YEARS_AHEAD after it. Replaced bref's team contracts pages on 2026-11-13.
 
-The current season is kept too, even though `salaries` usually has it. When a
-new season starts, bref moves it into the first column, and until
-backfill_salaries.py is run for it, this is the only place it is on file. The
-player page shows a contract year from here only for seasons `salaries` has
-nothing for, so the two never double up.
+The current season is kept too, even though `salaries` has it: the player page
+shows a contract year from here only for seasons `salaries` has nothing for,
+so the two never double up, and backfill_rosters falls back on it.
 
-Options come from the cell's class, which is what bref colors by: `salary-pl`
-is a player option, `salary-tm` a team option. Nothing else is marked there.
+THE FIGURE is the cap hit, or for a two-way deal (no cap hit) the cash paid,
+the same as backfill_bdl_salaries.
 
-Each run makes the table match bref exactly: contract years still listed are
-upserted, and any that are gone (a player waived, a team option declined, a
-trade moving the year to another team) are deleted. Upserting rather than
-replacing keeps each row's id, which the player page puts in ?salary= links,
-so a shared link still points at the same season tomorrow. It all happens in
-one transaction, and only when every team's page parsed, so a bad fetch leaves
-yesterday's data in place instead of an empty table.
+ONLY YEARS A LIVE CONTRACT COVERS. BALLDONTLIE's season lists run past a
+player's contracts (see backfill_bdl_salaries.signed_through), so each future
+year is checked against his contracts before it's kept.
+
+OPTIONS aren't a field. They are written into the contract's notes
+("2027-28: Player Option (deadline 6/29/27)", "Club Option/non-guaranteed",
+"Team Option"), one /contracts/players/aggregate request per player with a
+year after this one. An option already exercised is no longer an option, and
+the current season never carries one: a player under contract now is past
+that decision. A rookie-scale deal has no notes, so its third- and fourth-year
+team options go unlabeled, deliberately.
+
+DEAD MONEY isn't on BALLDONTLIE, which lists only the players a team has.
+backfill_dead_money.py adds it weekly from bref, as source 'bref_dead' rows,
+which this script never touches.
+
+ROW IDENTITY stays (bref_slug, season, team), because the player page puts the
+row's id in ?salary= links and an upsert on that key keeps it. bref_slug is the
+player's bref id where we have one, else "bdl:<BALLDONTLIE id>" for a player
+bref has never matched (mostly rookies before their debut).
+
+Each run makes the table match BALLDONTLIE exactly, in one transaction and only
+when the current season came back for all 30 teams, so a bad fetch leaves
+yesterday's data in place. Dry run by default.
 
 Projected caps are entered by hand below. Update them when the league
 publishes new projections; a season that becomes official is read from bref
 into `seasons` by seed_seasons.py and can be dropped from here.
 
 Usage:
-  python backfill_future_salaries.py
+  python backfill_future_salaries.py           # dry run: what would change
+  python backfill_future_salaries.py --write
 """
-import re
+import sys
 import time
+from collections import Counter
 
 import psycopg2
-from bs4 import BeautifulSoup
 
-import bref
-from backfill_salaries import load_team_resolver, season_teams
+import bdl
+from backfill_bdl_salaries import label, open_options, salary_of, signed_through
+from backfill_rosters import team_contracts
 from backfill_stats import current_season
 from db import connect
-from player_index import PlayerIndex, match_row
 
 # Season -> projected cap. 2026-27 is official and lives in `seasons`.
 CAP_PROJECTIONS = {
@@ -48,55 +64,41 @@ CAP_PROJECTIONS = {
     "2030-2031": 201_000_000,
 }
 
-OPTION_CLASSES = {"salary-pl": "player", "salary-tm": "team"}
+# Seasons after this one to fetch. Five, as bref's pages had; a sixth season out
+# is checked too, and fetched if anyone is signed that far.
+YEARS_AHEAD = 5
 
-FUZZY_METHODS = {"fuzzy", "fuzzy_team"}
+def fetch(cur, start_year):
+    """{(slug, season, team): (player_id, name, salary, option)}."""
+    cur.execute("SELECT balldontlie_id, id, bbref_slug FROM players WHERE balldontlie_id IS NOT NULL")
+    player = {bid: (pid, slug) for bid, pid, slug in cur.fetchall()}
 
+    years = {}
+    for year in range(start_year, start_year + YEARS_AHEAD + 2):
+        rows = team_contracts(cur, year, require_all=(year == start_year))
+        if year > start_year + YEARS_AHEAD and not rows:
+            break
+        years[year] = rows
 
-def to_label(short):
-    """'2027-28' -> '2027-2028'."""
-    start = int(short[:4])
-    return f"{start}-{start + 1}"
+    future = {c["player_id"] for y, rows in years.items() if y > start_year for _, c in rows}
+    covered = {bid: signed_through(bid) for bid in sorted(future)}
+    options = {bid: open_options(bid, start_year) for bid in sorted(future)}
 
-
-def team_contracts(abbr):
-    """[(name, slug, [(season, salary, option)])] from a team's contracts page."""
-    html = bref.fetch(f"https://www.basketball-reference.com/contracts/{abbr}.html")
-    soup = BeautifulSoup(html.replace("<!--", "").replace("-->", ""), "lxml")
-    table = soup.find("table", id="contracts")
-    if table is None:
-        raise ValueError(f"no contracts table for {abbr}")
-
-    seasons = {}
-    for th in table.find("thead").find_all("th"):
-        stat = th.get("data-stat") or ""
-        if re.fullmatch(r"y\d", stat):
-            seasons[stat] = to_label(th.get_text(strip=True))
-
-    out = []
-    for tr in table.find("tbody").find_all("tr"):
-        head = tr.find("th", attrs={"data-stat": "player"})
-        if head is None or not head.get_text(strip=True):
-            continue
-        link = head.find("a")
-        slug = head.get("csk") or (
-            re.search(r"/players/./([a-z0-9]+)\.html", link["href"]).group(1) if link else None
-        )
-        years = []
-        for stat, season in seasons.items():
-            td = tr.find("td", attrs={"data-stat": stat})
-            salary = bref.parse_money(td.get_text(strip=True)) if td else None
+    out, skipped = {}, 0
+    for year, rows in years.items():
+        for team, c in rows:
+            salary = salary_of(c)
             if not salary:
                 continue
-            # bref keeps coloring the current season's option after it has
-            # been picked up, but a player under contract this season is past
-            # that decision, so only later seasons carry one.
-            option = None if stat == "y1" else next(
-                (OPTION_CLASSES[c] for c in td.get("class", []) if c in OPTION_CLASSES), None
-            )
-            years.append((season, salary, option))
-        if years:
-            out.append((head.get_text(strip=True), slug, years))
+            bid = c["player_id"]
+            if year > start_year and year not in covered[bid]:
+                skipped += 1
+                continue
+            pid, slug = player.get(bid, (None, None))
+            name = f"{c['player']['first_name']} {c['player']['last_name']}".strip()
+            option = options.get(bid, {}).get(year)
+            out[(slug or f"bdl:{bid}", label(year), team)] = (pid, name, salary, option)
+    print(f"  {skipped} future years no live contract covers, skipped")
     return out
 
 
@@ -113,95 +115,109 @@ def seed_projections(cur):
         )
 
 
-def main():
+def report(cur, rows):
+    cur.execute("SELECT bref_slug, season, team, salary, option, name FROM future_salaries "
+                "WHERE source <> 'bref_dead'")
+    old = {(s, y, t): (sal, o, n) for s, y, t, sal, o, n in cur.fetchall()}
+    kept = [k for k in rows if k in old]
+    changed = [k for k in kept if old[k][0] != rows[k][2]]
+    opt_changed = [k for k in kept if old[k][1] != rows[k][3]]
+    added = [k for k in rows if k not in old]
+    removed = [k for k in old if k not in rows]
+    print(f"{len(rows)} contract years for {len({k[0] for k in rows})} players "
+          f"({sum(1 for v in rows.values() if v[3])} options)")
+    print(f"  {len(kept)} rows keep their id; {len(changed)} with a new figure, "
+          f"{len(opt_changed)} with a different option")
+    print(f"  {len(added)} added, {len(removed)} removed")
+    by_season = Counter(k[1] for k in removed)
+    print(f"  removed by season: {dict(sorted(by_season.items()))}")
+    for k in sorted(removed, key=lambda k: -old[k][0])[:12]:
+        print(f"    - {old[k][2]} {k[1]} {k[2]} ${old[k][0]:,}")
+    for k in sorted(added, key=lambda k: -rows[k][2])[:6]:
+        print(f"    + {rows[k][1]} {k[1]} {k[2]} ${rows[k][2]:,}")
+    for k in opt_changed[:8]:
+        print(f"    option {rows[k][1]} {k[1]}: {old[k][1]} -> {rows[k][3]}")
+
+    def commitments(src, sal):
+        out = Counter()
+        for k, v in src.items():
+            out[(k[1], k[2])] += sal(v)
+        return out
+    before = commitments(old, lambda v: v[0])
+    after = commitments(rows, lambda v: v[2])
+    deltas = sorted(((after[k] - before[k], k) for k in set(before) | set(after)
+                     if k[0] != label(int(current_season()[:4]))), key=lambda d: -abs(d[0]))
+    print("  biggest future team commitment changes:")
+    for d, (season, team) in deltas[:6]:
+        print(f"    {team} {season}: {d:+,}")
+
+
+def run(write):
+    start_year = int(current_season()[:4])
+    # Fetched on a connection of its own and closed before the write: the
+    # fetch is a few hundred requests, and a connection idle that long is the
+    # one Neon drops.
+    conn = connect()
+    with conn, conn.cursor() as cur:
+        rows = fetch(cur, start_year)
+    conn.close()
+    if not rows:
+        raise RuntimeError("no contract years fetched; leaving future_salaries untouched")
+
     for attempt in range(3):
         conn = None
         try:
             conn = connect()
-            cur = conn.cursor()
-            resolve_team = load_team_resolver(cur)
-            index = PlayerIndex(cur)
-
-            seed_projections(cur)
-
-            # bref names league pages by the season's end year.
-            end_year = int(current_season()[:4]) + 1
-            season = bref.season_label(end_year)
-
-            rows = {}
-            unmatched = []
-            for abbr in season_teams(end_year):
-                canon_abbr, _ = resolve_team(abbr)
-                for name, slug, years in team_contracts(abbr):
-                    if not slug:
-                        print(f"  skipped {canon_abbr} {name}: no bref id")
-                        continue
-                    pid, method, _ = match_row(
-                        {"name": name, "season": season, "team": canon_abbr, "slug": slug}, index
-                    )
-                    # Exact matches only. Before opening night the season has no stat
-                    # rows, so the fuzzy fallback pools every player in history, and a
-                    # rookie lands on whoever's name is closest: Mikel Brown Jr. came
-                    # out as the Mike Brown who retired in 2001. An unmatched player is
-                    # still stored, under his bref id and name, so his team's
-                    # commitments are whole; he links up once he has played and the
-                    # name matches exactly.
-                    if method in FUZZY_METHODS:
-                        pid = None
-                    if pid is None:
-                        unmatched.append(f"{canon_abbr} {name} ({slug})")
-                    else:
-                        index.record_slug(cur, pid, slug)
-                    for year, salary, option in years:
-                        # A player listed twice on one page is one contract shown twice.
-                        rows[(slug, year, canon_abbr)] = (pid, name, salary, option)
-
-            if not rows:
-                raise RuntimeError("no contract years parsed; leaving future_salaries untouched")
-
-            cur.executemany(
-                """
-                INSERT INTO future_salaries
-                  (bref_slug, season, team, player_id, name, salary, option, source)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, 'bref')
-                ON CONFLICT (bref_slug, season, team) DO UPDATE
-                  SET player_id = EXCLUDED.player_id, name = EXCLUDED.name,
-                      salary = EXCLUDED.salary, option = EXCLUDED.option,
-                      source = EXCLUDED.source, updated_at = now()
-                """,
-                [(slug, year, team, *vals) for (slug, year, team), vals in rows.items()],
-            )
-            # Whatever this run didn't see is no longer on anyone's books.
-            cur.execute(
-                """
-                DELETE FROM future_salaries f
-                WHERE f.source = 'bref'
-                  AND NOT EXISTS (
-                    SELECT 1 FROM unnest(%s::text[], %s::text[], %s::text[]) AS k(slug, season, team)
-                    WHERE k.slug = f.bref_slug AND k.season = f.season AND k.team = f.team)
-                """,
-                [list(col) for col in zip(*rows.keys())],
-            )
-            removed = cur.rowcount
-            conn.commit()
-
-            players = len({slug for slug, _, _ in rows})
-            options = sum(1 for *_, option in rows.values() if option)
-            print(f"{len(rows)} future contract years for {players} players ({options} options), "
-                  f"{removed} removed")
-            if unmatched:
-                print(f"stored without a player link ({len(unmatched)}): " + ", ".join(unmatched))
-
-            cur.close()
+            with conn, conn.cursor() as cur:
+                report(cur, rows)
+                if write:
+                    write_rows(cur, rows)
             conn.close()
+            if not write:
+                print("dry run: nothing written")
             return
-        except psycopg2.OperationalError as exc:
+        except (psycopg2.OperationalError, psycopg2.InterfaceError):
             if conn is not None:
-                conn.close()
+                try:
+                    conn.close()
+                except Exception:
+                    pass
             if attempt == 2:
                 raise
             print(f"database connection reset during future salaries; retrying ({attempt + 1}/3)")
             time.sleep(5 * (attempt + 1))
+
+
+def write_rows(cur, rows):
+    seed_projections(cur)
+    cur.executemany(
+        """
+        INSERT INTO future_salaries
+          (bref_slug, season, team, player_id, name, salary, option, source)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, 'bdl')
+        ON CONFLICT (bref_slug, season, team) DO UPDATE
+          SET player_id = EXCLUDED.player_id, name = EXCLUDED.name,
+              salary = EXCLUDED.salary, option = EXCLUDED.option,
+              source = EXCLUDED.source, updated_at = now()
+        """,
+        [(slug, year, team, *vals) for (slug, year, team), vals in rows.items()],
+    )
+    # Whatever this run didn't see is no longer on anyone's books.
+    cur.execute(
+        """
+        DELETE FROM future_salaries f
+        WHERE f.source <> 'bref_dead'
+          AND NOT EXISTS (
+            SELECT 1 FROM unnest(%s::text[], %s::text[], %s::text[]) AS k(slug, season, team)
+            WHERE k.slug = f.bref_slug AND k.season = f.season AND k.team = f.team)
+        """,
+        [list(col) for col in zip(*rows.keys())],
+    )
+    print(f"written; {cur.rowcount} removed")
+
+
+def main():
+    run(write="--write" in sys.argv)
 
 
 if __name__ == "__main__":

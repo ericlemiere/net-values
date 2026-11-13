@@ -58,7 +58,7 @@ import sys
 
 from psycopg2.extras import execute_values
 
-from db import connect
+from db import connect, lock_writes
 
 # Replacement level, in points per 100 possessions below league average. -2.0 is
 # the convention BPM and VORP use, kept so the two are readable side by side.
@@ -784,6 +784,7 @@ def main():
     players = [p for p in load_players(cur, season_filter) if p["season"] in league]
     rows = compute(players, league)
 
+    lock_writes(cur)
     if season_filter:
         cur.execute("DELETE FROM player_production WHERE season = %s", (season_filter,))
     else:

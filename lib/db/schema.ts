@@ -346,7 +346,8 @@ export const capProjections = pgTable("cap_projections", {
 });
 
 /**
- * Contract years from basketball-reference's team contracts pages: the current
+ * Contract years from BALLDONTLIE's team contracts (bref's pages until
+ * 2026-11-13; bref_slug holds "bdl:<id>" for a player with no bref id): the current
  * season and every one after it that a player is signed through. The current
  * season normally duplicates `salaries` and is only shown where `salaries` has
  * nothing for it (see backfill_future_salaries.py).

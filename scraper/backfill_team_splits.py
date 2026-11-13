@@ -33,6 +33,8 @@ Usage:
   python backfill_team_splits.py              # every season, 1990 on
   python backfill_team_splits.py 2026         # one bref end-year (2025-26)
   python backfill_team_splits.py 1997 2026    # a range of end-years
+  python backfill_team_splits.py 2027 --box-only   # game logs only, no bref
+                                                   # (the daily job's call)
 """
 import sys
 from collections import defaultdict
@@ -200,14 +202,21 @@ def advanced_values(r):
     return values
 
 
-def build_season(end_year, cur, resolve_team, slug_to_id, lookups):
+def build_season(end_year, cur, resolve_team, slug_to_id, lookups, box_only=False):
+    """One season's splits. `box_only` skips bref's per-team rows: the stints
+    still come whole from the game logs, and gs, age and the advanced columns
+    are left empty, as is pos, which production takes from the season row
+    instead. Nothing else reads them. Only for seasons with game logs.
+    """
     season = bref.season_label(end_year)
     base = "https://www.basketball-reference.com/leagues"
-    totals = bref_splits(
+    if box_only and end_year < FIRST_GAMELOG_END_YEAR:
+        raise ValueError(f"{season} has no game logs; its splits need bref's rows")
+    totals = {} if box_only else bref_splits(
         bref.parse_table(bref.fetch(f"{base}/NBA_{end_year}_totals.html"), "totals_stats"),
         resolve_team,
     )
-    advanced = bref_splits(
+    advanced = {} if box_only else bref_splits(
         bref.parse_table(bref.fetch(f"{base}/NBA_{end_year}_advanced.html"), "advanced"),
         resolve_team,
     )
@@ -294,12 +303,13 @@ def build_season(end_year, cur, resolve_team, slug_to_id, lookups):
     missing_adv = sum(1 for row in rows if row[2 + COLUMNS.index("per")] is None)
     print(
         f"  {len(stints_by_player)} traded players, {len(rows)} stints"
-        + (f", {missing_adv} without bref advanced" if missing_adv else "")
+        + (f", {missing_adv} without bref advanced" if missing_adv and not box_only else "")
     )
 
 
 def main():
-    args = [int(a) for a in sys.argv[1:]]
+    box_only = "--box-only" in sys.argv
+    args = [int(a) for a in sys.argv[1:] if a != "--box-only"]
     last = int(current_season()[:4]) + 1
     start, end = (FIRST_END_YEAR, last) if not args else (
         (args[0], args[0]) if len(args) == 1 else (args[0], args[1])
@@ -317,7 +327,8 @@ def main():
 
     for end_year in range(start, end + 1):
         print(f"=== {bref.season_label(end_year)} ===")
-        build_season(end_year, cur, resolve_team, slug_to_id, (player_by_nba_id, team_by_nba_id))
+        build_season(end_year, cur, resolve_team, slug_to_id, (player_by_nba_id, team_by_nba_id),
+                     box_only=box_only)
         conn.commit()
 
     cur.close()

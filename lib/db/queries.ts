@@ -1953,8 +1953,8 @@ export const getFutureSalaries = cached("getFutureSalaries", async function getF
 });
 
 /**
- * A team's contracts, this season and every one after it, as bref's contracts
- * page has them: one row per player per season, rookies included. The current
+ * A team's contracts, this season and every one after it, from BALLDONTLIE's
+ * team contracts (scraper/backfill_future_salaries.py): one row per player per season, rookies included. The current
  * season comes from the contracts too rather than `salaries`, so the table
  * reads as one consistent set of commitments.
  */

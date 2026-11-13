@@ -1,9 +1,13 @@
 #!/bin/bash
-# Schedules run_daily.sh with launchd, every day at 7:30am local time (by then
-# every West Coast game is final). Safe to re-run: it replaces the old schedule.
+# Schedules run_daily.sh (the bref half of the morning job) with launchd, every
+# day at 2:00am local time, the same time GitHub runs the BALLDONTLIE half. The
+# order doesn't matter: each recomputes from whatever the other has written,
+# and the model's writes take a database lock so they never overlap. A Mac
+# asleep at 2am runs it when it wakes; one that's shut down skips the day.
+# Safe to re-run: it replaces the old schedule.
 #
 # Usage:
-#   scraper/schedule/install.sh            # 7:30am
+#   scraper/schedule/install.sh            # 2:00am
 #   scraper/schedule/install.sh 8 15       # 8:15am
 #   scraper/schedule/install.sh --remove   # unschedule
 set -euo pipefail
@@ -31,8 +35,8 @@ case "$schedule_dir" in
         ;;
 esac
 
-hour="${1:-7}"
-minute="${2:-30}"
+hour="${1:-2}"
+minute="${2:-0}"
 mkdir -p "$HOME/Library/LaunchAgents" "$logs_dir"
 
 cat >"$plist" <<EOF

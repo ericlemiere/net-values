@@ -6,8 +6,8 @@ waived player's dead money, still on his old team's bref contracts page,
 never shows up as someone who can be traded.
 
 A player BALLDONTLIE has just moved arrives with no cap hit for a while. His
-contract hasn't changed, so it is taken from bref's year in `future_salaries`:
-the row on his new team if bref has caught up, otherwise his only row
+contract hasn't changed, so it is taken from his year in `future_salaries`:
+the row on his new team if it has caught up, otherwise his only row
 anywhere. Two rows and neither on his new team is one contract plus dead
 money that can't be told apart, so he stays unpriced. So does anyone neither
 source prices, mostly two-way deals; the trade finder leaves them out.
@@ -27,11 +27,18 @@ from db import connect, to_season_label
 from map_balldontlie import team_abbrs
 
 
-def fetch(cur):
-    """[(bdl player, canonical team, cap hit or None)] for every roster."""
+def team_contracts(cur, start_year=None, require_all=True):
+    """[(canonical team, contract)] for every roster, all 30 teams or an error.
+
+    `start_year` picks the season (2026 is 2026-27); omitted, BALLDONTLIE
+    returns the season now in progress. `require_all=False` is for seasons
+    years out, where a team with nothing committed yet is real, not a failed
+    fetch. Also read by backfill_bdl_salaries and backfill_future_salaries.
+    """
     abbr_for = team_abbrs(cur)
     cur.execute("SELECT abbr FROM teams")
     ours = {row[0] for row in cur.fetchall()}
+    params = {} if start_year is None else {"season": start_year}
 
     rows = []
     teams = 0
@@ -41,15 +48,22 @@ def fetch(cur):
         # (with a blank conference), one of them a second WAS.
         if not (team.get("conference") or "").strip() or abbr not in ours:
             continue
-        contracts = bdl.get("/nba/v1/contracts/teams", team_id=team["id"])["data"]
-        if not contracts:
-            raise RuntimeError(f"no contracts for {abbr}; leaving rosters as they were")
+        contracts = bdl.get("/nba/v1/contracts/teams", team_id=team["id"], **params)["data"]
+        if not contracts and require_all:
+            raise RuntimeError(f"no contracts for {abbr}; leaving the tables as they were")
         teams += 1
-        for c in contracts:
-            rows.append((c["player"], abbr, c.get("cap_hit")))
+        rows.extend((abbr, c) for c in contracts)
     if teams != 30:
-        raise RuntimeError(f"expected 30 teams, got {teams}; leaving rosters as they were")
+        raise RuntimeError(f"expected 30 teams, got {teams}; leaving the tables as they were")
     return rows
+
+
+def fetch(cur):
+    """[(bdl player, canonical team, cap hit or None)] for every roster.
+
+    A two-way deal has no cap hit, so it takes the cash paid, as `salaries` does.
+    """
+    return [(c["player"], abbr, c.get("cap_hit") or c.get("total_cash")) for abbr, c in team_contracts(cur)]
 
 
 def bref_cap_hit(contracts, player_id, team):
@@ -80,7 +94,7 @@ def run(season):
             contracts.setdefault(pid, []).append((team, salary))
 
         out, seen = [], set()
-        counts = {"bdl": 0, "bref": 0, None: 0}
+        counts = {"bdl": 0, "contracts": 0, None: 0}
         for p, team, cap_hit in fetched:
             if p["id"] in seen:
                 continue
@@ -89,7 +103,7 @@ def run(season):
             source = "bdl" if cap_hit else None
             if not cap_hit and pid is not None:
                 cap_hit = bref_cap_hit(contracts, pid, team)
-                source = "bref" if cap_hit else None
+                source = "contracts" if cap_hit else None
             counts[source] += 1
             name = f"{p['first_name']} {p['last_name']}".strip()
             out.append((pid, p["id"], name, team, season, cap_hit or None, source))
@@ -104,7 +118,7 @@ def run(season):
     unpinned = sum(1 for r in out if r[0] is None)
     print(
         f"{len(out)} rostered players: {counts['bdl']} priced by BALLDONTLIE, "
-        f"{counts['bref']} by bref, {counts[None]} unpriced; {unpinned} not pinned to a player"
+        f"{counts['contracts']} from future_salaries, {counts[None]} unpriced; {unpinned} not pinned to a player"
     )
 
 

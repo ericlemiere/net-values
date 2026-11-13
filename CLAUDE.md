@@ -15,7 +15,7 @@ NBA site that prices each player's season: production in dollars minus salary, r
 
 ## Data flow
 
-- Daily job: `scraper/update_season.py`, run by launchd through `scraper/schedule/run_daily.sh` (install with `install.sh`). Logs go to `scraper/logs/YYYY-MM-DD.log`. Use nba_api first and basketball-reference only for what nba_api lacks.
+- Daily job: `scraper/update_season.py`, split in two so either can fail alone. `--bdl` (every BALLDONTLIE call) runs on GitHub Actions (`.github/workflows/daily.yml`, 2am Pacific). `--bref` (positions/GS, advanced, awards, cap, weekly dead money) runs from launchd through `scraper/schedule/run_daily.sh` (install with `install.sh`, 2am local); its logs go to `scraper/logs/YYYY-MM-DD.log`. Both end by recomputing production and net values. Use BALLDONTLIE first and basketball-reference only for what it lacks.
 - Every job ends with `revalidate.py`, which stamps `site_meta` and posts to `/api/revalidate`. Run it by hand after a backfill.
 - Scraper scripts upsert on (player_id, season), so they're safe to re-run. Most take a season argument.
 

@@ -46,23 +46,35 @@ def fetch(url: str, use_cache: bool = True) -> str:
         if fresh:
             return cached.read_text(encoding="utf-8")
 
-    elapsed = time.monotonic() - _last_fetch
-    if elapsed < CRAWL_DELAY:
-        time.sleep(CRAWL_DELAY - elapsed)
+    last_error = None
+    for attempt in range(5):
+        try:
+            elapsed = time.monotonic() - _last_fetch
+            if elapsed < CRAWL_DELAY:
+                time.sleep(CRAWL_DELAY - elapsed)
 
-    resp = requests.get(url, headers={"User-Agent": USER_AGENT}, timeout=60)
-    _last_fetch = time.monotonic()
+            resp = requests.get(url, headers={"User-Agent": USER_AGENT}, timeout=60)
+            _last_fetch = time.monotonic()
 
-    # BR serves UTF-8 but sends no charset in Content-Type, so requests would
-    # fall back to latin-1 and mangle accented names (Doncic, Jokic, ...).
-    resp.encoding = "utf-8"
+            # BR serves UTF-8 but sends no charset in Content-Type, so requests would
+            # fall back to latin-1 and mangle accented names (Doncic, Jokic, ...).
+            resp.encoding = "utf-8"
 
-    if resp.status_code == 404:
-        raise FileNotFoundError(url)
-    resp.raise_for_status()
+            if resp.status_code == 404:
+                raise FileNotFoundError(url)
+            resp.raise_for_status()
 
-    cached.write_text(resp.text, encoding="utf-8")
-    return resp.text
+            cached.write_text(resp.text, encoding="utf-8")
+            return resp.text
+        except (requests.RequestException, FileNotFoundError) as exc:
+            last_error = exc
+            if isinstance(exc, FileNotFoundError):
+                raise
+            if attempt == 4:
+                raise
+            time.sleep(5 * (attempt + 1))
+
+    raise last_error
 
 
 def parse_table(html: str, table_id: str) -> List[Dict[str, str]]:

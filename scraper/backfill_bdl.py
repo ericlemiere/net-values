@@ -39,8 +39,10 @@ Usage:
   python backfill_bdl.py 2025       # a start year (2025 is 2025-26)
 """
 import sys
+import time
 from collections import defaultdict
 
+import psycopg2
 import pandas as pd
 
 import bdl
@@ -381,18 +383,32 @@ def run(start_year):
     print(f"{season}: {len(rows)} game lines, {len({r['game']['id'] for r in regular})} "
           f"regular-season games, {len({r['game']['id'] for r in playoffs})} playoff games")
 
-    conn = connect()
-    with conn, conn.cursor() as cur:
-        abbr_for = map_balldontlie.team_abbrs(cur)
-        pid_for = resolve_players(cur, played(regular) + played(playoffs), season)
-    with conn, conn.cursor() as cur:
-        team_of = write_player_stats(cur, season, regular, pid_for, abbr_for)
-    with conn, conn.cursor() as cur:
-        write_team_ratings(cur, start_year, season, regular, abbr_for)
-        write_team_records(cur, season, regular, playoffs, abbr_for)
-    with conn, conn.cursor() as cur:
-        write_season_averages(cur, start_year, season, pid_for, team_of)
-    conn.close()
+    for attempt in range(3):
+        conn = None
+        try:
+            conn = connect()
+            with conn, conn.cursor() as cur:
+                abbr_for = map_balldontlie.team_abbrs(cur)
+                pid_for = resolve_players(cur, played(regular) + played(playoffs), season)
+            with conn, conn.cursor() as cur:
+                team_of = write_player_stats(cur, season, regular, pid_for, abbr_for)
+            with conn, conn.cursor() as cur:
+                write_team_ratings(cur, start_year, season, regular, abbr_for)
+                write_team_records(cur, season, regular, playoffs, abbr_for)
+            with conn, conn.cursor() as cur:
+                write_season_averages(cur, start_year, season, pid_for, team_of)
+            conn.close()
+            return
+        except (psycopg2.OperationalError, psycopg2.InterfaceError):
+            if conn is not None:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+            if attempt == 2:
+                raise
+            print(f"database connection reset while refreshing {season}; retrying ({attempt + 1}/3)")
+            time.sleep(5 * (attempt + 1))
 
 
 def main():

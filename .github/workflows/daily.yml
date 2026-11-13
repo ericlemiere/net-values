@@ -68,14 +68,15 @@ jobs:
             echo "Skipping: the $FIRED UTC schedule isn't 2am Pacific today."
           fi
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         if: steps.gate.outputs.run == 'true'
 
-      # Matches the local venv's Python.
-      - uses: actions/setup-python@v5
+      # Not the local venv's 3.9: GitHub's Ubuntu 26.04 runners only offer
+      # 3.10 and newer. Every pinned requirement has a 3.12 wheel.
+      - uses: actions/setup-python@v7
         if: steps.gate.outputs.run == 'true'
         with:
-          python-version: "3.9"
+          python-version: "3.12"
           cache: pip
           cache-dependency-path: scraper/requirements.txt
 
@@ -92,7 +93,7 @@ jobs:
       # download them from the run page when a match needs fixing.
       - name: Save match reports
         if: always() && steps.gate.outputs.run == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: match-reports
           path: scraper/*.csv

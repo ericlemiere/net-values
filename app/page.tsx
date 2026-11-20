@@ -252,11 +252,11 @@ function SeasonLeaders({
   style: React.CSSProperties;
 }) {
   return (
-    <section className="home-in mb-10" style={style}>
+    <section className="home-in my-10" style={style}>
       {/* The site's chapter marker (see SectionHeading), with the note beside
           the title on a wide screen and dropped under it on a phone. */}
       <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-1">
-        <h2 className="min-w-0 text-2xl font-semibold tracking-[0.2em] text-accent uppercase sm:shrink-0">
+        <h2 className="min-w-0 text-3xl font-semibold tracking-[0.2em] text-accent uppercase sm:shrink-0">
           {title}
         </h2>
         {note && (
@@ -290,13 +290,33 @@ function SeasonLeaders({
           )}
           {data.movers.week.length > 0 && (
             <MoversList
-              title="Biggest Movers This Week"
+              title="Biggest Movers in the Last 7 Days"
               rows={data.movers.week}
-              since="this week"
+              since="in the last 7 days"
             />
           )}
         </div>
       )}
+      {data.sinceLastSeason &&
+        (data.sinceLastSeason.risers.length > 0 ||
+          data.sinceLastSeason.drops.length > 0) && (
+          <div className="mt-8 grid gap-6 md:grid-cols-2">
+            {data.sinceLastSeason.risers.length > 0 && (
+              <MoversList
+                title={`Biggest Risers Since ${data.sinceLastSeason.season}`}
+                rows={data.sinceLastSeason.risers}
+                since={`since ${data.sinceLastSeason.season}`}
+              />
+            )}
+            {data.sinceLastSeason.drops.length > 0 && (
+              <MoversList
+                title={`Biggest Drops Since ${data.sinceLastSeason.season}`}
+                rows={data.sinceLastSeason.drops}
+                since={`since ${data.sinceLastSeason.season}`}
+              />
+            )}
+          </div>
+        )}
     </section>
   );
 }

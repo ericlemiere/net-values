@@ -2875,6 +2875,16 @@ export interface HomeNetValueSeason {
    * to compare against, and always empty for a season no longer in progress.
    */
   movers: { day: HomeMoverRow[]; week: HomeMoverRow[] };
+  /**
+   * The five biggest climbs and drops from the season before's final ranks,
+   * for the newest season only. Null on the older one, or when there's no
+   * season before it on file.
+   */
+  sinceLastSeason: {
+    season: string;
+    risers: HomeMoverRow[];
+    drops: HomeMoverRow[];
+  } | null;
 }
 
 /**
@@ -2893,7 +2903,8 @@ export const getHomeNetValueLeaders = cached("getHomeNetValueLeaders", async fun
 
   const selection = { ...seasonNetValueSelection, nbaPersonId: players.nbaPersonId };
   return Promise.all(
-    recent.map(async ({ season }) => {
+    recent.map(async ({ season }, i) => {
+      const lastSeason = i === 0 ? recent[1]?.season : undefined;
       const ranked = and(eq(netValues.season, season), isNotNull(netValues.seasonRank));
       const [top, bottom] = await Promise.all([
         db
@@ -2915,12 +2926,14 @@ export const getHomeNetValueLeaders = cached("getHomeNetValueLeaders", async fun
       // Only a season in progress moves. A finished one keeps its last
       // snapshots, which would otherwise show its final day's moves all summer.
       const dates = inProgress ? await historyDates(season) : null;
-      const [prior, day, week] = await Promise.all([
+      const [prior, day, week, risers, drops] = await Promise.all([
         dates?.previous
           ? priorRanks(season, dates.previous, [...top, ...bottom].map((r) => r.playerId))
           : null,
         dates?.previous ? biggestMovers(season, dates.previous) : [],
         dates?.weekAgo ? biggestMovers(season, dates.weekAgo) : [],
+        lastSeason ? seasonMovers(season, lastSeason, "up") : [],
+        lastSeason ? seasonMovers(season, lastSeason, "down") : [],
       ]);
       // The bottom list starts at the last rank, which is how many are ranked.
       const total = bottom[0]?.seasonRank ?? 0;
@@ -2940,6 +2953,7 @@ export const getHomeNetValueLeaders = cached("getHomeNetValueLeaders", async fun
         top: top.map((r) => ({ ...r, moved: moved(r, false) })),
         bottom: bottom.map((r) => ({ ...r, moved: moved(r, true) })),
         movers: { day, week },
+        sinceLastSeason: lastSeason ? { season: lastSeason, risers, drops } : null,
       };
     }),
   );
@@ -3023,6 +3037,48 @@ async function biggestMovers(season: string, asOf: string): Promise<HomeMoverRow
     .orderBy(sql`abs(${moved}) DESC`, asc(netValues.seasonRank))
     .limit(5);
   return rows;
+}
+
+/**
+ * The five players who climbed (or dropped) furthest from their final rank in
+ * an earlier season, biggest move first. Raw ranks, though the two seasons
+ * rank different numbers of players. Only players ranked in both seasons.
+ * Ties go to the better current rank.
+ */
+async function seasonMovers(
+  season: string,
+  fromSeason: string,
+  dir: "up" | "down",
+): Promise<HomeMoverRow[]> {
+  const was = alias(netValues, "was");
+  const moved = sql<number>`(${was.seasonRank} - ${netValues.seasonRank})::int`;
+  return db
+    .select({
+      playerId: netValues.playerId,
+      name: players.name,
+      nbaPersonId: players.nbaPersonId,
+      team: netValues.team,
+      teamLabel: eraAbbrSql(netValues.team, netValues.season),
+      netValueScore: sql<number | null>`${netValues.netValueScore}::float8`,
+      seasonRank: sql<number>`${netValues.seasonRank}`,
+      wasRank: sql<number>`${was.seasonRank}`,
+      moved,
+    })
+    .from(netValues)
+    .innerJoin(players, eq(players.id, netValues.playerId))
+    .innerJoin(was, and(eq(was.playerId, netValues.playerId), eq(was.season, fromSeason)))
+    .where(
+      and(
+        eq(netValues.season, season),
+        isNotNull(netValues.seasonRank),
+        isNotNull(was.seasonRank),
+        dir === "up"
+          ? sql`${was.seasonRank} > ${netValues.seasonRank}`
+          : sql`${was.seasonRank} < ${netValues.seasonRank}`,
+      ),
+    )
+    .orderBy(dir === "up" ? sql`${moved} DESC` : sql`${moved} ASC`, asc(netValues.seasonRank))
+    .limit(5);
 }
 
 /**

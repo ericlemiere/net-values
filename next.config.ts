@@ -1,6 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Don't advertise the framework in an `X-Powered-By: Next.js` header.
+  poweredByHeader: false,
   /*
    * /advanced-stats was its own route until the three player tables were put
    * behind one toggle on /stats. Kept as a redirect rather than deleted

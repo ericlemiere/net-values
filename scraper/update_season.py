@@ -226,9 +226,11 @@ def priced_seasons(season):
     return priced
 
 
-def recompute(season, failed):
+def recompute(season, failed, new_day=False):
     """Production and net values from what's in the database, then the site.
-    No network calls but the revalidate."""
+    No network calls but the revalidate. new_day starts a new day of rank
+    history, for the home page's movement; only a run that just loaded fresh
+    box scores should (see compute_net_values.snapshot_ranks)."""
     import compute_net_values
     import compute_production
 
@@ -237,7 +239,9 @@ def recompute(season, failed):
              lambda: call_main(compute_production, label), failed)
     for priced in priced_seasons(season):
         run_step(f"net values: {priced}",
-                 lambda priced=priced: call_main(compute_net_values, priced), failed)
+                 lambda priced=priced: call_main(
+                     compute_net_values, priced, *(["--new-day"] if new_day else [])),
+                 failed)
     run_step("revalidate", revalidate, failed)
 
 
@@ -251,11 +255,13 @@ def main():
     both = not ({"--bdl", "--bref"} & flags)
 
     failed = []
+    new_day = False
     if both or "--bdl" in flags:
         bdl_steps(season, failed)
+        new_day = not any(name.startswith("stats from BALLDONTLIE") for name in failed)
     if both or "--bref" in flags:
         bref_steps(season, failed, force_dead_money="--dead-money" in flags)
-    recompute(season, failed)
+    recompute(season, failed, new_day)
 
     if failed:
         print(f"\n{len(failed)} step(s) failed: {', '.join(failed)}")

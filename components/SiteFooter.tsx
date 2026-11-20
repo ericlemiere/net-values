@@ -1,5 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
+import { DataFreshness } from "@/components/DataFreshness";
 import { HideOnHome } from "@/components/HideOnHome";
 import { SupportButton } from "@/components/SupportButton";
 import { getDataUpdatedAt } from "@/lib/db/queries";
@@ -22,6 +23,8 @@ export async function SiteFooter() {
 
   return (
     <footer className="relative z-10 flex items-end gap-4 px-4 pb-4 pt-6 md:gap-6">
+      {/* In the footer because every page has one and it already reads the date. */}
+      <DataFreshness updatedAt={updatedAt} />
       {/* A pre-sized copy (640px, 2x the largest display) served as-is:
           Vercel's image optimizer answers 402 once the plan's quota runs out,
           which left the logo blank, so it doesn't go through /_next/image. */}

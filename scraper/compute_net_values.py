@@ -69,9 +69,11 @@ double-count.
 Usage:
   python compute_net_values.py
   python compute_net_values.py 2024-2025      # one season
+  python compute_net_values.py 2026-2027 --new-day   # the BDL job: new stats
 """
 import sys
-from datetime import date
+from datetime import date, datetime
+from zoneinfo import ZoneInfo
 
 from psycopg2.extras import execute_values
 
@@ -855,7 +857,9 @@ def compute(rows, games_by_season, salary_rows, teams_by_season, stints, last_pl
 
 
 def main():
-    season_filter = sys.argv[1] if len(sys.argv) > 1 else None
+    args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    new_day = "--new-day" in sys.argv[1:]
+    season_filter = args[0] if args else None
     conn = connect()
     cur = conn.cursor()
 
@@ -899,27 +903,44 @@ def main():
         shares,
         page_size=1000,
     )
-    snapshot_ranks(cur, season_filter)
+    snapshot_ranks(cur, season_filter, new_day)
     conn.commit()
     cur.close()
     conn.close()
     print(f"\nwrote {len(rows)} player-seasons, {len(shares)} team shares")
 
 
-def snapshot_ranks(cur, season_filter):
+def snapshot_ranks(cur, season_filter, new_day):
     """Copies the in-progress season's ranks into net_value_rank_history.
 
-    The home page compares today's rank against the previous day's copy to
-    show how far each player moved. Only the season in progress: a finished
-    season's ranks don't move. Dated by this machine's clock, the one the
-    morning job is scheduled on, and replaced if the job runs twice in a day.
-    Not Eastern time: a run late in a Pacific evening would land on tomorrow's
-    date there, and the next morning's job would overwrite it.
+    The home page compares current ranks against the day before the latest
+    copy to show how far each player moved, so a new day must mean new games.
+    Only a run with fresh box scores passes new_day (update_season.py --bdl,
+    once its stats step succeeds); it starts today's copy. Every other run --
+    the bref job, a backfill, a hand run -- rewrites the latest copy in place,
+    so a model change folds into the baseline instead of reading as a night
+    with no movement. A new_day run whose ranks match the latest copy exactly
+    (a night with no games) does the same, so the page keeps last game night's
+    moves. Only the season in progress: a finished season's ranks don't move.
+
+    Dated in Pacific time, the clock the morning job is scheduled on, whatever
+    the machine's own zone: GitHub's runners are on UTC, where an evening run
+    by hand would land on tomorrow.
     """
     season = season_in_progress()
     if season is None or season_filter not in (None, season):
         return
-    as_of = date.today()
+    cur.execute(
+        "SELECT max(as_of) FROM net_value_rank_history WHERE season = %s", (season,)
+    )
+    latest = cur.fetchone()[0]
+    as_of = latest
+    if new_day or latest is None:
+        today = datetime.now(ZoneInfo("America/Los_Angeles")).date()
+        if latest is None or latest >= today or ranks_changed(cur, season, latest):
+            as_of = today
+    if latest is not None and as_of == latest:
+        print(f"updating the {latest} rank snapshot in place")
     cur.execute(
         "DELETE FROM net_value_rank_history WHERE season = %s AND as_of = %s",
         (season, as_of),
@@ -933,6 +954,24 @@ def snapshot_ranks(cur, season_filter):
         (as_of, season),
     )
     print(f"snapshotted {cur.rowcount} ranks for {season} as of {as_of}")
+
+
+def ranks_changed(cur, season, as_of):
+    """Whether any current rank differs from the copy dated as_of."""
+    cur.execute(
+        """
+        SELECT EXISTS (
+            SELECT 1
+            FROM (SELECT player_id, season_rank FROM net_values
+                  WHERE season = %s AND season_rank IS NOT NULL) n
+            FULL JOIN (SELECT player_id, season_rank FROM net_value_rank_history
+                       WHERE season = %s AND as_of = %s) h USING (player_id)
+            WHERE n.season_rank IS DISTINCT FROM h.season_rank
+        )
+        """,
+        (season, season, as_of),
+    )
+    return cur.fetchone()[0]
 
 
 if __name__ == "__main__":

@@ -630,8 +630,9 @@ export const netValues = pgTable(
  * rewritten in place every morning and keeps no history of its own.
  *
  * Written by scraper/compute_net_values.py whenever it prices the season in
- * progress, keyed by the day it ran on the job's machine, so a second run the same day
- * replaces that day's copy rather than adding one.
+ * progress. Only the BALLDONTLIE job, which brings new box scores, starts a new
+ * day (dated in Pacific time); every other run rewrites the latest day in place,
+ * so a run without new games can't make the page read as no movement.
  */
 export const netValueRankHistory = pgTable(
   "net_value_rank_history",

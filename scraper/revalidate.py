@@ -2,8 +2,9 @@
 
 The site keeps every query's result for up to a day (lib/db/cached.ts), so
 without this a run's new numbers wouldn't show until that ran out. Posts to
-the app's /api/revalidate, which marks the whole data cache stale; each page
-re-queries Neon the next time someone opens it.
+the app's /api/revalidate, which expires the whole data cache; each page
+re-queries Neon the next time someone opens it. Then it opens the home page
+itself, so that first, slower render is this script's rather than a visitor's.
 
 Needs two settings, from the environment or .env.local:
   NEXT_PUBLIC_SITE_URL   the deployed site, e.g. https://example.com
@@ -50,6 +51,17 @@ def revalidate() -> None:
     )
     res.raise_for_status()
     print(f"revalidated {site}")
+    warm(site)
+
+
+def warm(site: str) -> None:
+    """Requests the home page so its fresh render is built before anyone visits.
+    A failure here is only a slower first visit, so it's reported, not raised."""
+    try:
+        res = requests.get(site.rstrip("/") + "/", timeout=60)
+        print(f"warmed home page: {res.status_code}")
+    except requests.RequestException as e:
+        print(f"warming the home page failed: {e}")
 
 
 if __name__ == "__main__":

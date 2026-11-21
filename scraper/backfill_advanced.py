@@ -24,9 +24,12 @@ Usage:
 """
 import csv
 import sys
+import time
 from pathlib import Path
 
+import psycopg2
 import bref
+
 from db import connect
 from player_index import PlayerIndex, match_row
 
@@ -123,38 +126,58 @@ def main():
     updates = ", ".join(f"{c} = EXCLUDED.{c}" for c in COLUMNS)
 
     for end_year in range(start, end + 1):
-        season = bref.season_label(end_year)
-        url = f"https://www.basketball-reference.com/leagues/NBA_{end_year}_advanced.html"
-        rows = bref.parse_table(bref.fetch(url), "advanced")
-        chosen = pick_rows(rows)
-        print(f"=== {season} ({len(chosen)} players) ===")
+        for attempt in range(3):
+            try:
+                season = bref.season_label(end_year)
+                url = f"https://www.basketball-reference.com/leagues/NBA_{end_year}_advanced.html"
+                rows = bref.parse_table(bref.fetch(url), "advanced")
+                chosen = pick_rows(rows)
+                print(f"=== {season} ({len(chosen)} players) ===")
 
-        n = 0
-        for slug, r in chosen.items():
-            name = r.get("name_display", "").strip()
-            team = resolve_team(r.get("team_name_abbr"))
-            pid, method, score = match_row(
-                {"name": name, "season": season, "team": team, "slug": slug}, index
-            )
-            methods[method] = methods.get(method, 0) + 1
-            if pid is None:
-                unmatched.append([season, team or "", name, slug, round(score or 0, 1)])
-                continue
+                n = 0
+                for slug, r in chosen.items():
+                    name = r.get("name_display", "").strip()
+                    team = resolve_team(r.get("team_name_abbr"))
+                    pid, method, score = match_row(
+                        {"name": name, "season": season, "team": team, "slug": slug}, index
+                    )
+                    methods[method] = methods.get(method, 0) + 1
+                    if pid is None:
+                        unmatched.append([season, team or "", name, slug, round(score or 0, 1)])
+                        continue
 
-            index.record_slug(cur, pid, slug)
-            values = build_values(r, team)
-            cur.execute(
-                f"""
-                INSERT INTO advanced_stats (player_id, season, {", ".join(COLUMNS)})
-                VALUES ({placeholders})
-                ON CONFLICT (player_id, season) DO UPDATE SET {updates}
-                """,
-                [pid, season] + [values[c] for c in COLUMNS],
-            )
-            n += 1
+                    index.record_slug(cur, pid, slug)
+                    values = build_values(r, team)
+                    cur.execute(
+                        f"""
+                        INSERT INTO advanced_stats (player_id, season, {", ".join(COLUMNS)})
+                        VALUES ({placeholders})
+                        ON CONFLICT (player_id, season) DO UPDATE SET {updates}
+                        """,
+                        [pid, season] + [values[c] for c in COLUMNS],
+                    )
+                    n += 1
 
-        conn.commit()
-        print(f"  upserted {n}")
+                conn.commit()
+                print(f"  upserted {n}")
+                break
+            except (psycopg2.OperationalError, psycopg2.InterfaceError):
+                try:
+                    cur.close()
+                except Exception:
+                    pass
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+                if attempt == 2:
+                    raise
+                conn = connect()
+                cur = conn.cursor()
+                resolve_team = load_team_resolver(cur)
+                index = PlayerIndex(cur)
+                print(f"database connection reset while refreshing {season}; retrying this season")
+                time.sleep(5)
 
     if unmatched:
         with open(UNMATCHED_CSV, "w", newline="") as f:

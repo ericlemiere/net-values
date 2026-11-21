@@ -26,8 +26,10 @@ Usage:
 """
 import re
 import sys
+import time
 from datetime import datetime, timedelta, timezone
 
+import psycopg2
 from bs4 import BeautifulSoup
 
 import bref
@@ -145,23 +147,37 @@ def write(cur, dead):
 
 
 def run(write_rows):
-    conn = connect()
-    with conn, conn.cursor() as cur:
-        dead = find(cur)
-        totals = {}
-        for (_, season, team), (_, name, salary) in dead.items():
-            totals.setdefault(season, []).append((salary, team, name))
-        for season in sorted(totals):
-            rows = sorted(totals[season], reverse=True)
-            print(f"  {season}: {len(rows)} rows, ${sum(r[0] for r in rows):,}; "
-                  + ", ".join(f"{n} ({t}) ${s:,}" for s, t, n in rows[:4]))
-        if write_rows:
-            write(cur, dead)
-            print("written")
-        else:
-            conn.rollback()
-            print("dry run: nothing written")
-    conn.close()
+    for attempt in range(3):
+        conn = None
+        try:
+            conn = connect()
+            with conn, conn.cursor() as cur:
+                dead = find(cur)
+                totals = {}
+                for (_, season, team), (_, name, salary) in dead.items():
+                    totals.setdefault(season, []).append((salary, team, name))
+                for season in sorted(totals):
+                    rows = sorted(totals[season], reverse=True)
+                    print(f"  {season}: {len(rows)} rows, ${sum(r[0] for r in rows):,}; "
+                          + ", ".join(f"{n} ({t}) ${s:,}" for s, t, n in rows[:4]))
+                if write_rows:
+                    write(cur, dead)
+                    print("written")
+                else:
+                    conn.rollback()
+                    print("dry run: nothing written")
+            conn.close()
+            return
+        except (psycopg2.OperationalError, psycopg2.InterfaceError):
+            if conn is not None:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+            if attempt == 2:
+                raise
+            print(f"database connection reset while refreshing dead money; retrying ({attempt + 1}/3)")
+            time.sleep(5 * (attempt + 1))
 
 
 def main():

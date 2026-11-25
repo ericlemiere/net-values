@@ -1,13 +1,15 @@
 #!/bin/bash
 # Schedules run_daily.sh (the bref half of the morning job) with launchd, every
-# day at 2:00am local time, the same time GitHub runs the BALLDONTLIE half. The
+# day at 12:10am local time, ahead of the BALLDONTLIE half at 2am Pacific. The
 # order doesn't matter: each recomputes from whatever the other has written,
 # and the model's writes take a database lock so they never overlap. A Mac
-# asleep at 2am runs it when it wakes; one that's shut down skips the day.
+# asleep at 12:10 runs it when it wakes; one that's shut down skips the day.
+# The desktop also has a pmset wake at 12:05am (sudo pmset repeat wakeorpoweron
+# MTWRFSU 00:05:00), set by hand, not by this script.
 # Safe to re-run: it replaces the old schedule.
 #
 # Usage:
-#   scraper/schedule/install.sh            # 2:00am
+#   scraper/schedule/install.sh            # 12:10am
 #   scraper/schedule/install.sh 8 15       # 8:15am
 #   scraper/schedule/install.sh --remove   # unschedule
 set -euo pipefail
@@ -35,8 +37,8 @@ case "$schedule_dir" in
         ;;
 esac
 
-hour="${1:-2}"
-minute="${2:-0}"
+hour="${1:-0}"
+minute="${2:-10}"
 mkdir -p "$HOME/Library/LaunchAgents" "$logs_dir"
 
 cat >"$plist" <<EOF
